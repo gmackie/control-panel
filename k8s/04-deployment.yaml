@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel
+  namespace: control-panel
+  labels:
+    app: control-panel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel
+  template:
+    metadata:
+      labels:
+        app: control-panel
+    spec:
+      containers:
+      - name: control-panel
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        envFrom:
+        - configMapRef:
+            name: control-panel-config
+        - secretRef:
+            name: control-panel-secrets
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "Control Panel - Container Registry Setup Required"
+          echo "Visit https://ci.gmac.io/mackieg/control-panel to create container registry"
+          echo "Then push the image: docker push ci.gmac.io/mackieg/control-panel:latest"
+          echo "Finally update the deployment to use the custom image"
+          nginx -g "daemon off;"

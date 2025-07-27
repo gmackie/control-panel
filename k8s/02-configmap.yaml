@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-config
+  namespace: control-panel
+data:
+  GITEA_URL: "https://ci.gmac.io"
+  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
+  GRAFANA_URL: "https://monitoring.gmac.io"
+  ALERTMANAGER_URL: "http://alertmanager.monitoring.svc.cluster.local:9093"
