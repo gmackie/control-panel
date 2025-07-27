@@ -21,6 +21,46 @@ export const services = sqliteTable("services", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Integrations table
+export const integrations = sqliteTable("integrations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // 'stripe', 'turso', 'webhook', etc.
+  provider: text("provider").notNull(),
+  status: text("status").notNull().default("active"),
+  config: text("config").notNull(), // JSON string with encrypted config
+  lastChecked: text("last_checked").notNull(),
+  healthStatus: text("health_status").notNull().default("unknown"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// API Keys table
+export const apiKeys = sqliteTable("api_keys", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  integrationId: text("integration_id").references(() => integrations.id),
+  keyHash: text("key_hash").notNull(), // Hashed API key
+  permissions: text("permissions").notNull(), // JSON string
+  lastUsed: text("last_used"),
+  expiresAt: text("expires_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Integration Health Checks table
+export const integrationHealthChecks = sqliteTable(
+  "integration_health_checks",
+  {
+    id: text("id").primaryKey(),
+    integrationId: text("integration_id").references(() => integrations.id),
+    status: text("status").notNull(), // 'success', 'failure', 'warning'
+    responseTime: integer("response_time"), // in milliseconds
+    errorMessage: text("error_message"),
+    timestamp: text("timestamp").notNull(),
+  }
+);
+
 // Service metrics table
 export const serviceMetrics = sqliteTable("service_metrics", {
   id: text("id").primaryKey(),

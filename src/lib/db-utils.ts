@@ -96,3 +96,74 @@ export async function getAnalytics() {
   console.warn("Database not available, returning empty array");
   return [];
 }
+
+// Integration functions
+export async function getAllIntegrations() {
+  // try {
+  //   const database = checkDb();
+  //   return await database
+  //     .select()
+  //     .from(integrations)
+  //     .orderBy(desc(integrations.createdAt));
+  // } catch (error) {
+  //   console.warn('Database not available, returning empty array')
+  //   return []
+  // }
+  console.warn("Database not available, returning empty array");
+  return [];
+}
+
+export async function createIntegration(integrationData: any) {
+  // try {
+  //   const database = checkDb();
+  //   return await database.insert(integrations).values(integrationData);
+  // } catch (error) {
+  //   console.warn('Database not available, returning null')
+  //   return null
+  // }
+  console.warn("Database not available, returning null");
+  return null;
+}
+
+export async function getIntegrationById(id: string) {
+  // try {
+  //   const database = checkDb();
+  //   const result = await database
+  //     .select()
+  //     .from(integrations)
+  //     .where(eq(integrations.id, id));
+  //   return result[0] || null;
+  // } catch (error) {
+  //   console.warn('Database not available, returning null')
+  //   return null
+  // }
+  console.warn("Database not available, returning null");
+  return null;
+}
+
+export async function updateIntegration(id: string, integrationData: any) {
+  // try {
+  //   const database = checkDb();
+  //   return await database
+  //     .update(integrations)
+  //     .set({ ...integrationData, updatedAt: new Date().toISOString() })
+  //     .where(eq(integrations.id, id));
+  // } catch (error) {
+  //   console.warn('Database not available, returning null')
+  //   return null
+  // }
+  console.warn("Database not available, returning null");
+  return null;
+}
+
+export async function deleteIntegration(id: string) {
+  // try {
+  //   const database = checkDb();
+  //   return await database.delete(integrations).where(eq(integrations.id, id));
+  // } catch (error) {
+  //   console.warn('Database not available, returning null')
+  //   return null
+  // }
+  console.warn("Database not available, returning null");
+  return null;
+}
