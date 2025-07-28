@@ -14,6 +14,19 @@ export const authOptions: NextAuthOptions = {
     GitHubProvider({
       clientId: process.env.GITHUB_ID!,
       clientSecret: process.env.GITHUB_SECRET!,
+      authorization: {
+        url: "https://github.com/login/oauth/authorize",
+        params: {
+          scope: "read:user user:email",
+          redirect_uri: `${process.env.NEXTAUTH_URL}/oauth2/callback`,
+        },
+      },
+      token: {
+        url: "https://github.com/login/oauth/access_token",
+        params: {
+          redirect_uri: `${process.env.NEXTAUTH_URL}/oauth2/callback`,
+        },
+      },
     }),
   ],
   callbacks: {
