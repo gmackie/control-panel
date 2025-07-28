@@ -7,6 +7,7 @@ import CustomerMetrics from '@/components/CustomerMetrics'
 import DatabaseStatus from '@/components/DatabaseStatus'
 import RecentDeployments from '@/components/RecentDeployments'
 import UsageAnalytics from '@/components/UsageAnalytics'
+import { SystemHealth } from '@/components/dashboard/system-health'
 import { fetchBusinessMetrics } from '@/lib/api'
 
 export default function Dashboard() {
@@ -22,8 +23,15 @@ export default function Dashboard() {
         <p className="text-muted">Monitor your applications, customers, and revenue</p>
       </div>
 
-      {/* Revenue Overview */}
-      <RevenueMetrics />
+      {/* System Health Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1">
+          <SystemHealth />
+        </div>
+        <div className="lg:col-span-2">
+          <RevenueMetrics />
+        </div>
+      </div>
 
       {/* Application Services */}
       <div>
