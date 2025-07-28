@@ -13,6 +13,7 @@ export default function Navigation() {
     { name: "Services", href: "/services" },
     { name: "Integrations", href: "/integrations" },
     { name: "Deployments", href: "/deployments" },
+    { name: "Secrets", href: "/secrets" },
   ];
 
   return (
