@@ -22,9 +22,7 @@ export default function RootLayout({
       >
         <Providers>
           <Navigation />
-          <main className="container mx-auto px-4 py-6 max-w-7xl">
-            {children}
-          </main>
+          <main>{children}</main>
         </Providers>
       </body>
     </html>

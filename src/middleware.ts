@@ -19,7 +19,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - oauth2 (OAuth callback)
+     * And exclude the home page
      */
-    "/((?!api/auth|api/health|auth|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/health|auth|oauth2|_next/static|_next/image|favicon.ico|$).*)",
   ],
 };
