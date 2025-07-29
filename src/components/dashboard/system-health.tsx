@@ -108,7 +108,7 @@ export function SystemHealth() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">System Health</h2>
         <Badge 
-          variant={healthStatus === "healthy" ? "success" : healthStatus === "warning" ? "warning" : "destructive"}
+          variant={healthStatus === "healthy" ? "success" : healthStatus === "warning" ? "warning" : "error"}
           className="text-sm"
         >
           {healthStatus === "healthy" && <CheckCircle className="h-3 w-3 mr-1" />}

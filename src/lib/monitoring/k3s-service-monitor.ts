@@ -73,11 +73,11 @@ export async function getK3sServiceStatus(): Promise<AppService[]> {
       environment: service.namespace as "production" | "staging" | "development",
       url: service.url,
       metrics: {
-        cpu: "N/A",
-        memory: "N/A",
+        cpu: undefined,
+        memory: undefined,
         requests: 0,
-        errors: 0,
-        responseTime: responseTime ? `${responseTime}ms` : "N/A",
+        errorRate: 0,
+        responseTime: responseTime || undefined,
       },
     });
   }

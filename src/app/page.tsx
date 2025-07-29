@@ -8,6 +8,8 @@ import DatabaseStatus from '@/components/DatabaseStatus'
 import RecentDeployments from '@/components/RecentDeployments'
 import UsageAnalytics from '@/components/UsageAnalytics'
 import { SystemHealth } from '@/components/dashboard/system-health'
+import { RealtimeMetrics } from '@/components/dashboard/realtime-metrics'
+import { ClerkAuthMetrics } from '@/components/dashboard/clerk-auth-metrics'
 import { fetchBusinessMetrics } from '@/lib/api'
 
 export default function Dashboard() {
@@ -21,6 +23,12 @@ export default function Dashboard() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Business Control Panel</h1>
         <p className="text-muted">Monitor your applications, customers, and revenue</p>
+      </div>
+
+      {/* Real-time Monitoring */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RealtimeMetrics />
+        <ClerkAuthMetrics />
       </div>
 
       {/* System Health Overview */}

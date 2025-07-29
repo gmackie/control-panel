@@ -540,3 +540,42 @@ export interface ServiceMetrics {
     };
   };
 }
+
+export interface ClerkMetrics {
+  totalUsers: number;
+  activeUsers: number;
+  newUsers: {
+    today: number;
+    week: number;
+    month: number;
+  };
+  sessions: {
+    active: number;
+    total: number;
+    avgDuration: number;
+  };
+  authentication: {
+    signIns: number;
+    signUps: number;
+    failures: number;
+    methods: {
+      email: number;
+      google: number;
+      github: number;
+      microsoft: number;
+    };
+  };
+  organizations: {
+    total: number;
+    active: number;
+    members: number;
+  };
+  mfa: {
+    enabled: number;
+    usage: number;
+  };
+  period: {
+    start: string;
+    end: string;
+  };
+}
