@@ -1,0 +1,207 @@
+# Prometheus Alert Rules for GMAC.IO Control Panel
+groups:
+  - name: control-panel-alerts
+    rules:
+    # Application Health
+    - alert: ControlPanelDown
+      expr: up{job="control-panel"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: control-panel
+      annotations:
+        summary: "Control Panel is down"
+        description: "Control Panel has been down for more than 1 minute"
+
+    - alert: ControlPanelHighErrorRate
+      expr: rate(http_requests_total{job="control-panel",status=~"5.."}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: high
+        service: control-panel
+      annotations:
+        summary: "High error rate on Control Panel"
+        description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+
+    - alert: ControlPanelSlowResponse
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) > 2
+      for: 5m
+      labels:
+        severity: medium
+        service: control-panel
+      annotations:
+        summary: "Control Panel slow response time"
+        description: "95th percentile latency is {{ $value }}s for the last 5 minutes"
+
+    # Resource Usage
+    - alert: ControlPanelHighCPU
+      expr: rate(container_cpu_usage_seconds_total{pod=~"control-panel-.*"}[5m]) > 0.8
+      for: 5m
+      labels:
+        severity: medium
+        service: control-panel
+      annotations:
+        summary: "High CPU usage on Control Panel"
+        description: "CPU usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}"
+
+    - alert: ControlPanelHighMemory
+      expr: container_memory_usage_bytes{pod=~"control-panel-.*"} / container_spec_memory_limit_bytes{pod=~"control-panel-.*"} > 0.9
+      for: 5m
+      labels:
+        severity: medium
+        service: control-panel
+      annotations:
+        summary: "High memory usage on Control Panel"
+        description: "Memory usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}"
+
+    - alert: ControlPanelPodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{pod=~"control-panel-.*"}[5m]) > 0
+      for: 5m
+      labels:
+        severity: high
+        service: control-panel
+      annotations:
+        summary: "Control Panel pod is crash looping"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 5 minutes"
+
+  - name: infrastructure-alerts
+    rules:
+    # Kubernetes Cluster
+    - alert: KubernetesNodeDown
+      expr: kube_node_status_ready{condition="Ready"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        service: kubernetes
+      annotations:
+        summary: "Kubernetes node is down"
+        description: "Node {{ $labels.node }} has been down for more than 5 minutes"
+
+    - alert: KubernetesNodeHighCPU
+      expr: (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 90
+      for: 10m
+      labels:
+        severity: medium
+        service: kubernetes
+      annotations:
+        summary: "High CPU usage on Kubernetes node"
+        description: "CPU usage is {{ $value }}% on node {{ $labels.instance }}"
+
+    - alert: KubernetesNodeHighMemory
+      expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+      for: 10m
+      labels:
+        severity: medium
+        service: kubernetes
+      annotations:
+        summary: "High memory usage on Kubernetes node"
+        description: "Memory usage is {{ $value }}% on node {{ $labels.instance }}"
+
+    - alert: KubernetesPodNotReady
+      expr: kube_pod_status_ready{condition="Ready"} == 0 and kube_pod_status_phase{phase="Running"} == 1
+      for: 10m
+      labels:
+        severity: medium
+        service: kubernetes
+      annotations:
+        summary: "Kubernetes pod not ready"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for more than 10 minutes"
+
+  - name: integration-alerts
+    rules:
+    # Gitea
+    - alert: GiteaDown
+      expr: up{job="gitea"} == 0
+      for: 2m
+      labels:
+        severity: high
+        service: gitea
+      annotations:
+        summary: "Gitea is down"
+        description: "Gitea has been down for more than 2 minutes"
+
+    # Drone CI
+    - alert: DroneDown
+      expr: up{job="drone"} == 0
+      for: 2m
+      labels:
+        severity: high
+        service: drone
+      annotations:
+        summary: "Drone CI is down"
+        description: "Drone CI has been down for more than 2 minutes"
+
+    # Harbor Registry
+    - alert: HarborDown
+      expr: up{job="harbor"} == 0
+      for: 2m
+      labels:
+        severity: high
+        service: harbor
+      annotations:
+        summary: "Harbor Registry is down"
+        description: "Harbor Registry has been down for more than 2 minutes"
+
+    # Database
+    - alert: PostgresDown
+      expr: up{job="postgres-exporter"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL is down"
+        description: "PostgreSQL database has been down for more than 2 minutes"
+
+    - alert: PostgresHighConnections
+      expr: pg_stat_database_numbackends / pg_settings_max_connections{setting="max_connections"} > 0.8
+      for: 5m
+      labels:
+        severity: medium
+        service: postgres
+      annotations:
+        summary: "High number of PostgreSQL connections"
+        description: "Connection usage is {{ $value | humanizePercentage }}"
+
+    # Redis
+    - alert: RedisDown
+      expr: up{job="redis-exporter"} == 0
+      for: 2m
+      labels:
+        severity: high
+        service: redis
+      annotations:
+        summary: "Redis is down"
+        description: "Redis has been down for more than 2 minutes"
+
+    - alert: RedisHighMemoryUsage
+      expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+      for: 5m
+      labels:
+        severity: medium
+        service: redis
+      annotations:
+        summary: "Redis high memory usage"
+        description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+  - name: certificate-alerts
+    rules:
+    - alert: CertificateExpiringIn7Days
+      expr: (cert_expiry_timestamp - time()) / 86400 < 7
+      for: 1h
+      labels:
+        severity: medium
+        service: certificates
+      annotations:
+        summary: "Certificate expiring soon"
+        description: "Certificate {{ $labels.domain }} expires in {{ $value | humanizeDuration }}"
+
+    - alert: CertificateExpiringIn24Hours
+      expr: (cert_expiry_timestamp - time()) / 86400 < 1
+      for: 1h
+      labels:
+        severity: high
+        service: certificates
+      annotations:
+        summary: "Certificate expiring in 24 hours"
+        description: "Certificate {{ $labels.domain }} expires in {{ $value | humanizeDuration }}"

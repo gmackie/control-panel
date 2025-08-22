@@ -107,6 +107,15 @@ export async function generateProjectFiles(config: StarterConfig): Promise<Proje
       });
     }
   }
+  
+  // Add Kubernetes manifests if observability integrations are selected
+  const hasObservability = config.integrations.some(id => 
+    ['prometheus', 'loki', 'grafana', 'alertmanager'].includes(id)
+  );
+  
+  if (hasObservability) {
+    files.push(...generateObservabilityManifests(config));
+  }
 
   // Add testing setup if enabled
   if (config.testing !== 'none') {
@@ -622,4 +631,280 @@ ${additional}
 
 // Original config
 module.exports`);
+}
+
+function generateObservabilityManifests(config: StarterConfig): ProjectFile[] {
+  const files: ProjectFile[] = [];
+  const appName = config.projectName;
+  
+  // Service Monitor for Prometheus
+  if (config.integrations.includes('prometheus')) {
+    files.push({
+      path: 'k8s/monitoring/service-monitor.yaml',
+      content: `apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ${appName}
+  namespace: default
+  labels:
+    app: ${appName}
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ${appName}
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /api/metrics`
+    });
+  }
+  
+  // ConfigMap for Loki configuration
+  if (config.integrations.includes('loki')) {
+    files.push({
+      path: 'k8s/monitoring/fluentbit-config.yaml',
+      content: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${appName}-fluentbit-config
+  namespace: default
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/${appName}*.log
+        Parser            docker
+        Tag               ${appName}.*
+        Refresh_Interval  5
+
+    [OUTPUT]
+        Name   loki
+        Match  ${appName}.*
+        Host   loki.monitoring.svc.cluster.local
+        Port   3100
+        Labels job=${appName}, namespace=default`
+    });
+  }
+  
+  // Deployment with observability annotations
+  files.push({
+    path: 'k8s/deployment.yaml',
+    content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${appName}
+  namespace: default
+  labels:
+    app: ${appName}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ${appName}
+  template:
+    metadata:
+      labels:
+        app: ${appName}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/metrics"
+    spec:
+      containers:
+      - name: ${appName}
+        image: ${appName}:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        - containerPort: 3000
+          name: metrics
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PROMETHEUS_PUSHGATEWAY_URL
+          value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"
+        - name: LOKI_PUSH_URL
+          value: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        - name: GRAFANA_URL
+          value: "http://grafana.monitoring.svc.cluster.local:3000"
+        - name: ALERTMANAGER_URL
+          value: "http://alertmanager.monitoring.svc.cluster.local:9093"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${appName}
+  namespace: default
+  labels:
+    app: ${appName}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    name: http
+  - port: 3000
+    targetPort: 3000
+    name: metrics
+  selector:
+    app: ${appName}`
+  });
+  
+  // Health check endpoints
+  files.push({
+    path: 'src/app/api/health/route.ts',
+    content: `import { NextResponse } from 'next/server';
+
+export async function GET() {
+  // Perform health checks
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+  };
+  
+  return NextResponse.json(health);
+}`
+  });
+  
+  files.push({
+    path: 'src/app/api/ready/route.ts',
+    content: `import { NextResponse } from 'next/server';
+
+export async function GET() {
+  // Check if app is ready to serve traffic
+  const ready = {
+    ready: true,
+    timestamp: new Date().toISOString(),
+  };
+  
+  return NextResponse.json(ready);
+}`
+  });
+  
+  // Docker Compose for local observability stack
+  files.push({
+    path: 'docker-compose.observability.yml',
+    content: `version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+    networks:
+      - monitoring
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/config.yml:/etc/alertmanager/config.yml
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge`
+  });
+  
+  // Prometheus configuration
+  files.push({
+    path: 'prometheus/prometheus.yml',
+    content: `global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: '${appName}'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+    metrics_path: '/api/metrics'`
+  });
+  
+  // AlertManager configuration
+  files.push({
+    path: 'alertmanager/config.yml',
+    content: `global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+
+receivers:
+- name: 'web.hook'
+  webhook_configs:
+  - url: 'http://host.docker.internal:3000/api/alerts/webhook'
+    send_resolved: true`
+  });
+  
+  return files;
 }

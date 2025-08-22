@@ -1,0 +1,287 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: control-panel-alerts
+  namespace: monitoring
+  labels:
+    app: control-panel
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: control-panel.application
+    interval: 30s
+    rules:
+    - alert: ControlPanelDown
+      expr: up{job="control-panel"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel is down"
+        description: "Control Panel has been down for more than 1 minute. No metrics are being scraped."
+        runbook_url: "https://docs.gmac.io/runbooks/control-panel-down"
+
+    - alert: ControlPanelHighErrorRate
+      expr: (
+        sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m])) /
+        sum(rate(http_requests_total{job="control-panel"}[5m]))
+      ) * 100 > 5
+      for: 5m
+      labels:
+        severity: high
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel has high error rate"
+        description: "Control Panel error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/high-error-rate"
+
+    - alert: ControlPanelHighResponseTime
+      expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le)) > 0.5
+      for: 10m
+      labels:
+        severity: warning
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel has high response times"
+        description: "Control Panel 95th percentile response time is {{ $value }}s over the last 10 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/high-response-time"
+
+    - alert: ControlPanelHighMemoryUsage
+      expr: process_resident_memory_bytes{job="control-panel"} / 1024 / 1024 / 1024 > 1.5
+      for: 15m
+      labels:
+        severity: warning
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel has high memory usage"
+        description: "Control Panel is using {{ $value | humanize }}GB of memory."
+        runbook_url: "https://docs.gmac.io/runbooks/high-memory-usage"
+
+    - alert: ControlPanelRestartLoop
+      expr: increase(kube_pod_container_status_restarts_total{container="control-panel"}[15m]) > 3
+      for: 0m
+      labels:
+        severity: high
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel pod is in restart loop"
+        description: "Control Panel pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/restart-loop"
+
+  - name: control-panel.database
+    interval: 30s
+    rules:
+    - alert: ControlPanelDatabaseDown
+      expr: up{job="postgres-exporter"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        service: database
+        team: platform
+      annotations:
+        summary: "Control Panel database is down"
+        description: "PostgreSQL database for Control Panel is not responding."
+        runbook_url: "https://docs.gmac.io/runbooks/database-down"
+
+    - alert: ControlPanelDatabaseHighConnections
+      expr: pg_stat_database_numbackends{datname="control_panel"} / pg_settings_max_connections * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        service: database
+        team: platform
+      annotations:
+        summary: "Control Panel database has high connection usage"
+        description: "Database connection usage is {{ $value | humanizePercentage }} of maximum."
+        runbook_url: "https://docs.gmac.io/runbooks/high-db-connections"
+
+    - alert: ControlPanelDatabaseSlowQueries
+      expr: pg_stat_statements_mean_time_seconds > 1
+      for: 10m
+      labels:
+        severity: warning
+        service: database
+        team: platform
+      annotations:
+        summary: "Control Panel database has slow queries"
+        description: "Average query time is {{ $value }}s."
+        runbook_url: "https://docs.gmac.io/runbooks/slow-queries"
+
+  - name: control-panel.infrastructure
+    interval: 30s
+    rules:
+    - alert: ControlPanelPodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{container="control-panel"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: high
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel pod is crash looping"
+        description: "Pod {{ $labels.pod }} is restarting frequently."
+        runbook_url: "https://docs.gmac.io/runbooks/crash-looping"
+
+    - alert: ControlPanelPVCFullSoon
+      expr: (
+        kubelet_volume_stats_available_bytes{persistentvolumeclaim=~".*control-panel.*"} /
+        kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*control-panel.*"}
+      ) * 100 < 15
+      for: 1h
+      labels:
+        severity: warning
+        service: control-panel
+        team: platform
+      annotations:
+        summary: "Control Panel PVC will be full soon"
+        description: "PVC {{ $labels.persistentvolumeclaim }} has only {{ $value | humanizePercentage }} free space left."
+        runbook_url: "https://docs.gmac.io/runbooks/pvc-full"
+
+    - alert: ControlPanelIngressDown
+      expr: probe_success{job="blackbox", instance="https://control.gmac.io"} == 0
+      for: 3m
+      labels:
+        severity: critical
+        service: ingress
+        team: platform
+      annotations:
+        summary: "Control Panel ingress is not accessible"
+        description: "Control Panel is not reachable via https://control.gmac.io"
+        runbook_url: "https://docs.gmac.io/runbooks/ingress-down"
+
+  - name: control-panel.integrations
+    interval: 60s
+    rules:
+    - alert: ControlPanelGiteaIntegrationDown
+      expr: control_panel_integration_health{service="gitea"} == 0
+      for: 5m
+      labels:
+        severity: high
+        service: gitea
+        team: platform
+      annotations:
+        summary: "Control Panel Gitea integration is down"
+        description: "Cannot connect to Gitea API."
+        runbook_url: "https://docs.gmac.io/runbooks/gitea-integration"
+
+    - alert: ControlPanelDroneIntegrationDown
+      expr: control_panel_integration_health{service="drone"} == 0
+      for: 5m
+      labels:
+        severity: high
+        service: drone
+        team: platform
+      annotations:
+        summary: "Control Panel Drone integration is down"
+        description: "Cannot connect to Drone CI API."
+        runbook_url: "https://docs.gmac.io/runbooks/drone-integration"
+
+    - alert: ControlPanelHarborIntegrationDown
+      expr: control_panel_integration_health{service="harbor"} == 0
+      for: 5m
+      labels:
+        severity: high
+        service: harbor
+        team: platform
+      annotations:
+        summary: "Control Panel Harbor integration is down"
+        description: "Cannot connect to Harbor Registry API."
+        runbook_url: "https://docs.gmac.io/runbooks/harbor-integration"
+
+    - alert: ControlPanelArgoCDIntegrationDown
+      expr: control_panel_integration_health{service="argocd"} == 0
+      for: 5m
+      labels:
+        severity: high
+        service: argocd
+        team: platform
+      annotations:
+        summary: "Control Panel ArgoCD integration is down"
+        description: "Cannot connect to ArgoCD API."
+        runbook_url: "https://docs.gmac.io/runbooks/argocd-integration"
+
+  - name: control-panel.business
+    interval: 300s  # 5 minutes
+    rules:
+    - alert: ControlPanelNoActiveUsers
+      expr: control_panel_active_users_5m == 0
+      for: 30m
+      labels:
+        severity: warning
+        service: control-panel
+        team: product
+      annotations:
+        summary: "Control Panel has no active users"
+        description: "No users have been active in the Control Panel for 30 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/no-active-users"
+
+    - alert: ControlPanelHighFailedLogins
+      expr: increase(control_panel_failed_logins_total[15m]) > 20
+      for: 0m
+      labels:
+        severity: warning
+        service: control-panel
+        team: security
+      annotations:
+        summary: "Control Panel has high failed login attempts"
+        description: "{{ $value }} failed login attempts in the last 15 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/high-failed-logins"
+
+  - name: control-panel.slo
+    interval: 30s
+    rules:
+    # Availability SLO: 99.9% uptime
+    - alert: ControlPanelSLOAvailabilityBreach
+      expr: (
+        avg_over_time(probe_success{job="blackbox", instance="https://control.gmac.io"}[1h]) * 100
+      ) < 99.9
+      for: 0m
+      labels:
+        severity: critical
+        service: control-panel
+        team: sre
+        slo_type: availability
+      annotations:
+        summary: "Control Panel SLO availability breach"
+        description: "Availability SLO breach: {{ $value | humanizePercentage }} over the last hour (target: 99.9%)."
+        runbook_url: "https://docs.gmac.io/runbooks/slo-availability"
+
+    # Latency SLO: 95% of requests under 200ms
+    - alert: ControlPanelSLOLatencyBreach
+      expr: (
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le)) * 1000
+      ) > 200
+      for: 10m
+      labels:
+        severity: high
+        service: control-panel
+        team: sre
+        slo_type: latency
+      annotations:
+        summary: "Control Panel SLO latency breach"
+        description: "Latency SLO breach: P95 is {{ $value }}ms over the last 10 minutes (target: <200ms)."
+        runbook_url: "https://docs.gmac.io/runbooks/slo-latency"
+
+    # Error Rate SLO: <1% error rate
+    - alert: ControlPanelSLOErrorRateBreach
+      expr: (
+        sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m])) /
+        sum(rate(http_requests_total{job="control-panel"}[5m])) * 100
+      ) > 1
+      for: 15m
+      labels:
+        severity: high
+        service: control-panel
+        team: sre
+        slo_type: error_rate
+      annotations:
+        summary: "Control Panel SLO error rate breach"
+        description: "Error rate SLO breach: {{ $value | humanizePercentage }} over the last 15 minutes (target: <1%)."
+        runbook_url: "https://docs.gmac.io/runbooks/slo-error-rate"

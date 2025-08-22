@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import { useRouter } from "next/navigation";
 import Navigation from "@/components/Navigation";
 import IntegrationList from "@/components/integrations/IntegrationList";
 import CreateIntegrationModal from "@/components/integrations/CreateIntegrationModal";
 
 export default function IntegrationsPage() {
-  const { data: session, status } = useSession();
+  const { authenticated } = useAuth();
   const router = useRouter();
   const [integrations, setIntegrations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (!authenticated) {
       router.push("/auth/signin");
     }
-  }, [status, router]);
+  }, [authenticated, router]);
 
   useEffect(() => {
     fetchIntegrations();
@@ -57,7 +57,7 @@ export default function IntegrationsPage() {
     }
   };
 
-  if (status === "loading") {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="flex items-center justify-center min-h-screen">
@@ -67,7 +67,7 @@ export default function IntegrationsPage() {
     );
   }
 
-  if (!session) {
+  if (!authenticated) {
     return null;
   }
 

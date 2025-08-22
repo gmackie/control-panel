@@ -1,0 +1,721 @@
+# GMAC.IO Control Panel Observability Stack
+# Complete monitoring, logging, and tracing setup
+
+---
+# Prometheus Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'gmac-production'
+        environment: 'production'
+
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - 'alertmanager:9093'
+
+    scrape_configs:
+      # Control Panel Application
+      - job_name: 'control-panel'
+        static_configs:
+        - targets: ['control-panel-service.control-panel:3000']
+        metrics_path: /api/metrics
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        honor_labels: true
+        params:
+          format: ['prometheus']
+
+      # Kubernetes API Server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      # Kubernetes Nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+        - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+      # PostgreSQL Exporter
+      - job_name: 'postgres-exporter'
+        static_configs:
+        - targets: ['postgres-exporter.control-panel:9187']
+        scrape_interval: 30s
+
+      # Node Exporter
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+        - role: endpoints
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_endpoints_name]
+          regex: 'node-exporter'
+          action: keep
+
+      # Blackbox Exporter for external monitoring
+      - job_name: 'blackbox'
+        metrics_path: /probe
+        params:
+          module: [http_2xx]
+        static_configs:
+        - targets:
+          - https://control.gmac.io
+          - https://control.gmac.io/api/health
+        relabel_configs:
+        - source_labels: [__address__]
+          target_label: __param_target
+        - source_labels: [__param_target]
+          target_label: instance
+        - target_label: __address__
+          replacement: blackbox-exporter:9115
+
+      # Service Discovery for additional services
+      - job_name: 'kubernetes-service-endpoints'
+        kubernetes_sd_configs:
+        - role: endpoints
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+
+    # Recording rules for performance optimization
+    rule_files:
+      - "/etc/prometheus/recording_rules/*.yml"
+
+  recording_rules.yml: |
+    groups:
+    - name: control-panel.sli
+      interval: 30s
+      rules:
+      # Availability SLI
+      - record: control_panel:availability:rate5m
+        expr: avg_over_time(up{job="control-panel"}[5m])
+
+      # Latency SLI  
+      - record: control_panel:latency:p99:rate5m
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le))
+
+      - record: control_panel:latency:p95:rate5m
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le))
+
+      - record: control_panel:latency:p50:rate5m
+        expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le))
+
+      # Error Rate SLI
+      - record: control_panel:error_rate:rate5m
+        expr: sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m])) / sum(rate(http_requests_total{job="control-panel"}[5m]))
+
+      # Throughput SLI
+      - record: control_panel:throughput:rate5m
+        expr: sum(rate(http_requests_total{job="control-panel"}[5m]))
+
+      # Database SLIs
+      - record: control_panel:db_connections:rate5m
+        expr: avg_over_time(pg_stat_database_numbackends{datname="control_panel"}[5m])
+
+      - record: control_panel:db_query_time:rate5m
+        expr: avg_over_time(pg_stat_statements_mean_time_seconds[5m])
+
+---
+# Loki Configuration for Log Aggregation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: monitoring
+data:
+  loki.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      log_level: info
+
+    common:
+      path_prefix: /tmp/loki
+      storage:
+        filesystem:
+          chunks_directory: /tmp/loki/chunks
+          rules_directory: /tmp/loki/rules
+      replication_factor: 1
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 100
+
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+
+    ruler:
+      alertmanager_url: http://alertmanager:9093
+
+    # Limits
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      max_look_back_period: 0s
+      retention_period: 720h # 30 days
+      ingestion_rate_mb: 16
+      ingestion_burst_size_mb: 32
+      per_stream_rate_limit: 3MB
+      per_stream_rate_limit_burst: 15MB
+
+    # Compactor
+    compactor:
+      working_directory: /tmp/loki/boltdb-shipper-compactor
+      shared_store: filesystem
+
+    analytics:
+      reporting_enabled: false
+
+---
+# Jaeger Configuration for Distributed Tracing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-config
+  namespace: monitoring
+data:
+  jaeger.yaml: |
+    extensions:
+      health_check:
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+      zipkin:
+        endpoint: 0.0.0.0:9411
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+      memory_limiter:
+        limit_mib: 512
+
+    exporters:
+      jaeger:
+        endpoint: jaeger-collector:14250
+        tls:
+          insecure: true
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [memory_limiter, batch]
+          exporters: [jaeger]
+
+---
+# AlertManager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alerts@gmac.io'
+      smtp_auth_username: 'alerts@gmac.io'
+      smtp_auth_password: 'APP_PASSWORD'
+      slack_api_url: 'SLACK_WEBHOOK_URL'
+
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+
+    route:
+      group_by: ['alertname', 'service', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default-receiver'
+      routes:
+      # Critical alerts go to PagerDuty and Slack
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 10s
+        repeat_interval: 1h
+      
+      # High severity alerts go to Slack
+      - match:
+          severity: high
+        receiver: 'high-alerts'
+        group_wait: 30s
+        repeat_interval: 2h
+
+      # Warning alerts go to Slack during business hours
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+        group_wait: 5m
+        repeat_interval: 24h
+        active_time_intervals:
+        - business-hours
+
+      # Low severity and info alerts
+      - match:
+          severity: low
+        receiver: 'low-alerts'
+        repeat_interval: 48h
+
+    time_intervals:
+    - name: business-hours
+      time_intervals:
+      - times:
+        - start_time: '09:00'
+          end_time: '17:00'
+        weekdays: ['monday:friday']
+
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'service', 'instance']
+
+    - source_match:
+        severity: 'high'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'service', 'instance']
+
+    receivers:
+    - name: 'default-receiver'
+      slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL'
+        channel: '#alerts'
+        title: 'GMAC.IO Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}: {{ .Annotations.description }}{{ end }}'
+
+    - name: 'critical-alerts'
+      pagerduty_configs:
+      - routing_key: 'PAGERDUTY_INTEGRATION_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+      slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL'
+        channel: '#incidents'
+        title: '🚨 CRITICAL ALERT 🚨'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: 'danger'
+
+    - name: 'high-alerts'
+      slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL'
+        channel: '#platform-team'
+        title: '⚠️ High Priority Alert'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: 'warning'
+
+    - name: 'warning-alerts'
+      slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL'
+        channel: '#monitoring'
+        title: '💛 Warning Alert'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Service:* {{ .GroupLabels.service }}
+        color: '#FFD700'
+
+    - name: 'low-alerts'
+      email_configs:
+      - to: 'platform-team@gmac.io'
+        subject: 'Low Priority Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          Alert: {{ .GroupLabels.alertname }}
+          Summary: {{ .CommonAnnotations.summary }}
+          Description: {{ .CommonAnnotations.description }}
+          
+          View in Grafana: https://grafana.gmac.io
+
+---
+# Fluent Bit Configuration for Log Collection
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: monitoring
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*control-panel*.log
+        Parser            cri
+        Tag               control-panel.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     50MB
+        Skip_Long_Lines   On
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*postgres*.log
+        Parser            cri
+        Tag               postgres.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     20MB
+
+    [INPUT]
+        Name              systemd
+        Tag               systemd.*
+        Systemd_Filter    _SYSTEMD_UNIT=kubelet.service
+        Read_From_Tail    On
+
+    [FILTER]
+        Name                kubernetes
+        Match               control-panel.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     control-panel.var.log.containers.
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+        Annotations         Off
+
+    [FILTER]
+        Name                modify
+        Match               control-panel.*
+        Set                 service control-panel
+        Set                 environment production
+
+    [FILTER]
+        Name                parser
+        Match               control-panel.*
+        Key_Name            log
+        Parser              json
+        Reserve_Data        On
+
+    [OUTPUT]
+        Name                loki
+        Match               control-panel.*
+        Host                loki
+        Port                3100
+        Labels              job=control-panel, service=control-panel, environment=production
+        Label_Keys          $pod_name, $container_name, $namespace_name
+        Batch_Wait          1s
+        Batch_Size          10240
+
+    [OUTPUT]
+        Name                loki
+        Match               postgres.*
+        Host                loki
+        Port                3100
+        Labels              job=postgres, service=postgres, environment=production
+        Label_Keys          $pod_name, $container_name, $namespace_name
+        Batch_Wait          1s
+        Batch_Size          1024
+
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+---
+# OpenTelemetry Collector Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: monitoring
+data:
+  otel-collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: 'control-panel-traces'
+            static_configs:
+            - targets: ['control-panel-service.control-panel:3000']
+            metrics_path: /api/metrics
+            scrape_interval: 30s
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+      resource:
+        attributes:
+        - key: service.name
+          value: control-panel
+          action: upsert
+        - key: service.version
+          from_attribute: version
+          action: upsert
+        - key: deployment.environment
+          value: production
+          action: upsert
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        metric_expiration: 180m
+        enable_open_metrics: true
+      jaeger:
+        endpoint: jaeger-collector:14250
+        tls:
+          insecure: true
+      loki:
+        endpoint: http://loki:3100/loki/api/v1/push
+        tenant_id: "control-panel"
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+
+    service:
+      extensions: [health_check, pprof]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [jaeger]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [memory_limiter, resource, batch]
+          exporters: [prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [loki]
+
+---
+# SLO Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slo-config
+  namespace: monitoring
+data:
+  slos.yaml: |
+    slos:
+    - name: "control-panel-availability"
+      description: "Control Panel should be available 99.9% of the time"
+      service: "control-panel"
+      sli:
+        events:
+          error_query: 'sum(rate(probe_success{job="blackbox", instance="https://control.gmac.io"}[5m])) == 0'
+          total_query: 'sum(rate(probe_duration_seconds_count{job="blackbox", instance="https://control.gmac.io"}[5m]))'
+      objectives:
+      - target: 0.999  # 99.9%
+        window: 30d
+      alerting:
+        page_alert:
+          labels:
+            severity: critical
+            team: platform
+        ticket_alert:
+          labels:
+            severity: high
+            team: platform
+
+    - name: "control-panel-latency"
+      description: "95% of requests should complete within 200ms"
+      service: "control-panel"
+      sli:
+        threshold:
+          metric: 'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le))'
+          threshold: 0.2  # 200ms
+      objectives:
+      - target: 0.95   # 95%
+        window: 30d
+      alerting:
+        page_alert:
+          labels:
+            severity: high
+            team: platform
+
+    - name: "control-panel-error-rate"
+      description: "Error rate should be less than 1%"
+      service: "control-panel"
+      sli:
+        ratio:
+          errors:
+            query: 'sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m]))'
+          total:
+            query: 'sum(rate(http_requests_total{job="control-panel"}[5m]))'
+      objectives:
+      - target: 0.99   # <1% error rate
+        window: 30d
+      alerting:
+        page_alert:
+          labels:
+            severity: high
+            team: platform
+
+    error_budget_burn_alerts:
+      - short_window: 1h
+        short_burn_rate: 14.4
+        long_window: 1h
+        long_burn_rate: 14.4
+        severity: critical
+      - short_window: 6h
+        short_burn_rate: 6
+        long_window: 1h
+        long_burn_rate: 6
+        severity: critical
+      - short_window: 1d
+        short_burn_rate: 3
+        long_window: 4h
+        long_burn_rate: 1
+        severity: high
+      - short_window: 3d
+        short_burn_rate: 1
+        long_window: 1d
+        long_burn_rate: 1
+        severity: warning

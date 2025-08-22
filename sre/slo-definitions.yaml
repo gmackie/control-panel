@@ -1,0 +1,387 @@
+# GMAC.IO Control Panel - Service Level Objectives (SLOs)
+# This file defines the SLOs for the Control Panel service
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-slos
+  namespace: monitoring
+  labels:
+    app: control-panel
+    component: slo
+data:
+  slos.yaml: |
+    # Control Panel Service Level Objectives
+    service: "GMAC.IO Control Panel"
+    owner: "Platform Team"
+    contact: "platform-team@gmac.io"
+    
+    # Overall Service SLOs
+    slos:
+      # Availability SLO - 99.9% uptime
+      - name: "availability"
+        description: "Service should be available 99.9% of the time"
+        objective: 0.999
+        window: "30d"
+        sli:
+          type: "availability"
+          query: |
+            sum(rate(probe_success{job="blackbox", instance="https://control.gmac.io"}[5m])) /
+            sum(rate(probe_duration_seconds_count{job="blackbox", instance="https://control.gmac.io"}[5m]))
+        alerting:
+          burn_rate_alerts:
+            - name: "critical-burn-rate"
+              severity: "critical"
+              short_window: "1h"
+              long_window: "5m"
+              burn_rate_threshold: 14.4
+              error_budget_remaining: 2
+            - name: "high-burn-rate"  
+              severity: "high"
+              short_window: "6h"
+              long_window: "30m"
+              burn_rate_threshold: 6
+              error_budget_remaining: 5
+            - name: "medium-burn-rate"
+              severity: "warning"
+              short_window: "1d"
+              long_window: "2h"
+              burn_rate_threshold: 3
+              error_budget_remaining: 10
+      
+      # Latency SLO - 95% of requests under 200ms
+      - name: "latency"
+        description: "95% of requests should complete within 200ms"
+        objective: 0.95
+        window: "30d"
+        sli:
+          type: "latency"
+          threshold: 0.2  # 200ms
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="control-panel"}[5m])) by (le)
+            ) < 0.2
+        alerting:
+          burn_rate_alerts:
+            - name: "latency-critical-burn"
+              severity: "critical"
+              short_window: "1h"
+              long_window: "5m"
+              burn_rate_threshold: 14.4
+            - name: "latency-high-burn"
+              severity: "high"
+              short_window: "6h"
+              long_window: "30m"
+              burn_rate_threshold: 6
+      
+      # Error Rate SLO - Less than 1% error rate
+      - name: "error_rate"
+        description: "Error rate should be less than 1%"
+        objective: 0.99
+        window: "30d"
+        sli:
+          type: "error_rate"
+          query: |
+            sum(rate(http_requests_total{job="control-panel",status=~"2.."}[5m])) /
+            sum(rate(http_requests_total{job="control-panel"}[5m]))
+        alerting:
+          burn_rate_alerts:
+            - name: "error-rate-critical"
+              severity: "critical"
+              short_window: "1h"
+              long_window: "5m"
+              burn_rate_threshold: 14.4
+      
+      # Throughput SLO - Handle at least 100 requests per second
+      - name: "throughput"
+        description: "Service should handle at least 100 requests per second"
+        objective: 0.95
+        window: "30d"
+        sli:
+          type: "throughput"
+          threshold: 100
+          query: |
+            sum(rate(http_requests_total{job="control-panel"}[5m])) >= 100
+
+    # Component-specific SLOs
+    components:
+      # Database SLOs
+      database:
+        - name: "db_availability"
+          description: "Database should be available 99.95% of the time"
+          objective: 0.9995
+          window: "30d"
+          sli:
+            query: |
+              up{job="postgres-exporter"}
+        
+        - name: "db_query_latency"
+          description: "95% of database queries should complete within 50ms"
+          objective: 0.95
+          window: "30d"
+          sli:
+            threshold: 0.05
+            query: |
+              histogram_quantile(0.95,
+                sum(rate(pg_stat_statements_mean_time_seconds_bucket[5m])) by (le)
+              ) < 0.05
+        
+        - name: "db_connection_availability"
+          description: "Database should maintain <80% connection pool utilization"
+          objective: 0.95
+          window: "30d"
+          sli:
+            threshold: 0.8
+            query: |
+              pg_stat_database_numbackends{datname="control_panel"} /
+              pg_settings_max_connections < 0.8
+
+      # Integration SLOs
+      integrations:
+        - name: "gitea_integration_availability"
+          description: "Gitea integration should be available 99.5% of the time"
+          objective: 0.995
+          window: "30d"
+          sli:
+            query: |
+              control_panel_integration_health{service="gitea"}
+        
+        - name: "drone_integration_availability"
+          description: "Drone CI integration should be available 99.5% of the time"
+          objective: 0.995
+          window: "30d"
+          sli:
+            query: |
+              control_panel_integration_health{service="drone"}
+        
+        - name: "harbor_integration_availability"
+          description: "Harbor registry integration should be available 99.5% of the time"
+          objective: 0.995
+          window: "30d"
+          sli:
+            query: |
+              control_panel_integration_health{service="harbor"}
+        
+        - name: "argocd_integration_availability"
+          description: "ArgoCD integration should be available 99.5% of the time"
+          objective: 0.995
+          window: "30d"
+          sli:
+            query: |
+              control_panel_integration_health{service="argocd"}
+
+    # User Journey SLOs
+    user_journeys:
+      - name: "login_success_rate"
+        description: "User login should succeed 99% of the time"
+        objective: 0.99
+        window: "30d"
+        sli:
+          query: |
+            sum(rate(control_panel_auth_attempts_total{status="success"}[5m])) /
+            sum(rate(control_panel_auth_attempts_total[5m]))
+      
+      - name: "dashboard_load_time"
+        description: "Dashboard should load within 3 seconds for 95% of users"
+        objective: 0.95
+        window: "30d"
+        sli:
+          threshold: 3.0
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="control-panel",endpoint="/dashboard"}[5m])) by (le)
+            ) < 3.0
+      
+      - name: "api_response_success"
+        description: "API endpoints should respond successfully 99.5% of the time"
+        objective: 0.995
+        window: "30d"
+        sli:
+          query: |
+            sum(rate(http_requests_total{job="control-panel",status=~"2..",endpoint=~"/api/.*"}[5m])) /
+            sum(rate(http_requests_total{job="control-panel",endpoint=~"/api/.*"}[5m]))
+
+    # Error Budget Policies
+    error_budget_policy:
+      # Policy for how to handle error budget exhaustion
+      actions:
+        - condition: "error_budget_remaining < 1%"
+          action: "stop_deployments"
+          description: "Stop all non-critical deployments when error budget is exhausted"
+          notification:
+            - "platform-team@gmac.io"
+            - "#platform-team"
+        
+        - condition: "error_budget_remaining < 5%"
+          action: "increase_oncall_coverage"  
+          description: "Increase on-call coverage and monitoring when error budget is low"
+          notification:
+            - "#platform-team"
+        
+        - condition: "error_budget_remaining < 10%"
+          action: "prioritize_reliability"
+          description: "Prioritize reliability work over feature development"
+          notification:
+            - "engineering-leads@gmac.io"
+
+    # SLO Review Schedule
+    review_schedule:
+      frequency: "quarterly"
+      next_review: "2024-04-15"
+      participants:
+        - "Platform Team"
+        - "Engineering Leads" 
+        - "Product Team"
+        - "SRE Team"
+      
+    # Historical Performance
+    historical_performance:
+      "2024-Q1":
+        availability: 99.95
+        latency_p95: 150
+        error_rate: 0.1
+      "2023-Q4":
+        availability: 99.92
+        latency_p95: 180
+        error_rate: 0.2
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: control-panel-slo-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: slo.control-panel.availability
+    interval: 30s
+    rules:
+    # Availability SLO burn rate alerts
+    - alert: ControlPanelSLOAvailabilityCriticalBurnRate
+      expr: |
+        (
+          1 - sum(rate(probe_success{job="blackbox", instance="https://control.gmac.io"}[1h])) /
+          sum(rate(probe_duration_seconds_count{job="blackbox", instance="https://control.gmac.io"}[1h]))
+        ) > (14.4 * (1 - 0.999))
+      for: 2m
+      labels:
+        severity: critical
+        slo: availability
+        burn_rate: critical
+        team: platform
+      annotations:
+        summary: "Control Panel availability SLO critical burn rate"
+        description: "Control Panel availability is burning through error budget at {{ $value | humanizePercentage }} rate. At this rate, the monthly error budget will be exhausted in less than 6 hours."
+        dashboard: "https://grafana.gmac.io/d/slo-availability"
+        runbook: "https://docs.gmac.io/runbooks/slo-availability-burn"
+
+    - alert: ControlPanelSLOAvailabilityHighBurnRate  
+      expr: |
+        (
+          1 - sum(rate(probe_success{job="blackbox", instance="https://control.gmac.io"}[6h])) /
+          sum(rate(probe_duration_seconds_count{job="blackbox", instance="https://control.gmac.io"}[6h]))
+        ) > (6 * (1 - 0.999))
+      for: 15m
+      labels:
+        severity: high
+        slo: availability  
+        burn_rate: high
+        team: platform
+      annotations:
+        summary: "Control Panel availability SLO high burn rate"
+        description: "Control Panel availability is burning through error budget at {{ $value | humanizePercentage }} rate."
+
+  - name: slo.control-panel.latency
+    interval: 30s
+    rules:
+    - alert: ControlPanelSLOLatencyCriticalBurnRate
+      expr: |
+        (
+          sum(rate(http_request_duration_seconds_bucket{job="control-panel",le="0.2"}[1h])) /
+          sum(rate(http_request_duration_seconds_bucket{job="control-panel",le="+Inf"}[1h])) < 0.95
+        ) and
+        (
+          sum(rate(http_request_duration_seconds_bucket{job="control-panel",le="0.2"}[5m])) /
+          sum(rate(http_request_duration_seconds_bucket{job="control-panel",le="+Inf"}[5m])) < 0.95
+        )
+      for: 2m
+      labels:
+        severity: critical
+        slo: latency
+        burn_rate: critical
+        team: platform
+      annotations:
+        summary: "Control Panel latency SLO critical burn rate"
+        description: "Control Panel latency SLO is being violated. Current P95 latency is {{ $value }}ms (target: <200ms)."
+
+  - name: slo.control-panel.error-rate
+    interval: 30s  
+    rules:
+    - alert: ControlPanelSLOErrorRateCriticalBurnRate
+      expr: |
+        (
+          sum(rate(http_requests_total{job="control-panel",status=~"5.."}[1h])) /
+          sum(rate(http_requests_total{job="control-panel"}[1h])) > (14.4 * 0.01)
+        ) and
+        (
+          sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m])) /
+          sum(rate(http_requests_total{job="control-panel"}[5m])) > (14.4 * 0.01)
+        )
+      for: 2m
+      labels:
+        severity: critical
+        slo: error_rate
+        burn_rate: critical  
+        team: platform
+      annotations:
+        summary: "Control Panel error rate SLO critical burn rate"
+        description: "Control Panel error rate is {{ $value | humanizePercentage }} (target: <1%), burning error budget rapidly."
+
+  # Error Budget Tracking
+  - name: slo.control-panel.error-budget
+    interval: 300s  # 5 minutes
+    rules:
+    - record: control_panel:slo:error_budget_remaining:availability
+      expr: |
+        1 - (
+          (1 - sum_over_time(probe_success{job="blackbox", instance="https://control.gmac.io"}[30d]) / count_over_time(probe_success{job="blackbox", instance="https://control.gmac.io"}[30d])) /
+          (1 - 0.999)
+        )
+
+    - record: control_panel:slo:error_budget_remaining:latency
+      expr: |
+        1 - (
+          (1 - sum_over_time((http_request_duration_seconds_bucket{job="control-panel",le="0.2"} / ignoring(le) http_request_duration_seconds_bucket{job="control-panel",le="+Inf"})[30d:5m]) / count_over_time(http_request_duration_seconds_bucket{job="control-panel",le="+Inf"}[30d:5m])) /
+          (1 - 0.95)
+        )
+
+    - record: control_panel:slo:error_budget_remaining:error_rate
+      expr: |
+        1 - (
+          (sum_over_time(http_requests_total{job="control-panel",status=~"5.."}[30d]) / sum_over_time(http_requests_total{job="control-panel"}[30d])) /
+          0.01
+        )
+
+    # Error Budget Exhaustion Alerts
+    - alert: ControlPanelSLOErrorBudgetExhausted
+      expr: control_panel:slo:error_budget_remaining:availability < 0.01
+      for: 5m
+      labels:
+        severity: critical
+        slo: availability
+        team: platform
+      annotations:
+        summary: "Control Panel availability error budget exhausted"
+        description: "Control Panel availability error budget is {{ $value | humanizePercentage }} remaining. Deployment freeze is in effect."
+        action: "Stop all non-critical deployments until error budget recovers"
+
+    - alert: ControlPanelSLOErrorBudgetLow
+      expr: control_panel:slo:error_budget_remaining:availability < 0.05
+      for: 5m
+      labels:
+        severity: warning
+        slo: availability
+        team: platform
+      annotations:
+        summary: "Control Panel availability error budget low"
+        description: "Control Panel availability error budget is {{ $value | humanizePercentage }} remaining. Consider prioritizing reliability work."

@@ -1,0 +1,655 @@
+# Updated Control Panel Deployment for CI Integration
+# This file should replace /components/control-panel/install.sh functionality
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: control-panel
+  labels:
+    name: control-panel
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: control-panel
+  namespace: control-panel
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-panel
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "events", "configmaps", "secrets", "namespaces", "nodes"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
+    verbs: ["*"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/exec", "pods/portforward"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: control-panel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: control-panel
+subjects:
+  - kind: ServiceAccount
+    name: control-panel
+    namespace: control-panel
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-config
+  namespace: control-panel
+data:
+  config.json: |
+    {
+      "api": {
+        "kubernetes": {
+          "inCluster": true
+        }
+      },
+      "features": {
+        "monitoring": true,
+        "deployments": true,
+        "gitea": true,
+        "logs": true,
+        "metrics": true,
+        "clusterScaling": true,
+        "nodeManagement": true,
+        "vpsManagement": true,
+        "hybridInfrastructure": true,
+        "aiOperations": true,
+        "incidentPrediction": true,
+        "capacityPlanning": true,
+        "rootCauseAnalysis": true,
+        "resourceOptimization": true,
+        "anomalyDetection": true
+      },
+      "services": {
+        "prometheus": "http://prometheus-kube-prometheus-prometheus.monitoring:9090",
+        "grafana": "/grafana",
+        "gitea": "/git",
+        "alertmanager": "http://alertmanager-kube-prometheus-alertmanager.monitoring:9093",
+        "incidentPrediction": "http://control-panel-incident-prediction:8001",
+        "capacityPlanning": "http://control-panel-capacity-planning:8001",
+        "rootCauseAnalysis": "http://control-panel-root-cause-analysis:8001",
+        "resourceOptimization": "http://control-panel-resource-optimization:8001",
+        "anomalyDetection": "http://control-panel-anomaly-detection:8001"
+      },
+      "scaling": {
+        "enabled": true,
+        "provider": "hetzner",
+        "thresholds": {
+          "cpuScaleUp": 80,
+          "cpuScaleDown": 20,
+          "memScaleUp": 80,
+          "memScaleDown": 20
+        },
+        "limits": {
+          "minNodes": 1,
+          "maxNodes": 10
+        },
+        "cooldown": {
+          "scaleUp": 300,
+          "scaleDown": 600
+        }
+      },
+      "ai": {
+        "enabled": true,
+        "models": {
+          "incidentPrediction": {
+            "enabled": true,
+            "confidence_threshold": 0.8
+          },
+          "capacityPlanning": {
+            "enabled": true,
+            "forecast_horizon_hours": 24
+          },
+          "anomalyDetection": {
+            "enabled": true,
+            "detection_methods": ["statistical", "ml", "ensemble"]
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: control-panel-data
+  namespace: control-panel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: longhorn
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-frontend
+  namespace: control-panel
+  labels:
+    app: control-panel-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: control-panel-frontend
+  template:
+    metadata:
+      labels:
+        app: control-panel-frontend
+        component: frontend
+    spec:
+      serviceAccountName: control-panel
+      containers:
+      - name: frontend
+        image: ghcr.io/gmac-io/control-panel:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: PORT
+          value: "3000"
+        - name: BACKEND_URL
+          value: "http://control-panel-backend:8000"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: control-panel-config
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-backend
+  namespace: control-panel
+  labels:
+    app: control-panel-backend
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: control-panel-backend
+  template:
+    metadata:
+      labels:
+        app: control-panel-backend
+        component: backend
+    spec:
+      serviceAccountName: control-panel
+      containers:
+      - name: backend
+        image: ghcr.io/gmac-io/control-panel-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: ENVIRONMENT
+          value: production
+        - name: LOG_LEVEL
+          value: info
+        - name: PROMETHEUS_URL
+          value: "http://prometheus-kube-prometheus-prometheus.monitoring:9090"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: data
+          mountPath: /app/data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: control-panel-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: control-panel-data
+---
+# AI Services Deployments
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-incident-prediction
+  namespace: control-panel
+  labels:
+    app: control-panel-incident-prediction
+    component: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel-incident-prediction
+  template:
+    metadata:
+      labels:
+        app: control-panel-incident-prediction
+        component: ai-service
+    spec:
+      containers:
+      - name: incident-prediction
+        image: ghcr.io/gmac-io/control-panel-incident-prediction:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-capacity-planning
+  namespace: control-panel
+  labels:
+    app: control-panel-capacity-planning
+    component: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel-capacity-planning
+  template:
+    metadata:
+      labels:
+        app: control-panel-capacity-planning
+        component: ai-service
+    spec:
+      containers:
+      - name: capacity-planning
+        image: ghcr.io/gmac-io/control-panel-capacity-planning:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-root-cause-analysis
+  namespace: control-panel
+  labels:
+    app: control-panel-root-cause-analysis
+    component: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel-root-cause-analysis
+  template:
+    metadata:
+      labels:
+        app: control-panel-root-cause-analysis
+        component: ai-service
+    spec:
+      containers:
+      - name: root-cause-analysis
+        image: ghcr.io/gmac-io/control-panel-root-cause-analysis:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-resource-optimization
+  namespace: control-panel
+  labels:
+    app: control-panel-resource-optimization
+    component: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel-resource-optimization
+  template:
+    metadata:
+      labels:
+        app: control-panel-resource-optimization
+        component: ai-service
+    spec:
+      containers:
+      - name: resource-optimization
+        image: ghcr.io/gmac-io/control-panel-resource-optimization:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel-anomaly-detection
+  namespace: control-panel
+  labels:
+    app: control-panel-anomaly-detection
+    component: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-panel-anomaly-detection
+  template:
+    metadata:
+      labels:
+        app: control-panel-anomaly-detection
+        component: ai-service
+    spec:
+      containers:
+      - name: anomaly-detection
+        image: ghcr.io/gmac-io/control-panel-anomaly-detection:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-frontend
+  namespace: control-panel
+  labels:
+    app: control-panel-frontend
+spec:
+  selector:
+    app: control-panel-frontend
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-backend
+  namespace: control-panel
+  labels:
+    app: control-panel-backend
+spec:
+  selector:
+    app: control-panel-backend
+  ports:
+  - port: 8000
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-incident-prediction
+  namespace: control-panel
+  labels:
+    app: control-panel-incident-prediction
+spec:
+  selector:
+    app: control-panel-incident-prediction
+  ports:
+  - port: 8001
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-capacity-planning
+  namespace: control-panel
+  labels:
+    app: control-panel-capacity-planning
+spec:
+  selector:
+    app: control-panel-capacity-planning
+  ports:
+  - port: 8001
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-root-cause-analysis
+  namespace: control-panel
+  labels:
+    app: control-panel-root-cause-analysis
+spec:
+  selector:
+    app: control-panel-root-cause-analysis
+  ports:
+  - port: 8001
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-resource-optimization
+  namespace: control-panel
+  labels:
+    app: control-panel-resource-optimization
+spec:
+  selector:
+    app: control-panel-resource-optimization
+  ports:
+  - port: 8001
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-anomaly-detection
+  namespace: control-panel
+  labels:
+    app: control-panel-anomaly-detection
+spec:
+  selector:
+    app: control-panel-anomaly-detection
+  ports:
+  - port: 8001
+    targetPort: http
+    protocol: TCP
+    name: http
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: control-panel
+  namespace: control-panel
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - control-panel.${DOMAIN}
+    secretName: control-panel-tls
+  rules:
+  - host: control-panel.${DOMAIN}
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: control-panel-backend
+            port:
+              name: http
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: control-panel-frontend
+            port:
+              name: http

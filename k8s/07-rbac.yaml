@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: control-panel
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: service-account
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: control-panel-reader
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: rbac
+rules:
+# Nodes - read access for cluster management
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+
+# Node metrics and status
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+
+# Pods - read access for monitoring
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/status"]
+  verbs: ["get", "list", "watch"]
+
+# Services - read access
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+
+# Deployments, ReplicaSets - read access
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+
+# ConfigMaps and Secrets - read access (limited)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+  resourceNames: ["control-panel-secrets", "control-panel-config"]
+
+# Ingresses - read access
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+
+# Persistent Volumes - read access
+- apiGroups: [""]
+  resources: ["persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+
+# Events - read access for monitoring
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
+
+# Custom Resource Definitions (for ArgoCD, Prometheus, etc.)
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
+
+# ArgoCD Applications (if ArgoCD CRDs are installed)
+- apiGroups: ["argoproj.io"]
+  resources: ["applications", "appprojects"]
+  verbs: ["get", "list", "watch"]
+
+# Prometheus ServiceMonitors (if Prometheus Operator is installed)
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["servicemonitors", "prometheusrules"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: control-panel-reader-binding
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: control-panel
+  namespace: control-panel
+roleRef:
+  kind: ClusterRole
+  name: control-panel-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Additional Role for namespace-specific operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: control-panel
+  name: control-panel-namespace-admin
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: rbac
+rules:
+# Full access to namespace resources
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["apps"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-panel-namespace-admin-binding
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: control-panel
+  namespace: control-panel
+roleRef:
+  kind: Role
+  name: control-panel-namespace-admin
+  apiGroup: rbac.authorization.k8s.io

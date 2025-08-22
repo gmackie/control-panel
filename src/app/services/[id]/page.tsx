@@ -89,7 +89,7 @@ export default function ServiceDetailPage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold mb-2">Service not found</h2>
         <p className="text-muted-foreground">
-          The service you're looking for doesn't exist.
+          The service you&apos;re looking for doesn&apos;t exist.
         </p>
       </div>
     );

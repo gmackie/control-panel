@@ -12,11 +12,21 @@ export default function AuthError() {
       case "AccessDenied":
         return "Access denied. Only authorized GitHub accounts are allowed.";
       case "Configuration":
-        return "Authentication configuration error.";
+        return "Authentication configuration error. Please check OAuth settings.";
       case "Verification":
         return "Verification failed. Please try again.";
+      case "OAuthSignin":
+        return "Error during OAuth sign in. Check GitHub app configuration.";
+      case "OAuthCallback":
+        return "OAuth callback error. Verify redirect URI matches GitHub app settings.";
+      case "OAuthCreateAccount":
+        return "Could not create user account from OAuth data.";
+      case "EmailCreateAccount":
+        return "Could not create user account from email.";
+      case "Callback":
+        return "OAuth callback error. Check redirect URI configuration.";
       default:
-        return "An authentication error occurred.";
+        return `Authentication error: ${error || 'Unknown error occurred'}`;
     }
   };
 
@@ -30,6 +40,30 @@ export default function AuthError() {
           <p className="mt-2 text-center text-sm text-muted-foreground">
             {getErrorMessage(error)}
           </p>
+          {error && (
+            <div className="mt-4 p-4 bg-gray-900 rounded-lg">
+              <p className="text-xs text-gray-400 font-mono">
+                Error code: {error}
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                If this error persists, ensure your GitHub OAuth app has:
+              </p>
+              <ul className="text-xs text-gray-400 mt-1 list-disc list-inside">
+                <li>Authorization callback URL must be exactly: <code className="bg-gray-800 px-1 rounded">https://gmac.io/oauth2/callback</code></li>
+                <li>Homepage URL: <code className="bg-gray-800 px-1 rounded">https://gmac.io</code></li>
+                <li>Application name: GMAC.IO Control Panel (or similar)</li>
+              </ul>
+              <div className="mt-3 p-3 bg-yellow-950/20 border border-yellow-900 rounded text-xs">
+                <p className="flex items-start gap-2">
+                  <span className="text-yellow-400">⚠️</span>
+                  <span>
+                    Make sure the callback URL matches exactly, including the protocol (https://).
+                    Do not include a trailing slash or any extra parameters.
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-8 space-y-6">
           <Link

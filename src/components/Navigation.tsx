@@ -1,20 +1,28 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/app/providers";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export default function Navigation() {
-  const { data: session } = useSession();
+  const { user, authenticated, signOut } = useAuth();
   const pathname = usePathname();
 
   const navigation = [
     { name: "Dashboard", href: "/" },
+    { name: "Applications", href: "/applications" },
+    { name: "Deployments", href: "/deployments" },
+    { name: "Health", href: "/health" },
+    { name: "Infrastructure", href: "/infrastructure" },
+    { name: "Cluster", href: "/cluster" },
     { name: "Services", href: "/services" },
     { name: "Integrations", href: "/integrations" },
-    { name: "Deployments", href: "/deployments" },
     { name: "Secrets", href: "/secrets" },
-    { name: "Starter App", href: "/starter" },
+    { name: "Costs", href: "/costs" },
+    { name: "Alerts", href: "/alerts" },
+    { name: "Registry", href: "/registry" },
+    { name: "Webhooks", href: "/webhooks" },
+    { name: "Starter", href: "/starter" },
   ];
 
   return (
@@ -27,7 +35,7 @@ export default function Navigation() {
                 gmac.io
               </Link>
             </div>
-            {session && (
+            {authenticated && (
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 {navigation.map((item) => (
                   <Link
@@ -46,10 +54,10 @@ export default function Navigation() {
             )}
           </div>
           <div className="flex items-center">
-            {session?.user ? (
+            {authenticated ? (
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-300">
-                  {(session.user as any).name || (session.user as any).login}
+                  {user}
                 </span>
                 <button
                   onClick={() => signOut()}

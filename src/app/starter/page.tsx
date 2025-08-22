@@ -244,7 +244,7 @@ export default function StarterPage() {
             <h2 className="text-xl font-semibold mb-4">Choose Integrations</h2>
             <IntegrationSelector
               selectedIntegrations={formData.integrations}
-              onIntegrationsChange={(integrations) => setFormData({ ...formData, integrations })}
+              onSelectionChange={(integrations) => setFormData({ ...formData, integrations })}
             />
           </div>
         )}

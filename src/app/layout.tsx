@@ -1,13 +1,13 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";
-import Navigation from "@/components/Navigation";
+import MainLayout from "@/components/layout/main-layout";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "GMAC.IO - Business Control Panel",
-  description: "Monitor your applications, customers, and revenue",
+  title: "GMAC.IO - Infrastructure Control Panel",
+  description: "Complete infrastructure management and monitoring platform",
 };
 
 export default function RootLayout({
@@ -21,8 +21,9 @@ export default function RootLayout({
         className={`${inter.className} bg-background text-foreground min-h-screen`}
       >
         <Providers>
-          <Navigation />
-          <main>{children}</main>
+          <MainLayout>
+            {children}
+          </MainLayout>
         </Providers>
       </body>
     </html>

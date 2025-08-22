@@ -1,164 +1,386 @@
-'use client'
+"use client";
 
-import { useQuery } from '@tanstack/react-query'
-import { fetchRecentDeployments } from '@/lib/api'
-import { Deployment } from '@/types'
-import { GitBranch, GitCommit, Clock, ExternalLink, CheckCircle, XCircle, Clock3, ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  GitBranch,
+  GitCommit,
+  GitPullRequest,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  ArrowRight,
+  Activity,
+  Package,
+  Rocket,
+  History,
+  RotateCcw,
+  Eye,
+  Terminal,
+  ChevronDown,
+  ChevronRight,
+  Server,
+  Globe,
+  Shield,
+  Zap,
+} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+
+interface Deployment {
+  id: string;
+  applicationId: string;
+  applicationName: string;
+  environment: 'development' | 'staging' | 'production';
+  status: 'pending' | 'building' | 'deploying' | 'running' | 'failed' | 'rolled_back';
+  version: string;
+  commit: {
+    sha: string;
+    message: string;
+    author: string;
+    timestamp: Date;
+    branch: string;
+  };
+  pipeline: {
+    id: string;
+    url: string;
+    stages: PipelineStage[];
+  };
+  cluster: {
+    name: string;
+    region: string;
+    provider: 'k3s' | 'k8s';
+  };
+  deployment: {
+    replicas: number;
+    readyReplicas: number;
+    image: string;
+    namespace: string;
+  };
+  metrics?: {
+    cpu: number;
+    memory: number;
+    requests: number;
+    errors: number;
+    latency: number;
+  };
+  startedAt: Date;
+  completedAt?: Date;
+  deployedBy: string;
+  rollbackTo?: string;
+}
+
+interface PipelineStage {
+  name: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+  startedAt?: Date;
+  completedAt?: Date;
+  duration?: number;
+  logs?: string[];
+}
+
+interface DeploymentHistory {
+  id: string;
+  deployment: Deployment;
+  action: 'deployed' | 'rolled_back' | 'scaled' | 'updated';
+  timestamp: Date;
+  user: string;
+  details?: string;
+}
 
 export default function DeploymentsPage() {
-  const { data: deployments, isLoading } = useQuery<Deployment[]>({
-    queryKey: ['recent-deployments'],
-    queryFn: fetchRecentDeployments,
-    refetchInterval: 60000,
-  })
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [history, setHistory] = useState<DeploymentHistory[]>([]);
+  const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showLogs, setShowLogs] = useState<string | null>(null);
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchDeployments();
+    const interval = setInterval(fetchDeployments, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [selectedEnvironment]);
+
+  const fetchDeployments = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await fetch(`/api/deployments?environment=${selectedEnvironment}`);
+      const data = await response.json();
+      setDeployments(data.deployments);
+      setHistory(data.history);
+    } catch (error) {
+      console.error('Failed to fetch deployments:', error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleDeploy = async (applicationId: string, environment: string) => {
+    try {
+      const response = await fetch('/api/deployments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId, environment }),
+      });
+      
+      if (response.ok) {
+        await fetchDeployments();
+      }
+    } catch (error) {
+      console.error('Failed to trigger deployment:', error);
+    }
+  };
+
+  const handleRollback = async (deploymentId: string, targetVersion: string) => {
+    try {
+      const response = await fetch(`/api/deployments/${deploymentId}/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetVersion }),
+      });
+      
+      if (response.ok) {
+        await fetchDeployments();
+      }
+    } catch (error) {
+      console.error('Failed to rollback deployment:', error);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'text-green-500';
+      case 'building': return 'text-blue-500';
+      case 'deploying': return 'text-yellow-500';
+      case 'failed': return 'text-red-500';
+      case 'rolled_back': return 'text-orange-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'running': return <CheckCircle className="h-4 w-4" />;
+      case 'building': return <Loader2 className="h-4 w-4 animate-spin" />;
+      case 'deploying': return <Rocket className="h-4 w-4" />;
+      case 'failed': return <XCircle className="h-4 w-4" />;
+      case 'rolled_back': return <RotateCcw className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
+    }
+  };
+
+  const getEnvironmentColor = (env: string) => {
+    switch (env) {
+      case 'production': return 'bg-red-500/20 text-red-300 border-red-500';
+      case 'staging': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500';
+      case 'development': return 'bg-blue-500/20 text-blue-300 border-blue-500';
+      default: return 'bg-gray-500/20 text-gray-300 border-gray-500';
+    }
+  };
+
+  const toggleStageExpansion = (stageId: string) => {
+    const newExpanded = new Set(expandedStages);
+    if (newExpanded.has(stageId)) {
+      newExpanded.delete(stageId);
+    } else {
+      newExpanded.add(stageId);
+    }
+    setExpandedStages(newExpanded);
+  };
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Deployments</h1>
-        </div>
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="animate-pulse">
-              <div className="h-24 bg-gray-800 rounded-lg"></div>
-            </div>
-          ))}
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    )
-  }
-
-  const statusIcon = {
-    running: <CheckCircle className="h-5 w-5 text-green-500" />,
-    success: <CheckCircle className="h-5 w-5 text-green-500" />,
-    pending: <Clock3 className="h-5 w-5 text-yellow-500" />,
-    failed: <XCircle className="h-5 w-5 text-red-500" />,
-  }
-
-  const statusColor = {
-    running: 'text-green-500',
-    success: 'text-green-500',
-    pending: 'text-yellow-500',
-    failed: 'text-red-500',
-  }
-
-  const environmentColor = {
-    production: 'bg-red-900/20 text-red-400 border-red-900',
-    staging: 'bg-yellow-900/20 text-yellow-400 border-yellow-900',
-    development: 'bg-blue-900/20 text-blue-400 border-blue-900',
-  }
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date)
+    );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link
-            href="/"
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+        <div>
           <h1 className="text-3xl font-bold">Deployments</h1>
+          <p className="text-gray-400 mt-1">
+            Monitor and manage application deployments across all environments
+          </p>
         </div>
-        <div className="flex items-center space-x-4">
-          <select className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm">
-            <option value="all">All Environments</option>
-            <option value="production">Production</option>
-            <option value="staging">Staging</option>
-            <option value="development">Development</option>
-          </select>
-          <select className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm">
-            <option value="all">All Status</option>
-            <option value="success">Success</option>
-            <option value="running">Running</option>
-            <option value="failed">Failed</option>
-            <option value="pending">Pending</option>
-          </select>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchDeployments}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button>
+            <Rocket className="h-4 w-4 mr-2" />
+            New Deployment
+          </Button>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {!deployments || deployments.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            No deployments found
-          </div>
-        ) : (
-          deployments.map((deployment) => (
-            <div
-              key={deployment.id}
-              className="card hover:border-gray-700 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h3 className="text-xl font-semibold">{deployment.name}</h3>
-                    <span
-                      className={`status-badge ${
-                        environmentColor[deployment.environment]
-                      }`}
-                    >
-                      {deployment.environment}
-                    </span>
-                    <span className="text-gray-500">in {deployment.namespace}</span>
-                  </div>
-                  <div className="flex items-center space-x-6 text-sm text-gray-400">
-                    <span className="flex items-center">
-                      <GitBranch className="h-4 w-4 mr-1" />
-                      {deployment.branch}
-                    </span>
-                    <span className="flex items-center">
-                      <GitCommit className="h-4 w-4 mr-1" />
-                      {deployment.commit}
-                    </span>
-                    <span className="flex items-center">
-                      <Clock className="h-4 w-4 mr-1" />
-                      {formatTime(deployment.timestamp)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  {statusIcon[deployment.status]}
-                  <span className={`text-sm font-medium ${statusColor[deployment.status]}`}>
-                    {deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
-                  </span>
-                </div>
-              </div>
+      {/* Environment Filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-400">Environment:</span>
+        {['all', 'development', 'staging', 'production'].map(env => (
+          <Button
+            key={env}
+            variant={selectedEnvironment === env ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedEnvironment(env)}
+            className={selectedEnvironment === env && env !== 'all' ? getEnvironmentColor(env) : ''}
+          >
+            {env.charAt(0).toUpperCase() + env.slice(1)}
+          </Button>
+        ))}
+      </div>
 
-              <div className="space-y-2">
-                <p className="text-gray-300">{deployment.commitMessage}</p>
-                <p className="text-sm text-gray-500">
-                  by {deployment.author} from {deployment.repository}
-                </p>
-              </div>
-
-              {deployment.url && (
-                <div className="mt-4 pt-4 border-t border-gray-800">
-                  <Link
-                    href={deployment.url}
-                    target="_blank"
-                    className="text-blue-500 hover:text-blue-400 flex items-center text-sm"
-                  >
-                    View deployment
-                    <ExternalLink className="h-3 w-3 ml-1" />
-                  </Link>
-                </div>
-              )}
+      {/* Deployment Status Overview */}
+      <div className="grid grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Running</p>
+              <p className="text-2xl font-bold text-green-500">
+                {deployments.filter(d => d.status === 'running').length}
+              </p>
             </div>
-          ))
-        )}
+            <CheckCircle className="h-8 w-8 text-green-500/20" />
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Building</p>
+              <p className="text-2xl font-bold text-blue-500">
+                {deployments.filter(d => d.status === 'building').length}
+              </p>
+            </div>
+            <Package className="h-8 w-8 text-blue-500/20" />
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Deploying</p>
+              <p className="text-2xl font-bold text-yellow-500">
+                {deployments.filter(d => d.status === 'deploying').length}
+              </p>
+            </div>
+            <Rocket className="h-8 w-8 text-yellow-500/20" />
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400">Failed</p>
+              <p className="text-2xl font-bold text-red-500">
+                {deployments.filter(d => d.status === 'failed').length}
+              </p>
+            </div>
+            <XCircle className="h-8 w-8 text-red-500/20" />
+          </div>
+        </Card>
       </div>
+
+      {/* Main Content */}
+      <Tabs defaultValue="active" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="active">Active Deployments</TabsTrigger>
+          <TabsTrigger value="pipeline">CI/CD Pipeline</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="active" className="space-y-4">
+          {deployments.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              No deployments found
+            </div>
+          ) : (
+            deployments.map(deployment => (
+              <Card key={deployment.id} className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    {/* Deployment Header */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={`p-2 rounded-lg ${getStatusColor(deployment.status)} bg-opacity-20`}>
+                        {getStatusIcon(deployment.status)}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{deployment.applicationName}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className={getEnvironmentColor(deployment.environment)}>
+                            {deployment.environment}
+                          </Badge>
+                          <span className="text-sm text-gray-400">v{deployment.version}</span>
+                          <span className="text-xs text-gray-500">
+                            • {formatDistanceToNow(new Date(deployment.startedAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-start gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDeployment(deployment)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowLogs(deployment.id)}
+                      >
+                        <Terminal className="h-4 w-4 mr-1" />
+                        Logs
+                      </Button>
+                      {deployment.status === 'running' && deployment.environment !== 'production' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRollback(deployment.id, deployment.rollbackTo || '')}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Rollback
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="pipeline" className="space-y-4">
+          <div className="text-center py-16 text-gray-400">
+            Pipeline view coming soon...
+          </div>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <div className="text-center py-16 text-gray-400">
+            History view coming soon...
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
-  )
+  );
 }
