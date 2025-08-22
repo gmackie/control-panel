@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  control-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gmac-control-panel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/control_panel}
+      - GITEA_URL=${GITEA_URL:-https://git.gmac.io}
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      - DRONE_SERVER=${DRONE_SERVER:-https://ci.gmac.io}
+      - DRONE_TOKEN=${DRONE_TOKEN}
+      - HARBOR_URL=${HARBOR_URL:-https://registry.gmac.io}
+      - HARBOR_USERNAME=${HARBOR_USERNAME}
+      - HARBOR_PASSWORD=${HARBOR_PASSWORD}
+      - ARGOCD_SERVER=${ARGOCD_SERVER:-https://argocd.gmac.io}
+      - ARGOCD_TOKEN=${ARGOCD_TOKEN}
+      - K8S_API_SERVER=${K8S_API_SERVER}
+      - K8S_TOKEN=${K8S_TOKEN}
+      - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+    networks:
+      - control-panel-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: gmac-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=control_panel
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - control-panel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d control_panel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: gmac-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - control-panel-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Prometheus for local monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gmac-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - control-panel-network
+
+networks:
+  control-panel-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:

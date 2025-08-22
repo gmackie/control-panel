@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-config
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  NEXTAUTH_URL: "https://control.gmac.io"
+  GITEA_URL: "https://git.gmac.io"
+  DRONE_SERVER: "https://ci.gmac.io"
+  HARBOR_URL: "https://registry.gmac.io"
+  ARGOCD_SERVER: "https://argocd.gmac.io"
+  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
+  K8S_API_SERVER: "https://kubernetes.default.svc"
+  DATABASE_HOST: "postgres-service.control-panel.svc.cluster.local"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "control_panel"
+  REDIS_HOST: "redis-service.control-panel.svc.cluster.local"
+  REDIS_PORT: "6379"

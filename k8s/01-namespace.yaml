@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: control-panel
+  labels:
+    name: control-panel
+    environment: production
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/part-of: gmac-infrastructure

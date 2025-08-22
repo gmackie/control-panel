@@ -1,0 +1,24 @@
+# Use pre-built Next.js base image
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files and install dependencies
+COPY package*.json ./
+RUN npm ci --legacy-peer-deps
+
+# Copy all files
+COPY . .
+
+# Build the application
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# Set production environment
+ENV NODE_ENV=production
+
+# Expose port
+EXPOSE 3000
+
+# Run the application
+CMD ["npm", "start"]

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(find:*)",
+      "Bash(touch:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(rm:*)",
+      "Bash(./setup-github.sh:*)",
+      "Bash(git checkout:*)"
+    ],
+    "deny": []
+  }
+}

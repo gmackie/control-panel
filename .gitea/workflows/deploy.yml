@@ -1,0 +1,47 @@
+name: Build and Deploy Control Panel
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to Gitea Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ci.gmac.io
+        username: ${{ secrets.GITEAUSERNAME }}
+        password: ${{ secrets.GITEATOKEN }}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:latest
+          ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:${{ github.sha }}
+        build-args: |
+          GITHUB_ID=${{ secrets.GITHUBID }}
+          GITHUB_SECRET=${{ secrets.GITHUBSECRET }}
+          NEXTAUTH_SECRET=${{ secrets.NEXTAUTHSECRET }}
+          TURSO_DATABASE_URL=${{ secrets.TURSODATABASEURL }}
+          TURSO_AUTH_TOKEN=${{ secrets.TURSOAUTHTOKEN }}
+          GITEA_TOKEN=${{ secrets.GITEATOKEN }}
+          K3S_SA_TOKEN=${{ secrets.K3SSATOKEN }}
+    
+    - name: Deploy to K3s
+      run: |
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+        kubectl --kubeconfig=/tmp/kubeconfig set image deployment/control-panel control-panel=ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:${{ github.sha }} -n gmac-io
+        kubectl --kubeconfig=/tmp/kubeconfig rollout status deployment/control-panel -n gmac-io
