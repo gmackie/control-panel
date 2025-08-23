@@ -37,7 +37,7 @@ async function checkStripeHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     // Check Stripe API
@@ -109,7 +109,7 @@ async function checkTursoHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
@@ -157,7 +157,7 @@ async function checkSendGridHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     const response = await fetch('https://api.sendgrid.com/v3/user/profile', {
@@ -216,7 +216,7 @@ async function checkTwilioHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
@@ -275,7 +275,7 @@ async function checkElevenLabsHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     const response = await fetch('https://api.elevenlabs.io/v1/user', {
@@ -334,7 +334,7 @@ async function checkOpenRouterHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
   const endpoints = [];
-  const incidents = [];
+  const incidents: any[] = [];
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/auth/key', {

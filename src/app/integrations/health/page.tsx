@@ -437,7 +437,7 @@ export default function IntegrationHealthPage() {
                           <span className="text-xs text-gray-400">
                             {formatResponseTime(endpoint.responseTime)}
                           </span>
-                          <Badge variant={endpoint.status === 'up' ? 'success' : 'destructive'} className="text-xs">
+                          <Badge variant={endpoint.status === 'up' ? 'success' : 'error'} className="text-xs">
                             {endpoint.status}
                           </Badge>
                         </div>

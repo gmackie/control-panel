@@ -67,3 +67,10 @@ export async function getTursoDatabaseStatus(): Promise<TursoDatabase[]> {
   
   return databases;
 }
+
+// Compatibility adapter for existing imports
+export class TursoMonitor {
+  async getDatabases(): Promise<TursoDatabase[]> {
+    return getTursoDatabaseStatus()
+  }
+}

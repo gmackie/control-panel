@@ -326,7 +326,7 @@ console.log(completion.choices[0].message.content);`;
           </div>
         </div>
         {validationResult?.credits && (
-          <Badge variant={getUsagePercentage() > 90 ? 'destructive' : 'default'}>
+          <Badge variant={getUsagePercentage() > 90 ? 'error' : 'default'}>
             ${validationResult.credits.balance.toFixed(2)} Credits
           </Badge>
         )}

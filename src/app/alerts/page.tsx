@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,10 @@ interface AlertRule {
   notificationChannels: string[];
   createdAt: Date;
   updatedAt: Date;
+  lastTriggered?: Date;
+  triggerCount: number;
+  evaluationInterval: string;
+  group: string;
 }
 
 interface NotificationChannel {
@@ -69,6 +73,12 @@ interface NotificationChannel {
   type: 'email' | 'sms' | 'webhook' | 'slack' | 'pagerduty';
   config: Record<string, any>;
   enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  lastUsed?: Date;
+  successRate: number;
+  messagesSent: number;
+  tags: string[];
 }
 
 export default function AlertsPage() {
@@ -77,14 +87,7 @@ export default function AlertsPage() {
   const [notificationChannels, setNotificationChannels] = useState<NotificationChannel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchAlertsData();
-    // Set up real-time updates
-    const interval = setInterval(fetchAlertsData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchAlertsData = async () => {
+  const fetchAlertsData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [alertsRes, rulesRes, channelsRes] = await Promise.all([
@@ -109,7 +112,14 @@ export default function AlertsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAlertsData();
+    // Set up real-time updates
+    const interval = setInterval(fetchAlertsData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAlertsData]);
 
   const generateMockAlerts = (): Alert[] => {
     const now = new Date();
@@ -180,7 +190,11 @@ export default function AlertsPage() {
         },
         notificationChannels: ['email-ops', 'slack-alerts'],
         createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-        updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        triggerCount: 15,
+        lastTriggered: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        evaluationInterval: '30s',
+        group: 'infrastructure'
       },
       {
         id: 'rule-002',
@@ -198,7 +212,11 @@ export default function AlertsPage() {
         },
         notificationChannels: ['email-ops', 'pagerduty'],
         createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-        updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+        updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+        triggerCount: 5,
+        lastTriggered: new Date(Date.now() - 12 * 60 * 60 * 1000),
+        evaluationInterval: '10s',
+        group: 'platform'
       }
     ];
   };
@@ -210,21 +228,38 @@ export default function AlertsPage() {
         name: 'Operations Email',
         type: 'email',
         config: { recipients: ['ops@gmac.io'], smtp_server: 'smtp.gmail.com' },
-        enabled: true
+        enabled: true,
+        createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        lastUsed: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        successRate: 98.5,
+        messagesSent: 1250,
+        tags: ['primary', 'operations']
       },
       {
         id: 'slack-alerts',
         name: 'Slack #alerts',
         type: 'slack',
         config: { webhook_url: 'https://hooks.slack.com/...', channel: '#alerts' },
-        enabled: true
+        enabled: true,
+        createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        lastUsed: new Date(Date.now() - 30 * 60 * 1000),
+        successRate: 99.9,
+        messagesSent: 3420,
+        tags: ['instant', 'team']
       },
       {
         id: 'pagerduty',
         name: 'PagerDuty Escalation',
         type: 'pagerduty',
         config: { service_key: 'pd-key-123', severity_mapping: { critical: 'critical', high: 'error' } },
-        enabled: false
+        enabled: false,
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        successRate: 100,
+        messagesSent: 45,
+        tags: ['escalation', 'oncall']
       }
     ];
   };

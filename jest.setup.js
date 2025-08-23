@@ -21,37 +21,37 @@ global.console = {
   // error: jest.fn(),
 }
 
-// Mock IntersectionObserver
-global.IntersectionObserver = jest.fn(() => ({
-  disconnect: jest.fn(),
-  observe: jest.fn(),
-  unobserve: jest.fn(),
-}))
+// Browser-only mocks for JSDOM
+if (typeof window !== 'undefined') {
+  // Mock IntersectionObserver
+  global.IntersectionObserver = jest.fn(() => ({
+    disconnect: jest.fn(),
+    observe: jest.fn(),
+    unobserve: jest.fn(),
+  }))
 
-// Mock ResizeObserver
-global.ResizeObserver = jest.fn(() => ({
-  disconnect: jest.fn(),
-  observe: jest.fn(),
-  unobserve: jest.fn(),
-}))
+  // Mock ResizeObserver
+  global.ResizeObserver = jest.fn(() => ({
+    disconnect: jest.fn(),
+    observe: jest.fn(),
+    unobserve: jest.fn(),
+  }))
 
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-})
-
-// Mock fetch globally
-global.fetch = jest.fn()
+  // Mock matchMedia
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(), // deprecated
+      removeListener: jest.fn(), // deprecated
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  })
+}
 
 // Mock EventSource for SSE testing
 global.EventSource = jest.fn(() => ({
@@ -64,20 +64,6 @@ global.EventSource = jest.fn(() => ({
   CLOSED: 2,
 }))
 
-// Setup MSW for API mocking
-import { server } from './src/mocks/server'
-
-// Establish API mocking before all tests
-beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' })
-})
-
-// Reset any request handlers that are declared in individual tests
-afterEach(() => {
-  server.resetHandlers()
-})
-
-// Clean up after the tests are finished
-afterAll(() => {
-  server.close()
-})
+// Note: MSW setup is disabled in unit tests to avoid
+// Node/WHATWG fetch polyfill complexity in JSDOM.
+// If you need MSW, import and start the server in specific tests.

@@ -27,7 +27,7 @@ const mockAlerts = [
   {
     id: '1',
     name: 'High CPU Usage',
-    status: 'firing' as const,
+    status: 'firing' as 'firing' | 'pending' | 'resolved',
     severity: 'high' as const,
     message: 'CPU usage is above 80%',
     labels: { instance: 'node-1', job: 'node-exporter' },
@@ -176,7 +176,7 @@ export const handlers = [
   }),
 
   http.post('/api/applications', async ({ request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       application: { id: Date.now().toString(), ...body }

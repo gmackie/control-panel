@@ -100,7 +100,9 @@ export default defineConfig({
     timeout: 5000,
 
     /* Threshold for pixel tests */
-    threshold: 0.2,
+    toHaveScreenshot: {
+      threshold: 0.2,
+    },
   },
 
   /* Test timeout */

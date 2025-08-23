@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import {
   Upload,
   RefreshCw,
   Move,
-  Resize,
+  Maximize2,
   BarChart3,
   LineChart,
   PieChart,
@@ -107,7 +107,7 @@ export function CustomDashboards() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Mock data generation
-  const generateMockDashboards = (): CustomDashboard[] => {
+  const generateMockDashboards = useCallback((): CustomDashboard[] => {
     const now = new Date();
     return [
       {
@@ -147,7 +147,7 @@ export function CustomDashboards() {
         template: false
       }
     ];
-  };
+  }, []);
 
   const generateMockWidgets = (category: string): DashboardWidget[] => {
     const now = new Date();
@@ -298,7 +298,7 @@ export function CustomDashboards() {
 
   useEffect(() => {
     setDashboards(generateMockDashboards());
-  }, []);
+  }, [generateMockDashboards]);
 
   const filteredDashboards = dashboards.filter(dashboard => {
     const matchesSearch = searchQuery === "" || 
@@ -454,7 +454,7 @@ export function CustomDashboards() {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm bg-gray-900/50 p-2 rounded">
                 <span>Active Alerts</span>
-                <Badge variant="destructive">{widget.data?.count || 0}</Badge>
+                <Badge variant="error">{widget.data?.count || 0}</Badge>
               </div>
               <div className="flex items-center justify-between text-sm bg-gray-900/50 p-2 rounded">
                 <span>Resolved</span>

@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const environment = searchParams.get('environment') || 'all';
-    const status = searchParams.get('status');
-    const applicationId = searchParams.get('applicationId');
+    const status = searchParams.get('status') || undefined;
+    const applicationId = searchParams.get('applicationId') || undefined;
 
     // Fetch deployments from multiple sources
     const [k3sDeployments, giteaActions] = await Promise.all([

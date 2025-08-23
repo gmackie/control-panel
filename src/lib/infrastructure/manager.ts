@@ -235,15 +235,17 @@ export class InfrastructureManager {
     applications: Map<string, UnifiedApplication>
   ): Promise<void> {
     if (!this.k3sOrchestrator) return;
+    if (infra.type !== 'k3s') return;
 
     try {
       // Get deployments from k3s
-      const kubeconfig = await this.k3sOrchestrator.getKubeconfig(infra.config.clusterName);
+      const k3sConfig = infra.config as K3sInfraConfig;
+      const kubeconfig = await this.k3sOrchestrator.getKubeconfig(k3sConfig.clusterName);
       if (!kubeconfig) return;
 
       // This would use kubectl to get deployments
       // For now, return mock data
-      const k8sApps = []; // await getK8sDeployments(kubeconfig);
+      const k8sApps: any[] = []; // await getK8sDeployments(kubeconfig);
 
       for (const app of k8sApps) {
         const appId = `${app.namespace}/${app.name}`;
@@ -372,7 +374,14 @@ export class InfrastructureManager {
                 workflowId: latestRun.workflow_id,
                 runId: latestRun.id.toString(),
                 status: latestRun.status,
-                conclusion: latestRun.conclusion || undefined,
+                conclusion: (() => {
+                  if (!latestRun.conclusion) return undefined;
+                  // Map Gitea conclusions to our limited set
+                  if (latestRun.conclusion === 'success') return 'success';
+                  if (latestRun.conclusion === 'cancelled') return 'cancelled';
+                  // Map all other states to failure
+                  return 'failure';
+                })(),
                 duration: latestRun.updated_at 
                   ? new Date(latestRun.updated_at).getTime() - new Date(latestRun.created_at).getTime()
                   : undefined,

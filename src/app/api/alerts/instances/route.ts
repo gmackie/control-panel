@@ -50,7 +50,7 @@ function generateMockAlertInstances(): AlertInstance[] {
   const alerts: AlertInstance[] = [];
   
   // Generate firing alerts
-  const firingAlerts = [
+  const firingAlerts: AlertInstance[] = [
     {
       id: 'alert-001',
       ruleId: 'rule-001',
@@ -108,7 +108,7 @@ function generateMockAlertInstances(): AlertInstance[] {
   ];
   
   // Generate resolved alerts
-  const resolvedAlerts = [
+  const resolvedAlerts: AlertInstance[] = [
     {
       id: 'alert-005',
       ruleId: 'rule-003',

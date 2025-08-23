@@ -1,0 +1,235 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test-and-lint:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run ESLint
+      run: npm run lint
+
+    - name: Run tests
+      run: ./test-ci.sh
+      env:
+        NODE_ENV: test
+
+    - name: Upload coverage reports
+      if: github.event_name != 'pull_request'
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: test-and-lint
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build Next.js application
+      run: npm run build
+      env:
+        NODE_ENV: production
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret' }}
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: nextjs-build
+        path: |
+          .next/
+          public/
+        retention-days: 1
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test-and-lint
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner in repo mode
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  docker-build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.event_name != 'pull_request'
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          NODE_ENV=production
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker-build-and-push
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging environment
+      run: |
+        echo "Deploying to staging environment..."
+        # Trigger deployment webhook or ArgoCD sync
+        if [ -n "${{ secrets.STAGING_WEBHOOK_URL }}" ]; then
+          curl -X POST "${{ secrets.STAGING_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.STAGING_WEBHOOK_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "image": "${{ needs.docker-build-and-push.outputs.image-tags }}",
+              "environment": "staging",
+              "sha": "${{ github.sha }}"
+            }'
+        fi
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: docker-build-and-push
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production environment
+      run: |
+        echo "Deploying to production environment..."
+        # Trigger deployment webhook or ArgoCD sync
+        if [ -n "${{ secrets.PRODUCTION_WEBHOOK_URL }}" ]; then
+          curl -X POST "${{ secrets.PRODUCTION_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.PRODUCTION_WEBHOOK_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "image": "${{ needs.docker-build-and-push.outputs.image-tags }}",
+              "environment": "production",
+              "version": "${{ github.ref_name }}",
+              "sha": "${{ github.sha }}"
+            }'
+        fi
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [test-and-lint, build, docker-build-and-push]
+    if: always() && github.event_name != 'pull_request'
+    steps:
+    - name: Notify Slack on Success
+      if: needs.docker-build-and-push.result == 'success'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '✅ Build successful for ${{ github.repository }}@${{ github.ref_name }}'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        fields: repo,commit,author,action,eventName,ref,workflow
+
+    - name: Notify Slack on Failure
+      if: contains(needs.*.result, 'failure')
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: '❌ Build failed for ${{ github.repository }}@${{ github.ref_name }}'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow

@@ -110,7 +110,10 @@ export async function POST(request: NextRequest) {
     
     // Step 2: Create repository in Gitea
     if (config.repository.provider === 'gitea') {
-      const giteaClient = new GiteaClient();
+      const giteaClient = new GiteaClient({
+        baseUrl: process.env.GITEA_BASE_URL || 'https://gitea.gmac.io',
+        token: process.env.GITEA_API_TOKEN
+      });
       
       try {
         // Create the repository

@@ -180,8 +180,15 @@ export async function GET() {
     const applications = await getApplications(userId);
     
     // Initialize service clients
-    const giteaClient = new GiteaClient();
-    const harborClient = new HarborClient();
+    const giteaClient = new GiteaClient({
+      baseUrl: process.env.GITEA_BASE_URL || 'https://gitea.gmac.io',
+      token: process.env.GITEA_API_TOKEN
+    });
+    const harborClient = new HarborClient({
+      baseUrl: process.env.HARBOR_BASE_URL || 'https://harbor.gmac.io',
+      username: process.env.HARBOR_USERNAME || 'admin',
+      password: process.env.HARBOR_PASSWORD!
+    });
     const clerkMonitor = new ClerkMonitor();
     const stripeMonitor = new StripeMonitor();
     const tursoMonitor = new TursoMonitor();
@@ -267,12 +274,12 @@ export async function GET() {
         // Fetch container registry info from Harbor
         try {
           const projectName = app.slug.toLowerCase();
-          const repositories = await harborClient.getRepositories(projectName);
+          const repositories = await harborClient.listRepositories(projectName);
           
           if (repositories && repositories.length > 0) {
             const images = [];
             for (const repo of repositories.slice(0, 3)) {
-              const artifacts = await harborClient.getArtifacts(projectName, repo.name);
+              const artifacts = await harborClient.listArtifacts(projectName, repo.name);
               for (const artifact of artifacts.slice(0, 2)) {
                 images.push({
                   name: repo.name,
@@ -281,10 +288,10 @@ export async function GET() {
                   pushed: artifact.push_time,
                   vulnerabilities: artifact.scan_overview?.application?.summary
                     ? {
-                        critical: artifact.scan_overview.application.summary.Critical || 0,
-                        high: artifact.scan_overview.application.summary.High || 0,
-                        medium: artifact.scan_overview.application.summary.Medium || 0,
-                        low: artifact.scan_overview.application.summary.Low || 0,
+                        critical: artifact.scan_overview.application.summary.summary?.Critical || 0,
+                        high: artifact.scan_overview.application.summary.summary?.High || 0,
+                        medium: artifact.scan_overview.application.summary.summary?.Medium || 0,
+                        low: artifact.scan_overview.application.summary.summary?.Low || 0,
                       }
                     : undefined,
                 });
@@ -302,21 +309,21 @@ export async function GET() {
         
         // Fetch K3s deployment status for environments
         try {
-          const k3sStatus = await k3sMonitor.getServiceStatus();
+          const k3sServices = await k3sMonitor.getServiceStatus();
           
-          // Check for staging deployment
-          const stagingDeployment = k3sStatus.deployments?.find(
-            d => d.namespace === `${app.slug}-staging`
+          // Check for staging deployment (look for service matching app name)
+          const stagingService = k3sServices.find(
+            s => s.name === app.slug && s.environment === 'staging'
           );
           
-          if (stagingDeployment) {
+          if (stagingService) {
             dashboardApp.environments.staging = {
-              status: stagingDeployment.ready ? "healthy" : "unhealthy",
+              status: stagingService.status === "healthy" ? "healthy" : "unhealthy",
               url: `https://staging-${app.slug}.gmac.io`,
-              version: stagingDeployment.image?.split(":")[1] || "latest",
+              version: stagingService.version || "latest",
               lastDeployed: new Date().toISOString(), // Would need to fetch from K8s annotations
               healthChecks: {
-                api: stagingDeployment.ready,
+                api: stagingService.status === "healthy",
                 database: true, // Would need actual health check
                 cache: true, // Would need actual health check
               },
@@ -324,15 +331,15 @@ export async function GET() {
           }
           
           // Check for production deployment
-          const prodDeployment = k3sStatus.deployments?.find(
-            d => d.namespace === app.slug || d.namespace === `${app.slug}-prod`
+          const prodService = k3sServices.find(
+            s => s.name === app.slug && s.environment === 'production'
           );
           
-          if (prodDeployment) {
+          if (prodService) {
             dashboardApp.environments.production = {
-              status: prodDeployment.ready ? "healthy" : "unhealthy",
+              status: prodService.status === "healthy" ? "healthy" : "unhealthy",
               url: `https://${app.slug}.gmac.io`,
-              version: prodDeployment.image?.split(":")[1] || "latest",
+              version: prodService.version || "latest",
               lastDeployed: new Date().toISOString(), // Would need to fetch from K8s annotations
               metrics: {
                 requestsPerSecond: 0, // Would need Prometheus metrics
@@ -397,10 +404,10 @@ export async function GET() {
           integrationPromises.push(
             tursoMonitor.getDatabases().then(databases => {
               const totalRequests = databases.reduce((sum, db) => 
-                sum + (db.stats?.total_requests || 0), 0
+                sum + (db.operations?.reads || 0) + (db.operations?.writes || 0), 0
               );
               const totalStorage = databases.reduce((sum, db) => 
-                sum + (db.stats?.storage_bytes || 0), 0
+                sum + (db.size || 0), 0
               );
               
               dashboardApp.integrations.turso = {

@@ -404,7 +404,7 @@ export default function HealthPage() {
 
         <TabsContent value="slo" className="space-y-4">
           <SLODashboard 
-            services={services.filter(s => s.slo)}
+            services={services.filter(s => s.slo) as any}
             onUpdateSLO={(serviceId, slo) => {
               // Handle SLO update
               console.log('Updating SLO:', serviceId, slo);

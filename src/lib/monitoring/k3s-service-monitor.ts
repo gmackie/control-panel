@@ -84,3 +84,10 @@ export async function getK3sServiceStatus(): Promise<AppService[]> {
 
   return services;
 }
+
+// Compatibility adapter for existing imports
+export class K3sServiceMonitor {
+  async getServiceStatus(): Promise<AppService[]> {
+    return getK3sServiceStatus()
+  }
+}

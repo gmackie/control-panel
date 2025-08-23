@@ -791,7 +791,7 @@ export function AlertCorrelation({ alerts, onCreateCorrelationRule }: AlertCorre
                   <div>
                     <h4 className="font-medium mb-1">Optimize Time Windows</h4>
                     <p className="text-sm text-gray-400">
-                      Some rules have overlapping time windows. Consider adjusting the "Infrastructure Maintenance" 
+                      Some rules have overlapping time windows. Consider adjusting the &quot;Infrastructure Maintenance&quot; 
                       rule window from 60m to 30m for better precision.
                     </p>
                   </div>

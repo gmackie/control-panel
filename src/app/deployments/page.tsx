@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -103,13 +103,7 @@ export default function DeploymentsPage() {
   const [showLogs, setShowLogs] = useState<string | null>(null);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchDeployments();
-    const interval = setInterval(fetchDeployments, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
-  }, [selectedEnvironment]);
-
-  const fetchDeployments = async () => {
+  const fetchDeployments = useCallback(async () => {
     try {
       setIsRefreshing(true);
       const response = await fetch(`/api/deployments?environment=${selectedEnvironment}`);
@@ -122,7 +116,13 @@ export default function DeploymentsPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [selectedEnvironment]);
+
+  useEffect(() => {
+    fetchDeployments();
+    const interval = setInterval(fetchDeployments, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [fetchDeployments]);
 
   const handleDeploy = async (applicationId: string, environment: string) => {
     try {

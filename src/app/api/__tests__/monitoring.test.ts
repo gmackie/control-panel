@@ -225,3 +225,4 @@ describe('Monitoring API Error Handling', () => {
     expect([200, 201, 400]).toContain(response.status)
   })
 })
+/** @jest-environment node */

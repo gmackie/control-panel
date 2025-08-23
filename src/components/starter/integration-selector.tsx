@@ -442,7 +442,7 @@ export function IntegrationSelector({
                   <Switch
                     checked={isSelected}
                     onCheckedChange={() => !isMaxReached && handleToggleIntegration(integration.id)}
-                    disabled={isMaxReached}
+                    disabled={!!isMaxReached}
                   />
                 </div>
               </div>

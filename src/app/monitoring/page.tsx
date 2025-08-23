@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,7 @@ interface SystemMetric {
   };
   lastUpdated: Date;
   source: string;
+  history?: Array<{ timestamp: Date; value: number }>;
 }
 
 interface ServiceHealth {
@@ -119,20 +120,7 @@ export default function MonitoringPage() {
   const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  useEffect(() => {
-    fetchMonitoringData();
-    
-    let interval: NodeJS.Timeout;
-    if (autoRefresh) {
-      interval = setInterval(fetchMonitoringData, 30000); // Refresh every 30 seconds
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [autoRefresh]);
-
-  const fetchMonitoringData = async () => {
+  const fetchMonitoringData = useCallback(async () => {
     try {
       const [metricsRes, healthRes, alertsRes, infraRes] = await Promise.all([
         fetch('/api/monitoring/metrics'),
@@ -160,7 +148,20 @@ export default function MonitoringPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMonitoringData();
+    
+    let interval: NodeJS.Timeout;
+    if (autoRefresh) {
+      interval = setInterval(fetchMonitoringData, 30000); // Refresh every 30 seconds
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [autoRefresh, fetchMonitoringData]);
 
   const generateMockMetrics = (): SystemMetric[] => {
     const now = new Date();
@@ -692,7 +693,7 @@ export default function MonitoringPage() {
                         <Badge variant="outline" className={getAlertSeverityColor(alert.severity)}>
                           {alert.severity}
                         </Badge>
-                        <Badge variant={alert.status === 'active' ? 'destructive' : 'secondary'} className="text-xs">
+                        <Badge variant={alert.status === 'active' ? 'error' : 'secondary'} className="text-xs">
                           {alert.status}
                         </Badge>
                       </div>
@@ -720,7 +721,7 @@ export default function MonitoringPage() {
 
         <TabsContent value="metrics" className="space-y-4">
           <RealTimeMetrics 
-            metrics={systemMetrics}
+            metrics={systemMetrics as any}
             timeRange={selectedTimeRange}
             onTimeRangeChange={setSelectedTimeRange}
           />

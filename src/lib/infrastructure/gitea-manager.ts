@@ -83,13 +83,13 @@ export class GiteaManager {
       user_data: this.generateCloudInit(),
     });
 
-    this.serverIp = server.server.public_net.ipv4.ip;
+    this.serverIp = server.public_net.ipv4.ip;
 
     // Wait for server to be ready
-    await this.waitForServer(server.server.id);
+    await this.waitForServer(server.id);
 
     return {
-      serverId: server.server.id,
+      serverId: server.id,
       ip: this.serverIp
     };
   }

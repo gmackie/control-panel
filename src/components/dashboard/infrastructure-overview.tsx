@@ -66,10 +66,10 @@ const statusColors = {
 
 const statusBadgeVariants = {
   healthy: 'default',
-  warning: 'secondary',
-  critical: 'destructive',
-  degraded: 'secondary',
-  unhealthy: 'destructive'
+  warning: 'warning',
+  critical: 'error',
+  degraded: 'warning',
+  unhealthy: 'error'
 } as const
 
 function formatValue(value: number, unit: string): string {

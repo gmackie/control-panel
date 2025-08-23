@@ -4,6 +4,12 @@ import { authOptions } from '@/lib/auth';
 import { createApplication, getApplications } from '@/lib/applications/manager';
 import { CreateApplicationRequest } from '@/types/applications';
 
+function safeJson<T>(value: T): T {
+  // Remove undefined values to satisfy undici/NextResponse.json serializer
+  if (value === undefined || value === null) return value;
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -12,7 +18,7 @@ export async function GET() {
     }
 
     const applications = await getApplications((session.user as any).login || session.user.email!);
-    return NextResponse.json(applications);
+    return NextResponse.json({ applications: safeJson(applications) });
   } catch (error) {
     console.error('Error fetching applications:', error);
     return NextResponse.json(
@@ -43,7 +49,7 @@ export async function POST(request: NextRequest) {
       (session.user as any).login || session.user.email!
     );
 
-    return NextResponse.json(application, { status: 201 });
+    return NextResponse.json(safeJson(application), { status: 201 });
   } catch (error) {
     console.error('Error creating application:', error);
     return NextResponse.json(

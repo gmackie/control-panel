@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,13 @@ interface Budget {
   alertThreshold: number;
   status: 'under' | 'warning' | 'over';
   services: string[];
+  notifications: {
+    email: boolean;
+    sms: boolean;
+    webhook: boolean;
+  };
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 interface Forecast {
@@ -72,11 +79,7 @@ export default function CostsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
 
-  useEffect(() => {
-    fetchCostData();
-  }, [selectedPeriod]);
-
-  const fetchCostData = async () => {
+  const fetchCostData = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await fetch(`/api/costs?period=${selectedPeriod}`);
@@ -94,7 +97,11 @@ export default function CostsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    fetchCostData();
+  }, [fetchCostData]);
 
   const generateMockCostData = (): CostData[] => {
     const now = new Date();
@@ -200,7 +207,12 @@ export default function CostsPage() {
         period: 'monthly',
         alertThreshold: 80,
         status: 'under',
-        services: ['Hetzner', 'Cloudflare']
+        services: ['Hetzner', 'Cloudflare'],
+        notifications: {
+          email: true,
+          sms: false,
+          webhook: true
+        }
       },
       {
         id: 'budget-002',
@@ -210,7 +222,12 @@ export default function CostsPage() {
         period: 'monthly',
         alertThreshold: 90,
         status: 'warning',
-        services: ['Stripe', 'SendGrid', 'OpenRouter', 'Twilio']
+        services: ['Stripe', 'SendGrid', 'OpenRouter', 'Twilio'],
+        notifications: {
+          email: true,
+          sms: true,
+          webhook: true
+        }
       },
       {
         id: 'budget-003',
@@ -220,7 +237,12 @@ export default function CostsPage() {
         period: 'monthly',
         alertThreshold: 75,
         status: 'under',
-        services: ['Turso', 'Hetzner Storage']
+        services: ['Turso', 'Hetzner Storage'],
+        notifications: {
+          email: true,
+          sms: false,
+          webhook: false
+        }
       }
     ];
   };

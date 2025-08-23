@@ -79,11 +79,18 @@ function generateMetricUpdate(): MetricUpdate {
 }
 
 function generateAlertUpdate(): AlertUpdate {
-  const alerts = [
+  const alerts: Array<{
+    id: string;
+    name: string;
+    severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+    message: string;
+    source: string;
+    labels: Record<string, string>;
+  }> = [
     {
       id: 'alert-cpu-001',
       name: 'High CPU Usage',
-      severity: 'high' as const,
+      severity: 'high',
       message: 'CPU usage exceeded threshold',
       source: 'prometheus',
       labels: { instance: 'k3s-worker-01', job: 'node-exporter' }
@@ -91,7 +98,7 @@ function generateAlertUpdate(): AlertUpdate {
     {
       id: 'alert-mem-001',
       name: 'Memory Pressure',
-      severity: 'medium' as const,
+      severity: 'medium',
       message: 'Memory usage approaching limits',
       source: 'prometheus',
       labels: { instance: 'k3s-worker-02', job: 'node-exporter' }
@@ -99,7 +106,7 @@ function generateAlertUpdate(): AlertUpdate {
     {
       id: 'alert-db-001',
       name: 'Database Connection Pool',
-      severity: 'critical' as const,
+      severity: 'critical',
       message: 'Connection pool nearly exhausted',
       source: 'postgres-exporter',
       labels: { database: 'control_panel', instance: 'db.gmac.io' }

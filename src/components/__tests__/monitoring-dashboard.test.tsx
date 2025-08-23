@@ -399,3 +399,4 @@ describe('MonitoringDashboard', () => {
     expect(screen.getByText('Total: 0')).toBeInTheDocument()
   })
 })
+/** @jest-environment jsdom */

@@ -115,7 +115,7 @@ function NotificationItem({
               </Badge>
               {notification.metadata?.severity && (
                 <Badge 
-                  variant={notification.metadata.severity === 'critical' ? 'destructive' : 'secondary'}
+                  variant={notification.metadata.severity === 'critical' ? 'error' : 'warning'}
                   className="text-xs"
                 >
                   {notification.metadata.severity}

@@ -8,6 +8,7 @@ export interface ApiError extends Error {
 export class ValidationError extends Error implements ApiError {
   statusCode = 400;
   code = 'VALIDATION_ERROR';
+  cause?: Error;
   
   constructor(message: string, public details?: any) {
     super(message);
@@ -18,6 +19,7 @@ export class ValidationError extends Error implements ApiError {
 export class AuthenticationError extends Error implements ApiError {
   statusCode = 401;
   code = 'AUTHENTICATION_ERROR';
+  cause?: Error;
   
   constructor(message: string = 'Authentication required') {
     super(message);
@@ -28,6 +30,7 @@ export class AuthenticationError extends Error implements ApiError {
 export class AuthorizationError extends Error implements ApiError {
   statusCode = 403;
   code = 'AUTHORIZATION_ERROR';
+  cause?: Error;
   
   constructor(message: string = 'Insufficient permissions') {
     super(message);
@@ -38,6 +41,7 @@ export class AuthorizationError extends Error implements ApiError {
 export class NotFoundError extends Error implements ApiError {
   statusCode = 404;
   code = 'NOT_FOUND';
+  cause?: Error;
   
   constructor(resource: string = 'Resource') {
     super(`${resource} not found`);
@@ -48,6 +52,7 @@ export class NotFoundError extends Error implements ApiError {
 export class ConflictError extends Error implements ApiError {
   statusCode = 409;
   code = 'CONFLICT';
+  cause?: Error;
   
   constructor(message: string = 'Resource conflict') {
     super(message);
@@ -58,6 +63,7 @@ export class ConflictError extends Error implements ApiError {
 export class RateLimitError extends Error implements ApiError {
   statusCode = 429;
   code = 'RATE_LIMIT_EXCEEDED';
+  cause?: Error;
   
   constructor(
     message: string = 'Rate limit exceeded',
@@ -82,6 +88,7 @@ export class InternalServerError extends Error implements ApiError {
 export class ServiceUnavailableError extends Error implements ApiError {
   statusCode = 503;
   code = 'SERVICE_UNAVAILABLE';
+  cause?: Error;
   
   constructor(service: string = 'Service') {
     super(`${service} is currently unavailable`);
@@ -133,8 +140,8 @@ export function createApiErrorResponse(error: unknown): Response {
     'Content-Type': 'application/json'
   };
 
-  if (apiError instanceof RateLimitError && apiError.retryAfter) {
-    headers['Retry-After'] = apiError.retryAfter.toString();
+  if (error instanceof RateLimitError && error.retryAfter) {
+    headers['Retry-After'] = error.retryAfter.toString();
   }
 
   return new Response(JSON.stringify(response), {

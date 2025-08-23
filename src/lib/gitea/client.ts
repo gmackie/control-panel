@@ -94,7 +94,6 @@ export interface GiteaWorkflowRun {
   cancel_url: string;
   rerun_url: string;
   previous_attempt_url: string | null;
-  workflow_url: string;
   commit: {
     id: string;
     tree_id: string;

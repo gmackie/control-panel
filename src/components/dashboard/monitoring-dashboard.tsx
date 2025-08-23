@@ -125,7 +125,7 @@ function AlertCard({ alert, onAcknowledge, onSilence }: {
             <CardTitle className="text-sm">{alert.name}</CardTitle>
           </div>
           <div className="flex space-x-1">
-            <Badge variant={alert.severity === 'critical' ? 'destructive' : 'secondary'}>
+            <Badge variant={alert.severity === 'critical' ? 'error' : 'warning'}>
               {alert.severity}
             </Badge>
             {alert.silenced && <Badge variant="outline">Silenced</Badge>}

@@ -84,8 +84,8 @@ export function InfrastructureSwitcher({
           if (infra) onSelect(infra);
         }}>
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select infrastructure">
-              {selected && (
+            <SelectValue>
+              {selected ? (
                 <div className="flex items-center gap-2">
                   {getIcon(selected.type)}
                   <span>{selected.name}</span>
@@ -93,6 +93,8 @@ export function InfrastructureSwitcher({
                     {selected.status}
                   </Badge>
                 </div>
+              ) : (
+                "Select infrastructure"
               )}
             </SelectValue>
           </SelectTrigger>

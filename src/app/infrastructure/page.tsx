@@ -277,7 +277,7 @@ export default function InfrastructurePage() {
       )}
 
       {/* Create Infrastructure Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      {showCreateDialog && <Dialog>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Infrastructure</DialogTitle>
@@ -337,7 +337,7 @@ export default function InfrastructurePage() {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

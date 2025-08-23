@@ -21,3 +21,10 @@ export async function getStripeMetrics(): Promise<StripeMetrics> {
     ],
   };
 }
+
+// Compatibility adapter for existing imports
+export class StripeMonitor {
+  async getMetrics(): Promise<any> {
+    return getStripeMetrics() as any
+  }
+}

@@ -295,3 +295,8 @@ export class K3sClusterManager {
     };
   }
 }
+
+// Compatibility shim for create-wizard route import
+export class K3sManager {
+  // Placeholder implementation to satisfy imports without requiring constructor args
+}

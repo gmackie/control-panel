@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server'
 
 // Mock dependencies
 jest.mock('next-auth/next')
-jest.mock('../../../lib/cluster/k3s-client')
+// Note: No direct k3s client import in handlers; removing stale mock
 
 const mockGetServerSession = getServerSession as jest.MockedFunction<typeof getServerSession>
 
@@ -260,3 +260,4 @@ describe('Cluster API Error Handling', () => {
     expect([404, 500]).toContain(response.status)
   })
 })
+/** @jest-environment node */

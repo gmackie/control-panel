@@ -235,10 +235,17 @@ export async function POST(request: NextRequest) {
     metric,
     message: 'Metric stored successfully'
   });
-}));
+  } catch (error) {
+    console.error('Error storing metric:', error);
+    return NextResponse.json(
+      { error: 'Failed to store metric' },
+      { status: 500 }
+    );
+  }
+}
 
 // Health check endpoint for the metrics service
-export const HEAD = handleAsyncRoute(async (request: NextRequest) => {
+export async function HEAD(request: NextRequest) {
   // Check if monitoring services are accessible
   const checks = [
     { name: 'prometheus', healthy: Math.random() > 0.1 },
@@ -253,4 +260,4 @@ export const HEAD = handleAsyncRoute(async (request: NextRequest) => {
   } else {
     return new NextResponse(null, { status: 503 });
   }
-});
+}

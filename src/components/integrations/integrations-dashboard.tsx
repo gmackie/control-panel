@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { 
   GitBranch, 
@@ -108,7 +107,7 @@ function IntegrationCard({ integration, stats, onAction }: {
           </div>
           <div className="flex items-center space-x-2">
             {statusIcons[integration.status]}
-            <Badge variant={integration.status === 'healthy' ? 'default' : 'destructive'}>
+            <Badge variant={integration.status === 'healthy' ? 'success' : 'error'}>
               {integration.status}
             </Badge>
           </div>
@@ -215,20 +214,15 @@ function IntegrationCard({ integration, stats, onAction }: {
               Open
             </Button>
 
-            <Dialog open={showDetails} onOpenChange={setShowDetails}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Eye className="h-3 w-3 mr-1" />
-                  Details
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Integration Details: {integration.name}</DialogTitle>
-                  <DialogDescription>
+            {showDetails ? (
+              <div onClick={() => setShowDetails(false)} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+                <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold">Integration Details: {integration.name}</h2>
+                  <p className="text-sm text-gray-500">
                     Detailed configuration and status for {integration.type.toUpperCase()} integration
-                  </DialogDescription>
-                </DialogHeader>
+                  </p>
+                </div>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -278,8 +272,18 @@ function IntegrationCard({ integration, stats, onAction }: {
                     </div>
                   )}
                 </div>
-              </DialogContent>
-            </Dialog>
+                </div>
+              </div>
+          ) : null}
+
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => setShowDetails(true)}
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            Details
+          </Button>
 
             <Button 
               size="sm" 
@@ -502,7 +506,7 @@ export default function IntegrationsDashboard() {
   }
 
   const integrations = integrationData?.integrations || []
-  const stats = integrationData?.stats || {}
+  const stats = integrationData?.stats || {} as Record<string, any>
   const repositories = repoData?.repositories || []
 
   const healthyIntegrations = integrations.filter((i: Integration) => i.status === 'healthy').length
@@ -558,7 +562,7 @@ export default function IntegrationsDashboard() {
               <IntegrationCard
                 key={integration.id}
                 integration={integration}
-                stats={stats[integration.id]}
+                stats={(stats as any)[integration.id]}
                 onAction={handleIntegrationAction}
               />
             ))}
@@ -615,7 +619,7 @@ export default function IntegrationsDashboard() {
                 <IntegrationCard
                   key={integration.id}
                   integration={integration}
-                  stats={stats[integration.id]}
+                  stats={(stats as any)[integration.id]}
                   onAction={handleIntegrationAction}
                 />
               ))}
@@ -630,7 +634,7 @@ export default function IntegrationsDashboard() {
                 <IntegrationCard
                   key={integration.id}
                   integration={integration}
-                  stats={stats[integration.id]}
+                  stats={(stats as any)[integration.id]}
                   onAction={handleIntegrationAction}
                 />
               ))}

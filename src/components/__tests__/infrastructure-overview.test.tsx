@@ -286,3 +286,4 @@ describe('InfrastructureOverview', () => {
     expect(screen.getByText('75%')).toBeInTheDocument()
   })
 })
+/** @jest-environment jsdom */

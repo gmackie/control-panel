@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { headers } from 'next/headers';
-import { handleAsyncRoute, ValidationError, AuthenticationError } from '@/lib/api-errors';
+import { handleAsyncRoute, ValidationError, AuthenticationError, RateLimitError } from '@/lib/api-errors';
 import { webhookLimiter, withRateLimit } from '@/lib/rate-limiter';
 
 interface DeploymentWebhookPayload {
@@ -92,7 +91,7 @@ interface WebhookResponse {
 function validateWebhookSignature(payload: string, signature: string, secret: string): boolean {
   // In a real implementation, this would validate HMAC signatures
   // For now, we'll do basic validation
-  return signature && secret && signature.length > 0;
+  return !!(signature && secret && signature.length > 0);
 }
 
 // Process different webhook sources
@@ -278,8 +277,37 @@ async function executeActions(actions: string[], payload: DeploymentWebhookPaylo
   return executed;
 }
 
-export const POST = withRateLimit(webhookLimiter)(handleAsyncRoute(async (request: NextRequest) => {
-    const headersList = headers();
+async function applyRateLimit(request: NextRequest, handler: (r: NextRequest) => Promise<Response>): Promise<Response> {
+  try {
+    await webhookLimiter.checkLimit(request)
+    const response = await handler(request)
+    const status = webhookLimiter.getStatus(request)
+    const headers = new Headers(response.headers)
+    headers.set('X-RateLimit-Limit', status.limit.toString())
+    headers.set('X-RateLimit-Remaining', status.remaining.toString())
+    headers.set('X-RateLimit-Reset', status.resetTime.toISOString())
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      const status = webhookLimiter.getStatus(request)
+      return new Response(JSON.stringify({ error: { code: error.code, message: error.message, statusCode: error.statusCode, timestamp: new Date().toISOString(), retryAfter: error.retryAfter } }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': error.retryAfter?.toString() || '60',
+          'X-RateLimit-Limit': status.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': status.resetTime.toISOString(),
+        }
+      })
+    }
+    throw error
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const handler = handleAsyncRoute(async (request: NextRequest) => {
+    const headersList = request.headers;
     const signature = headersList.get('x-webhook-signature') || headersList.get('x-hub-signature-256');
     const source = headersList.get('x-webhook-source') as 'drone' | 'argocd' | 'harbor' | 'gitea';
     const event = headersList.get('x-webhook-event') || '';
@@ -368,7 +396,10 @@ export const POST = withRateLimit(webhookLimiter)(handleAsyncRoute(async (reques
     // 6. Create audit logs
 
   return NextResponse.json(response);
-}));
+    return NextResponse.json(response);
+  });
+  return applyRateLimit(request, handler);
+}
 
 // Handle preflight requests for CORS
 export async function OPTIONS(request: NextRequest) {

@@ -69,3 +69,10 @@ function getMockClerkMetrics(): ClerkMetrics {
     },
   };
 }
+
+// Compatibility adapter for existing imports
+export class ClerkMonitor {
+  async getMetrics(): Promise<any> {
+    return getClerkMetrics() as any
+  }
+}

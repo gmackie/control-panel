@@ -5,7 +5,6 @@ import { useAuth } from '@/app/providers'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { NotificationBell, NotificationPanel, useNotifications } from '@/components/notifications/notification-system'
 import { 
   Activity,
@@ -186,7 +185,7 @@ function NavLink({ item, isCollapsed = false }: { item: NavItem; isCollapsed?: b
           )}
         </button>
         
-        {!isCollapsed && isOpen && (
+        {!isCollapsed && isOpen && item.children && (
           <div className="ml-6 mt-1 space-y-1">
             {item.children.map((child) => (
               <Link
@@ -298,16 +297,29 @@ function Header() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center px-4 md:px-6">
         {/* Mobile menu trigger */}
-        <Sheet open={showMobileMenu} onOpenChange={setShowMobileMenu}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
-            <Sidebar />
-          </SheetContent>
-        </Sheet>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="md:hidden"
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        
+        {/* Mobile menu overlay */}
+        {showMobileMenu && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setShowMobileMenu(false)}
+          >
+            <div 
+              className="fixed left-0 top-0 h-full w-72 bg-white dark:bg-gray-900 z-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Sidebar />
+            </div>
+          </div>
+        )}
 
         {/* Desktop: spacer, Mobile: logo */}
         <div className="flex-1 md:hidden">
@@ -343,7 +355,7 @@ function Header() {
             />
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
+          <div className="w-px h-6 bg-gray-200 dark:bg-gray-700" />
 
           {/* User menu */}
           {authenticated ? (

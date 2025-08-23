@@ -54,7 +54,7 @@ class WebhookDeliveryService {
     
     try {
       // Prepare headers
-      const headers = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'User-Agent': 'GMAC.IO-Webhooks/1.0',
         'X-Webhook-ID': delivery.webhookId,
@@ -284,8 +284,5 @@ class WebhookDeliveryService {
 
 // Export singleton instance
 export const webhookDeliveryService = new WebhookDeliveryService();
-
-// Export types
-export type { WebhookDelivery, DeliveryResult, WebhookEvent };
 
 export default webhookDeliveryService;

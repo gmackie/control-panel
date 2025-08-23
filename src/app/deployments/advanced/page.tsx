@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -210,11 +210,7 @@ export default function AdvancedDeploymentsPage() {
   const [canaryConfigs, setCanaryConfigs] = useState<CanaryConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDeploymentData();
-  }, []);
-
-  const fetchDeploymentData = async () => {
+  const fetchDeploymentData = useCallback(async () => {
     try {
       setIsLoading(true);
       // Fetch deployment configurations
@@ -240,7 +236,11 @@ export default function AdvancedDeploymentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDeploymentData();
+  }, [fetchDeploymentData]);
 
   const deploymentStrategies: DeploymentStrategy[] = [
     {
@@ -925,26 +925,11 @@ export default function AdvancedDeploymentsPage() {
         </TabsContent>
 
         <TabsContent value="canary" className="space-y-4">
-          <CanaryRelease 
-            configs={canaryConfigs}
-            onPromoteCanary={(configId) => {
-              console.log('Promote canary:', configId);
-            }}
-            onRollbackCanary={(configId) => {
-              console.log('Rollback canary:', configId);
-            }}
-            onUpdateTraffic={(configId, percentage) => {
-              console.log('Update canary traffic:', configId, percentage);
-            }}
-          />
+          <CanaryRelease />
         </TabsContent>
 
         <TabsContent value="rollback" className="space-y-4">
-          <RollbackManager 
-            onRollback={(deploymentId, targetVersion) => {
-              console.log('Rollback deployment:', deploymentId, targetVersion);
-            }}
-          />
+          <RollbackManager />
         </TabsContent>
       </Tabs>
     </div>

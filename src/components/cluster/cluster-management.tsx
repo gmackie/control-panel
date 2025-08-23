@@ -108,7 +108,7 @@ function NodeCard({ node, onAction }: {
               {isMaster ? 'Master' : 'Worker'}
             </Badge>
           </div>
-          <Badge variant={isReady ? 'default' : 'destructive'}>
+          <Badge variant={isReady ? 'default' : 'error'}>
             {node.status}
           </Badge>
         </div>
@@ -160,14 +160,14 @@ function NodeCard({ node, onAction }: {
           {/* Actions */}
           <Separator />
           <div className="flex flex-wrap gap-2">
-            <Dialog open={showDetails} onOpenChange={setShowDetails}>
-              <DialogTrigger asChild>
+            {showDetails && <Dialog>
+              <DialogTrigger>
                 <Button size="sm" variant="outline">
                   <Eye className="h-3 w-3 mr-1" />
                   Details
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Node Details: {node.name}</DialogTitle>
                   <DialogDescription>
@@ -223,7 +223,7 @@ function NodeCard({ node, onAction }: {
                   </div>
                 </div>
               </DialogContent>
-            </Dialog>
+            </Dialog>}
 
             {!isMaster && (
               <>

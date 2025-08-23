@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { 
   Shuffle,
+  Plus,
   Activity,
   Globe,
   Server,
@@ -506,7 +507,7 @@ export function BlueGreenDeployment({
                         {config.blueEnvironment.argoApp && (
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">ArgoCD App</span>
-                            <Button variant="link" size="sm" className="h-auto p-0">
+                            <Button variant="ghost" size="sm" className="h-auto p-0">
                               <GitMerge className="h-3 w-3 mr-1" />
                               {config.blueEnvironment.argoApp}
                               <ExternalLink className="h-3 w-3 ml-1" />
@@ -522,7 +523,7 @@ export function BlueGreenDeployment({
                         {config.blueEnvironment.harborImage && (
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">Harbor Image</span>
-                            <Button variant="link" size="sm" className="h-auto p-0">
+                            <Button variant="ghost" size="sm" className="h-auto p-0">
                               <Package className="h-3 w-3 mr-1" />
                               View
                               <ExternalLink className="h-3 w-3 ml-1" />
@@ -538,7 +539,7 @@ export function BlueGreenDeployment({
                         {config.greenEnvironment.argoApp && (
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">ArgoCD App</span>
-                            <Button variant="link" size="sm" className="h-auto p-0">
+                            <Button variant="ghost" size="sm" className="h-auto p-0">
                               <GitMerge className="h-3 w-3 mr-1" />
                               {config.greenEnvironment.argoApp}
                               <ExternalLink className="h-3 w-3 ml-1" />
@@ -554,7 +555,7 @@ export function BlueGreenDeployment({
                         {config.greenEnvironment.harborImage && (
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">Harbor Image</span>
-                            <Button variant="link" size="sm" className="h-auto p-0">
+                            <Button variant="ghost" size="sm" className="h-auto p-0">
                               <Package className="h-3 w-3 mr-1" />
                               View
                               <ExternalLink className="h-3 w-3 ml-1" />

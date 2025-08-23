@@ -1,9 +1,6 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
 import { Providers } from "./providers";
 import MainLayout from "@/components/layout/main-layout";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "GMAC.IO - Infrastructure Control Panel",
@@ -17,9 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.className} bg-background text-foreground min-h-screen`}
-      >
+      <body className={`bg-background text-foreground min-h-screen`}>
         <Providers>
           <MainLayout>
             {children}

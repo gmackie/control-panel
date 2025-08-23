@@ -559,7 +559,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                   <div className="text-sm text-blue-300">
                     <p className="font-medium mb-1">Integration Setup</p>
                     <p className="text-xs text-blue-300/70">
-                      You'll be prompted to configure API keys and settings for each integration after the app is created.
+                      You&apos;ll be prompted to configure API keys and settings for each integration after the app is created.
                     </p>
                   </div>
                 </div>
@@ -1092,7 +1092,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                   <div className="text-sm text-yellow-300">
                     <p className="font-medium mb-1">Default Alerts</p>
                     <p className="text-xs text-yellow-300/70">
-                      We'll set up default alerts for high CPU/memory usage, error rates, and downtime.
+                      We&apos;ll set up default alerts for high CPU/memory usage, error rates, and downtime.
                     </p>
                   </div>
                 </div>

@@ -127,7 +127,7 @@ export function StripeIntegrationForm({
         },
       }));
     }
-  }, [applicationId]);
+  }, [applicationId, config.webhooks.endpoint]);
 
   const validateApiKey = async () => {
     setIsValidating(true);
@@ -430,7 +430,7 @@ export function StripeIntegrationForm({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => navigator.clipboard.writeText(config.webhooks.endpoint)}
+                onClick={() => navigator.clipboard.writeText(config.webhooks.endpoint || '')}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -533,8 +533,8 @@ export function StripeIntegrationForm({
             <div>
               <p className="font-medium text-red-400">Live Mode Active</p>
               <p className="text-sm text-red-400/80 mt-1">
-                You're using live API keys. Real transactions will be processed and charges will occur.
-                Make sure you've thoroughly tested in test mode first.
+                You&apos;re using live API keys. Real transactions will be processed and charges will occur.
+                Make sure you&apos;ve thoroughly tested in test mode first.
               </p>
             </div>
           </div>

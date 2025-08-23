@@ -390,7 +390,7 @@ function generateOpenAPISpec(): any {
         }
       }
     },
-    paths: {}
+    paths: {} as Record<string, any>
   };
 
   API_DOCUMENTATION.forEach(endpoint => {

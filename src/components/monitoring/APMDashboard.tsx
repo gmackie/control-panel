@@ -614,7 +614,7 @@ export function APMDashboard({ applications }: APMDashboardProps) {
                       <span>Rate: {error.percentage.toFixed(2)}%</span>
                     </div>
                   </div>
-                  <Badge variant="destructive">{error.count}</Badge>
+                  <Badge variant="error">{error.count}</Badge>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 text-sm">

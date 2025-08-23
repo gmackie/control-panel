@@ -352,7 +352,7 @@ export async function GET(request: NextRequest) {
         let evaluations = generateMockEvaluations();
         
         if (ruleId) {
-          evaluations = evaluations.filter(eval => eval.ruleId === ruleId);
+          evaluations = evaluations.filter(evaluation => evaluation.ruleId === ruleId);
         }
         
         // Filter by time range
@@ -360,7 +360,7 @@ export async function GET(request: NextRequest) {
                            timeRange === '6h' ? 21600000 : 
                            timeRange === '24h' ? 86400000 : 3600000;
         const cutoffTime = new Date(Date.now() - timeRangeMs);
-        evaluations = evaluations.filter(eval => eval.timestamp >= cutoffTime);
+        evaluations = evaluations.filter(evaluation => evaluation.timestamp >= cutoffTime);
         
         return NextResponse.json({
           evaluations,
