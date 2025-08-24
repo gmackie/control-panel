@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-integrations
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: integrations
+data:
+  # Grafana Configuration
+  GRAFANA_URL: "https://grafana.gmac.io"
+  GRAFANA_ORG_ID: "1"
+  
+  # Additional Prometheus Configuration
+  PROMETHEUS_RETENTION: "30d"
+  PROMETHEUS_SCRAPE_INTERVAL: "15s"
+  
+  # Harbor Configuration
+  HARBOR_PROJECT: "gmackie"
+  HARBOR_REGISTRY: "registry.gmac.io"
+  
+  # Gitea Configuration
+  GITEA_ORG: "gmackie"
+  GITEA_WEBHOOK_ENDPOINT: "https://control.gmac.io/api/webhooks/gitea"
+  
+  # ArgoCD Configuration
+  ARGOCD_NAMESPACE: "argocd"
+  ARGOCD_APP_NAMESPACE: "control-panel"
+  
+  # Monitoring Endpoints
+  METRICS_PATH: "/api/metrics"
+  HEALTH_PATH: "/api/health"
+  
+  # Integration Settings
+  WEBHOOK_TIMEOUT: "30s"
+  INTEGRATION_RETRY_COUNT: "3"
+  INTEGRATION_RETRY_DELAY: "5s"

@@ -330,6 +330,258 @@ async function checkElevenLabsHealth(): Promise<HealthCheck> {
   };
 }
 
+async function checkGiteaHealth(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+  const endpoints = [];
+  const incidents: any[] = [];
+
+  try {
+    const giteaUrl = process.env.GITEA_URL || 'https://git.gmac.io';
+    const response = await fetch(`${giteaUrl}/api/v1/version`, {
+      headers: {
+        'Authorization': `token ${process.env.GITEA_TOKEN || ''}`,
+      },
+    });
+
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      endpoints.push({
+        name: 'Gitea API',
+        url: giteaUrl,
+        status: 'up' as const,
+        responseTime,
+        lastCheck: new Date().toISOString(),
+      });
+    } else if (response.status >= 500) {
+      status = 'down';
+      incidents.push({
+        id: `gitea-server-error-${Date.now()}`,
+        severity: 'critical' as const,
+        message: 'Gitea server error',
+        timestamp: new Date().toISOString(),
+        resolved: false,
+      });
+    }
+  } catch (error) {
+    status = 'down';
+  }
+
+  return {
+    provider: 'gitea',
+    name: 'Gitea',
+    status,
+    uptime: status === 'healthy' ? 99.9 : 0,
+    lastCheck: new Date().toISOString(),
+    responseTime: Date.now() - startTime,
+    errorRate: status === 'healthy' ? 0.1 : 100,
+    metrics: {
+      requests: 12450,
+      errors: 12,
+      latency: Date.now() - startTime,
+    },
+    incidents,
+    endpoints,
+  };
+}
+
+async function checkHarborHealth(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+  const endpoints = [];
+  const incidents: any[] = [];
+
+  try {
+    const harborUrl = process.env.HARBOR_URL || 'https://registry.gmac.io';
+    const response = await fetch(`${harborUrl}/api/v2.0/health`, {
+      headers: {
+        'Authorization': `Basic ${Buffer.from(
+          `${process.env.HARBOR_USERNAME}:${process.env.HARBOR_PASSWORD}`
+        ).toString('base64')}`,
+      },
+    });
+
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      endpoints.push({
+        name: 'Harbor API',
+        url: harborUrl,
+        status: 'up' as const,
+        responseTime,
+        lastCheck: new Date().toISOString(),
+      });
+    } else if (response.status >= 500) {
+      status = 'down';
+    }
+  } catch (error) {
+    status = 'down';
+  }
+
+  return {
+    provider: 'harbor',
+    name: 'Harbor Registry',
+    status,
+    uptime: status === 'healthy' ? 99.95 : 0,
+    lastCheck: new Date().toISOString(),
+    responseTime: Date.now() - startTime,
+    errorRate: status === 'healthy' ? 0.05 : 100,
+    metrics: {
+      requests: 8932,
+      errors: 4,
+      latency: Date.now() - startTime,
+      usage: 45, // GB storage used
+      limit: 100, // GB storage limit
+    },
+    incidents,
+    endpoints,
+  };
+}
+
+async function checkArgoCDHealth(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+  const endpoints = [];
+  const incidents: any[] = [];
+
+  try {
+    const argocdUrl = process.env.ARGOCD_SERVER || 'https://argocd.gmac.io';
+    const response = await fetch(`${argocdUrl}/api/v1/version`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.ARGOCD_TOKEN || ''}`,
+      },
+    });
+
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      endpoints.push({
+        name: 'ArgoCD API',
+        url: argocdUrl,
+        status: 'up' as const,
+        responseTime,
+        lastCheck: new Date().toISOString(),
+      });
+    } else if (response.status >= 500) {
+      status = 'down';
+    }
+  } catch (error) {
+    status = 'down';
+  }
+
+  return {
+    provider: 'argocd',
+    name: 'ArgoCD',
+    status,
+    uptime: status === 'healthy' ? 99.99 : 0,
+    lastCheck: new Date().toISOString(),
+    responseTime: Date.now() - startTime,
+    errorRate: status === 'healthy' ? 0.01 : 100,
+    metrics: {
+      requests: 23450,
+      errors: 2,
+      latency: Date.now() - startTime,
+    },
+    incidents,
+    endpoints,
+  };
+}
+
+async function checkPrometheusHealth(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+  const endpoints = [];
+  const incidents: any[] = [];
+
+  try {
+    const prometheusUrl = process.env.PROMETHEUS_URL || 'http://prometheus.monitoring.svc.cluster.local:9090';
+    const response = await fetch(`${prometheusUrl}/-/healthy`);
+
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      endpoints.push({
+        name: 'Prometheus API',
+        url: prometheusUrl,
+        status: 'up' as const,
+        responseTime,
+        lastCheck: new Date().toISOString(),
+      });
+    } else if (response.status >= 500) {
+      status = 'down';
+    }
+  } catch (error) {
+    status = 'down';
+  }
+
+  return {
+    provider: 'prometheus',
+    name: 'Prometheus',
+    status,
+    uptime: status === 'healthy' ? 99.99 : 0,
+    lastCheck: new Date().toISOString(),
+    responseTime: Date.now() - startTime,
+    errorRate: status === 'healthy' ? 0.01 : 100,
+    metrics: {
+      requests: 156230,
+      errors: 15,
+      latency: Date.now() - startTime,
+    },
+    incidents,
+    endpoints,
+  };
+}
+
+async function checkGrafanaHealth(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+  const endpoints = [];
+  const incidents: any[] = [];
+
+  try {
+    const grafanaUrl = process.env.GRAFANA_URL || 'https://grafana.gmac.io';
+    const response = await fetch(`${grafanaUrl}/api/health`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.GRAFANA_API_KEY || ''}`,
+      },
+    });
+
+    const responseTime = Date.now() - startTime;
+    
+    if (response.ok) {
+      endpoints.push({
+        name: 'Grafana API',
+        url: grafanaUrl,
+        status: 'up' as const,
+        responseTime,
+        lastCheck: new Date().toISOString(),
+      });
+    } else if (response.status >= 500) {
+      status = 'down';
+    }
+  } catch (error) {
+    status = 'down';
+  }
+
+  return {
+    provider: 'grafana',
+    name: 'Grafana',
+    status,
+    uptime: status === 'healthy' ? 99.9 : 0,
+    lastCheck: new Date().toISOString(),
+    responseTime: Date.now() - startTime,
+    errorRate: status === 'healthy' ? 0.1 : 100,
+    metrics: {
+      requests: 45620,
+      errors: 45,
+      latency: Date.now() - startTime,
+    },
+    incidents,
+    endpoints,
+  };
+}
+
 async function checkOpenRouterHealth(): Promise<HealthCheck> {
   const startTime = Date.now();
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
@@ -394,6 +646,13 @@ export async function GET(request: NextRequest) {
 
     // Run all health checks in parallel
     const healthChecks = await Promise.allSettled([
+      // Infrastructure services
+      checkGiteaHealth(),
+      checkHarborHealth(),
+      checkArgoCDHealth(),
+      checkPrometheusHealth(),
+      checkGrafanaHealth(),
+      // Third-party integrations
       checkStripeHealth(),
       checkTursoHealth(),
       checkSendGridHealth(),

@@ -37,7 +37,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: control-panel
-        image: gmac/control-panel:latest
+        image: ghcr.io/gmackie/control-panel:main
         imagePullPolicy: Always
         ports:
         - name: http
@@ -110,6 +110,23 @@ spec:
             configMapKeyRef:
               name: control-panel-config
               key: REDIS_PORT
+        
+        # Integration configurations
+        - name: GRAFANA_URL
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-integrations
+              key: GRAFANA_URL
+        - name: HARBOR_PROJECT
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-integrations
+              key: HARBOR_PROJECT
+        - name: GITEA_ORG
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-integrations
+              key: GITEA_ORG
         
         # Load secrets from Secret
         - name: NEXTAUTH_SECRET

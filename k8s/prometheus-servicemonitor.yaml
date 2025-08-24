@@ -1,0 +1,84 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: control-panel
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: monitoring
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-panel
+      app.kubernetes.io/component: web
+  endpoints:
+  - port: http
+    path: /api/metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service
+    
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: control-panel-alerts
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: monitoring
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: control-panel
+    interval: 30s
+    rules:
+    - alert: ControlPanelDown
+      expr: up{job="control-panel"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        component: control-panel
+      annotations:
+        summary: "Control Panel is down"
+        description: "Control Panel instance {{ $labels.instance }} has been down for more than 5 minutes."
+    
+    - alert: ControlPanelHighMemory
+      expr: container_memory_usage_bytes{pod=~"control-panel-.*"} / container_spec_memory_limit_bytes{pod=~"control-panel-.*"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: control-panel
+      annotations:
+        summary: "Control Panel high memory usage"
+        description: "Control Panel pod {{ $labels.pod }} is using more than 90% of its memory limit."
+    
+    - alert: ControlPanelHighCPU
+      expr: rate(container_cpu_usage_seconds_total{pod=~"control-panel-.*"}[5m]) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: control-panel
+      annotations:
+        summary: "Control Panel high CPU usage"
+        description: "Control Panel pod {{ $labels.pod }} is using more than 80% CPU."
+    
+    - alert: ControlPanelRestarts
+      expr: increase(kube_pod_container_status_restarts_total{pod=~"control-panel-.*"}[1h]) > 3
+      for: 5m
+      labels:
+        severity: warning
+        component: control-panel
+      annotations:
+        summary: "Control Panel pod restarting frequently"
+        description: "Control Panel pod {{ $labels.pod }} has restarted more than 3 times in the last hour."

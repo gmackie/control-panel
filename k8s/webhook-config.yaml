@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-webhooks
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: webhooks
+data:
+  webhook-config.json: |
+    {
+      "gitea": {
+        "enabled": true,
+        "events": [
+          "push",
+          "pull_request",
+          "create",
+          "delete",
+          "issues",
+          "issue_comment",
+          "release"
+        ],
+        "secret": "${WEBHOOK_SECRET}",
+        "retries": 3,
+        "timeout": 30
+      },
+      "harbor": {
+        "enabled": true,
+        "events": [
+          "PUSH_ARTIFACT",
+          "PULL_ARTIFACT",
+          "DELETE_ARTIFACT",
+          "SCANNING_COMPLETED",
+          "SCANNING_FAILED",
+          "QUOTA_EXCEED"
+        ],
+        "endpoint": "https://control.gmac.io/api/webhooks/harbor",
+        "auth_header": "Bearer ${HARBOR_WEBHOOK_TOKEN}"
+      },
+      "argocd": {
+        "enabled": true,
+        "events": [
+          "app.created",
+          "app.updated",
+          "app.deleted",
+          "app.health.degraded",
+          "app.sync.running",
+          "app.sync.succeeded",
+          "app.sync.failed"
+        ],
+        "endpoint": "https://control.gmac.io/api/webhooks/argocd"
+      },
+      "prometheus": {
+        "enabled": true,
+        "alertmanager": {
+          "webhook_configs": [
+            {
+              "url": "https://control.gmac.io/api/webhooks/prometheus/alerts",
+              "send_resolved": true,
+              "http_config": {
+                "bearer_token": "${PROMETHEUS_BEARER_TOKEN}"
+              }
+            }
+          ]
+        }
+      },
+      "stripe": {
+        "enabled": true,
+        "events": [
+          "payment_intent.succeeded",
+          "payment_intent.failed",
+          "customer.subscription.created",
+          "customer.subscription.updated",
+          "customer.subscription.deleted",
+          "invoice.payment_succeeded",
+          "invoice.payment_failed"
+        ],
+        "endpoint": "https://control.gmac.io/api/webhooks/stripe",
+        "signing_secret": "${STRIPE_WEBHOOK_SECRET}"
+      },
+      "clerk": {
+        "enabled": true,
+        "events": [
+          "user.created",
+          "user.updated",
+          "user.deleted",
+          "session.created",
+          "session.ended",
+          "organization.created",
+          "organization.updated"
+        ],
+        "endpoint": "https://control.gmac.io/api/webhooks/clerk",
+        "signing_secret": "${CLERK_WEBHOOK_SECRET}"
+      }
+    }
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-webhook
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: webhook
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: webhook
+  selector:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: web
