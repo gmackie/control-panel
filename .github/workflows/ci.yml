@@ -217,7 +217,7 @@ jobs:
     if: always() && github.event_name != 'pull_request'
     steps:
     - name: Notify Slack on Success
-      if: needs.docker-build-and-push.result == 'success' && secrets.SLACK_WEBHOOK_URL != ''
+      if: needs.docker-build-and-push.result == 'success'
       uses: 8398a7/action-slack@v3
       with:
         status: success
@@ -226,7 +226,7 @@ jobs:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     - name: Notify Slack on Failure
-      if: contains(needs.*.result, 'failure') && secrets.SLACK_WEBHOOK_URL != ''
+      if: contains(needs.*.result, 'failure')
       uses: 8398a7/action-slack@v3
       with:
         status: failure
