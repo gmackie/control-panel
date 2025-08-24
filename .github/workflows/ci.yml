@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: gmackie/control-panel
 
 jobs:
   test-and-lint:
@@ -105,6 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.event_name != 'pull_request' && needs.build.result == 'success'
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
       image-tags: ${{ steps.meta.outputs.tags }}
