@@ -1,4 +1,4 @@
-# Control Panel - Next.js Production Build
+# Production Dockerfile for Control Panel
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
