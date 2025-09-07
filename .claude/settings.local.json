@@ -8,8 +8,46 @@
       "Bash(chmod:*)",
       "Bash(rm:*)",
       "Bash(./setup-github.sh:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)",
+      "Bash(npm ci:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run build:*)",
+      "Bash(grep:*)",
+      "Bash(npx jest:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh api:*)",
+      "Bash(cat:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh run watch:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(git restore:*)",
+      "Bash(kubectl config:*)",
+      "Bash(kubectl:*)",
+      "Bash(export KUBECONFIG=~/.kube/k3s-gmac.yaml)",
+      "Bash(export KUBECONFIG=~/.kube/config-hetzner)",
+      "Bash(__NEW_LINE__ kubectl delete deployment control-panel -n control-panel --insecure-skip-tls-verify --ignore-not-found=true)",
+      "Bash(./deploy-gmac-cluster.sh:*)",
+      "Bash(docker build:*)",
+      "Bash(docker push:*)",
+      "Bash(ping:*)",
+      "Bash(nc:*)",
+      "Bash(curl:*)",
+      "Bash(git remote add:*)",
+      "Bash(docker tag:*)",
+      "Bash(./setup-complete-monitoring.sh:*)",
+      "Bash(export KUBECONFIG=/Users/mackieg/.kube/config-hetzner)"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "/Users/mackieg/.kube"
+    ]
   }
 }

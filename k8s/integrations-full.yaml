@@ -1,0 +1,386 @@
+# Full Integration Configuration for Control Panel
+# This configures Gitea, Harbor, ArgoCD, and multi-cluster K3s support
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-config
+  namespace: control-panel
+data:
+  GITEA_URL: "https://git.gmac.io"
+  GITEA_ORG: "gmackie"
+  GITEA_WEBHOOK_ENDPOINT: "/api/webhooks/gitea"
+  GITEA_SYNC_INTERVAL: "60s"
+  GITEA_FEATURES: |
+    - repository_management
+    - issue_tracking
+    - pull_requests
+    - ci_cd_triggers
+    - release_management
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-config
+  namespace: control-panel
+data:
+  HARBOR_URL: "https://harbor.gmac.io"
+  HARBOR_PROJECT: "gmac"
+  HARBOR_WEBHOOK_ENDPOINT: "/api/webhooks/harbor"
+  HARBOR_SCAN_ON_PUSH: "true"
+  HARBOR_VULNERABILITY_THRESHOLD: "medium"
+  HARBOR_FEATURES: |
+    - image_registry
+    - vulnerability_scanning
+    - artifact_management
+    - replication
+    - retention_policies
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-config
+  namespace: control-panel
+data:
+  ARGOCD_SERVER: "https://argocd.gmac.io"
+  ARGOCD_WEBHOOK_ENDPOINT: "/api/webhooks/argocd"
+  ARGOCD_SYNC_POLICY: "automated"
+  ARGOCD_PRUNE: "true"
+  ARGOCD_SELF_HEAL: "true"
+  ARGOCD_FEATURES: |
+    - gitops_deployments
+    - application_management
+    - sync_status
+    - health_monitoring
+    - rollback_support
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-clusters-config
+  namespace: control-panel
+data:
+  clusters.yaml: |
+    staging:
+      name: staging-k3s
+      type: k3s
+      apiServer: https://staging.k3s.gmac.io:6443
+      environment: staging
+      region: us-west-2
+      provider: hetzner
+      nodeCount: 3
+      features:
+        - auto_scaling
+        - monitoring
+        - logging
+        - ingress_nginx
+        - cert_manager
+        - metrics_server
+      resources:
+        cpu: "12 cores"
+        memory: "32GB"
+        storage: "500GB"
+      applications:
+        - name: staging-apps
+          namespace: staging
+          autoSync: true
+    
+    production:
+      name: prod-k3s
+      type: k3s
+      apiServer: https://prod.k3s.gmac.io:6443
+      environment: production
+      region: us-east-1
+      provider: hetzner
+      nodeCount: 5
+      features:
+        - high_availability
+        - auto_scaling
+        - monitoring
+        - logging
+        - ingress_nginx
+        - cert_manager
+        - metrics_server
+        - backup_restore
+        - disaster_recovery
+      resources:
+        cpu: "24 cores"
+        memory: "64GB"
+        storage: "1TB"
+      applications:
+        - name: production-apps
+          namespace: production
+          autoSync: false
+          requireApproval: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: integration-secrets
+  namespace: control-panel
+type: Opaque
+stringData:
+  # Gitea Credentials
+  GITEA_TOKEN: "YOUR_GITEA_TOKEN_HERE"
+  
+  # Harbor Credentials
+  HARBOR_USERNAME: "admin"
+  HARBOR_PASSWORD: "YOUR_HARBOR_PASSWORD_HERE"
+  
+  # ArgoCD Credentials
+  ARGOCD_TOKEN: "YOUR_ARGOCD_TOKEN_HERE"
+  
+  # K3s Service Account Tokens
+  STAGING_K3S_SA_TOKEN: "YOUR_STAGING_SA_TOKEN_HERE"
+  PROD_K3S_SA_TOKEN: "YOUR_PROD_SA_TOKEN_HERE"
+  
+  # Webhook Secrets
+  GITEA_WEBHOOK_SECRET: "YOUR_GITEA_WEBHOOK_SECRET_HERE"
+  HARBOR_WEBHOOK_SECRET: "YOUR_HARBOR_WEBHOOK_SECRET_HERE"
+  ARGOCD_WEBHOOK_SECRET: "YOUR_ARGOCD_WEBHOOK_SECRET_HERE"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-webhooks
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: webhooks
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: webhooks
+  selector:
+    app.kubernetes.io/name: control-panel
+    app.kubernetes.io/component: web
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: control-panel-webhooks
+  namespace: control-panel
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  rules:
+  - host: control.gmac.io
+    http:
+      paths:
+      - path: /api/webhooks
+        pathType: Prefix
+        backend:
+          service:
+            name: control-panel-webhooks
+            port:
+              number: 8080
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: integration-dashboards
+  namespace: control-panel
+data:
+  gitea-dashboard.json: |
+    {
+      "title": "Gitea Integration",
+      "panels": [
+        {
+          "id": "repositories",
+          "type": "stat",
+          "title": "Total Repositories",
+          "query": "gitea_repositories_total"
+        },
+        {
+          "id": "commits",
+          "type": "graph",
+          "title": "Commits Over Time",
+          "query": "rate(gitea_commits_total[5m])"
+        },
+        {
+          "id": "prs",
+          "type": "stat",
+          "title": "Open Pull Requests",
+          "query": "gitea_pull_requests_open"
+        },
+        {
+          "id": "ci_status",
+          "type": "table",
+          "title": "CI/CD Pipeline Status",
+          "query": "gitea_ci_pipeline_status"
+        }
+      ]
+    }
+  
+  harbor-dashboard.json: |
+    {
+      "title": "Harbor Registry",
+      "panels": [
+        {
+          "id": "images",
+          "type": "stat",
+          "title": "Total Images",
+          "query": "harbor_images_total"
+        },
+        {
+          "id": "storage",
+          "type": "gauge",
+          "title": "Storage Usage",
+          "query": "harbor_storage_used_bytes"
+        },
+        {
+          "id": "vulnerabilities",
+          "type": "piechart",
+          "title": "Vulnerability Severity",
+          "query": "harbor_vulnerabilities_by_severity"
+        },
+        {
+          "id": "pulls",
+          "type": "graph",
+          "title": "Image Pulls",
+          "query": "rate(harbor_image_pulls_total[5m])"
+        }
+      ]
+    }
+  
+  argocd-dashboard.json: |
+    {
+      "title": "ArgoCD GitOps",
+      "panels": [
+        {
+          "id": "applications",
+          "type": "stat",
+          "title": "Total Applications",
+          "query": "argocd_applications_total"
+        },
+        {
+          "id": "sync_status",
+          "type": "piechart",
+          "title": "Sync Status",
+          "query": "argocd_app_sync_status"
+        },
+        {
+          "id": "health",
+          "type": "piechart",
+          "title": "Application Health",
+          "query": "argocd_app_health_status"
+        },
+        {
+          "id": "sync_history",
+          "type": "table",
+          "title": "Recent Syncs",
+          "query": "argocd_sync_history"
+        }
+      ]
+    }
+  
+  k3s-clusters-dashboard.json: |
+    {
+      "title": "K3s Clusters Overview",
+      "panels": [
+        {
+          "id": "cluster_health",
+          "type": "heatmap",
+          "title": "Cluster Health",
+          "query": "k3s_cluster_health"
+        },
+        {
+          "id": "node_status",
+          "type": "table",
+          "title": "Node Status",
+          "query": "k3s_node_status"
+        },
+        {
+          "id": "resource_usage",
+          "type": "graph",
+          "title": "Resource Usage",
+          "query": "k3s_resource_usage"
+        },
+        {
+          "id": "pod_count",
+          "type": "stat",
+          "title": "Total Pods",
+          "query": "k3s_pod_count"
+        }
+      ]
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-integrations
+  namespace: control-panel
+spec:
+  template:
+    spec:
+      containers:
+      - name: setup
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Setting up Control Panel integrations..."
+          
+          # Create service accounts for cluster access
+          kubectl create serviceaccount control-panel-sa -n control-panel --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create cluster role for monitoring
+          kubectl create clusterrole control-panel-monitor \
+            --verb=get,list,watch \
+            --resource=nodes,pods,services,deployments,statefulsets,daemonsets,ingresses,configmaps,secrets \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Bind role to service account
+          kubectl create clusterrolebinding control-panel-monitor-binding \
+            --clusterrole=control-panel-monitor \
+            --serviceaccount=control-panel:control-panel-sa \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          echo "Integration setup complete!"
+      restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: integration-scripts
+  namespace: control-panel
+data:
+  test-gitea.sh: |
+    #!/bin/bash
+    # Test Gitea integration
+    curl -H "Authorization: token $GITEA_TOKEN" \
+         "$GITEA_URL/api/v1/user/repos" | jq .
+  
+  test-harbor.sh: |
+    #!/bin/bash
+    # Test Harbor integration
+    curl -u "$HARBOR_USERNAME:$HARBOR_PASSWORD" \
+         "$HARBOR_URL/api/v2.0/projects" | jq .
+  
+  test-argocd.sh: |
+    #!/bin/bash
+    # Test ArgoCD integration
+    curl -H "Authorization: Bearer $ARGOCD_TOKEN" \
+         "$ARGOCD_SERVER/api/v1/applications" | jq .
+  
+  test-k3s.sh: |
+    #!/bin/bash
+    # Test K3s cluster connections
+    echo "Testing Staging Cluster..."
+    kubectl --server=$STAGING_K8S_API_SERVER \
+            --token=$STAGING_K3S_SA_TOKEN \
+            --insecure-skip-tls-verify \
+            get nodes
+    
+    echo "Testing Production Cluster..."
+    kubectl --server=$PROD_K8S_API_SERVER \
+            --token=$PROD_K3S_SA_TOKEN \
+            --insecure-skip-tls-verify \
+            get nodes

@@ -1,0 +1,340 @@
+# Application Monitoring Configuration
+# This defines all applications that should be monitored by the control panel
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: applications-config
+  namespace: control-panel
+data:
+  applications.yaml: |
+    # Core Applications
+    - name: control-panel
+      namespace: control-panel
+      cluster: production
+      git:
+        repo: gmackie/control-panel
+        branch: main
+      helm:
+        chart: control-panel
+        release: control-panel
+      observability:
+        grafana_dashboard: app-control-panel
+        loki_labels: "{namespace=\"control-panel\",app=\"control-panel\"}"
+        prometheus_job: control-panel
+      features:
+        - authentication
+        - monitoring
+        - infrastructure-management
+        
+    - name: landing-page
+      namespace: control-panel
+      cluster: production
+      git:
+        repo: gmackie/landing-page
+        branch: main
+      helm:
+        chart: static-site
+        release: landing-page
+      observability:
+        grafana_dashboard: app-landing-page
+        loki_labels: "{namespace=\"control-panel\",app=\"landing-page\"}"
+        prometheus_job: landing-page
+      features:
+        - static-content
+        - marketing
+        
+    # Development Tools
+    - name: gmac-chat
+      namespace: development
+      cluster: production
+      git:
+        repo: gmackie/gmac-chat
+        branch: main
+      helm:
+        chart: web-app
+        release: gmac-chat
+      observability:
+        grafana_dashboard: app-gmac-chat
+        loki_labels: "{namespace=\"development\",app=\"gmac-chat\"}"
+        prometheus_job: gmac-chat
+      features:
+        - real-time-chat
+        - ai-integration
+        - websockets
+        
+    - name: ai-dashboard
+      namespace: development
+      cluster: production
+      git:
+        repo: gmackie/ai-dashboard
+        branch: main
+      helm:
+        chart: web-app
+        release: ai-dashboard
+      observability:
+        grafana_dashboard: app-ai-dashboard
+        loki_labels: "{namespace=\"development\",app=\"ai-dashboard\"}"
+        prometheus_job: ai-dashboard
+      features:
+        - ai-models
+        - data-visualization
+        - api-gateway
+        
+    - name: dev-tools
+      namespace: development
+      cluster: staging
+      git:
+        repo: gmackie/dev-tools
+        branch: develop
+      helm:
+        chart: web-app
+        release: dev-tools
+      observability:
+        grafana_dashboard: app-dev-tools
+        loki_labels: "{namespace=\"development\",app=\"dev-tools\"}"
+        prometheus_job: dev-tools
+      features:
+        - code-analysis
+        - deployment-tools
+        - monitoring-utilities
+        
+    # API Services
+    - name: api-gateway
+      namespace: api
+      cluster: production
+      git:
+        repo: gmackie/api-gateway
+        branch: main
+      helm:
+        chart: api-service
+        release: api-gateway
+      observability:
+        grafana_dashboard: app-api-gateway
+        loki_labels: "{namespace=\"api\",app=\"api-gateway\"}"
+        prometheus_job: api-gateway
+      features:
+        - rate-limiting
+        - authentication
+        - load-balancing
+        - request-routing
+        
+    - name: user-service
+      namespace: api
+      cluster: production
+      git:
+        repo: gmackie/user-service
+        branch: main
+      helm:
+        chart: api-service
+        release: user-service
+      observability:
+        grafana_dashboard: app-user-service
+        loki_labels: "{namespace=\"api\",app=\"user-service\"}"
+        prometheus_job: user-service
+      features:
+        - user-management
+        - authentication
+        - profile-management
+        
+    - name: notification-service
+      namespace: api
+      cluster: production
+      git:
+        repo: gmackie/notification-service
+        branch: main
+      helm:
+        chart: api-service
+        release: notification-service
+      observability:
+        grafana_dashboard: app-notification-service
+        loki_labels: "{namespace=\"api\",app=\"notification-service\"}"
+        prometheus_job: notification-service
+      features:
+        - email-notifications
+        - sms-notifications
+        - push-notifications
+        - webhook-delivery
+        
+    # Data Services
+    - name: analytics-engine
+      namespace: data
+      cluster: production
+      git:
+        repo: gmackie/analytics-engine
+        branch: main
+      helm:
+        chart: data-service
+        release: analytics-engine
+      observability:
+        grafana_dashboard: app-analytics-engine
+        loki_labels: "{namespace=\"data\",app=\"analytics-engine\"}"
+        prometheus_job: analytics-engine
+      features:
+        - data-processing
+        - real-time-analytics
+        - reporting
+        
+    - name: data-pipeline
+      namespace: data
+      cluster: production
+      git:
+        repo: gmackie/data-pipeline
+        branch: main
+      helm:
+        chart: data-service
+        release: data-pipeline
+      observability:
+        grafana_dashboard: app-data-pipeline
+        loki_labels: "{namespace=\"data\",app=\"data-pipeline\"}"
+        prometheus_job: data-pipeline
+      features:
+        - etl-processing
+        - data-validation
+        - transformation
+        
+  # Grafana Dashboard Templates
+  grafana_dashboards.json: |
+    {
+      "app-overview": {
+        "title": "Application Overview - {{app_name}}",
+        "panels": [
+          {
+            "title": "Pod Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_pod_status_ready{namespace=\"{{namespace}}\",pod=~\"{{app_name}}.*\"}",
+                "legendFormat": "Ready Pods"
+              }
+            ]
+          },
+          {
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"{{prometheus_job}}\"}[5m])",
+                "legendFormat": "Requests/sec"
+              }
+            ]
+          },
+          {
+            "title": "Response Time",
+            "type": "graph", 
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"{{prometheus_job}}\"}[5m]))",
+                "legendFormat": "95th percentile"
+              }
+            ]
+          },
+          {
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"{{prometheus_job}}\",status=~\"5..\"}[5m])",
+                "legendFormat": "Error Rate"
+              }
+            ]
+          },
+          {
+            "title": "Git Information",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "up{job=\"{{prometheus_job}}\"}",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "title": "Helm Release Info", 
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_pod_info{namespace=\"{{namespace}}\",pod=~\"{{app_name}}.*\"}",
+                "legendFormat": "Release: {{release}}"
+              }
+            ]
+          }
+        ]
+      }
+    }
+    
+  # Loki Query Templates
+  loki_queries.yaml: |
+    application_logs:
+      - name: "All Application Logs"
+        query: "{{loki_labels}}"
+        description: "All logs for {{app_name}}"
+        
+      - name: "Error Logs"
+        query: "{{loki_labels}} |= \"ERROR\" or |= \"error\" or |= \"Error\""
+        description: "Error-level logs for {{app_name}}"
+        
+      - name: "Performance Logs"  
+        query: "{{loki_labels}} |= \"slow\" or |= \"timeout\" or |= \"performance\""
+        description: "Performance-related logs for {{app_name}}"
+        
+      - name: "Request Logs"
+        query: "{{loki_labels}} |= \"GET\" or |= \"POST\" or |= \"PUT\" or |= \"DELETE\""
+        description: "HTTP request logs for {{app_name}}"
+        
+    health_checks:
+      - name: "Health Check Logs"
+        query: "{{loki_labels}} |= \"health\" or |= \"/health\" or |= \"/healthz\""
+        description: "Health check logs for {{app_name}}"
+        
+      - name: "Startup Logs"
+        query: "{{loki_labels}} |= \"starting\" or |= \"started\" or |= \"initialization\""
+        description: "Application startup logs for {{app_name}}"
+        
+  # Prometheus Alert Rules
+  alert_rules.yaml: |
+    groups:
+      - name: application_alerts
+        rules:
+          - alert: ApplicationDown
+            expr: up{job="{{prometheus_job}}"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              app: "{{app_name}}"
+              namespace: "{{namespace}}"
+            annotations:
+              summary: "Application {{app_name}} is down"
+              description: "Application {{app_name}} in namespace {{namespace}} has been down for more than 1 minute."
+              
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{job="{{prometheus_job}}",status=~"5.."}[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: warning
+              app: "{{app_name}}"
+              namespace: "{{namespace}}"
+            annotations:
+              summary: "High error rate for {{app_name}}"
+              description: "Application {{app_name}} error rate is above 10% for more than 2 minutes."
+              
+          - alert: HighResponseTime
+            expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="{{prometheus_job}}"}[5m])) > 1
+            for: 5m
+            labels:
+              severity: warning
+              app: "{{app_name}}"
+              namespace: "{{namespace}}"
+            annotations:
+              summary: "High response time for {{app_name}}"
+              description: "Application {{app_name}} 95th percentile response time is above 1 second for more than 5 minutes."
+              
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total{namespace="{{namespace}}",pod=~"{{app_name}}.*"}[15m]) > 0
+            for: 5m
+            labels:
+              severity: critical
+              app: "{{app_name}}"
+              namespace: "{{namespace}}"
+            annotations:
+              summary: "Pod crash looping for {{app_name}}"
+              description: "Pod for {{app_name}} in namespace {{namespace}} is crash looping."
