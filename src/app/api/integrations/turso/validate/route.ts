@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createClient } from '@libsql/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +19,9 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      // Dynamically import libsql to avoid build issues in Alpine Linux
+      const { createClient } = await import('@libsql/client');
+      
       // Create a Turso client
       const client = createClient({
         url: databaseUrl,
