@@ -43,7 +43,11 @@
       "Bash(git remote add:*)",
       "Bash(docker tag:*)",
       "Bash(./setup-complete-monitoring.sh:*)",
-      "Bash(export KUBECONFIG=/Users/mackieg/.kube/config-hetzner)"
+      "Bash(export KUBECONFIG=/Users/mackieg/.kube/config-hetzner)",
+      "Bash(./test-monitoring.sh:*)",
+      "Bash(./test-e2e-monitoring.sh:*)",
+      "Bash(sed:*)",
+      "Bash(./setup-observability.sh:*)"
     ],
     "deny": [],
     "additionalDirectories": [
