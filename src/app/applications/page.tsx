@@ -5,23 +5,26 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Plus, 
-  Code, 
-  Key, 
-  Settings, 
+import {
+  Plus,
+  Code,
+  Key,
+  Settings,
   ExternalLink,
   MoreVertical,
   Shield,
   Globe,
-  Clock
+  Clock,
+  Download
 } from "lucide-react";
 import Link from "next/link";
 import { Application } from "@/types/applications";
 import { AppCreationWizard } from "@/components/applications/AppCreationWizard";
+import { ImportApplicationsModal } from "@/components/applications/ImportApplicationsModal";
 
 export default function ApplicationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const { data: applications, isLoading, refetch } = useQuery<Application[]>({
     queryKey: ["applications"],
@@ -54,10 +57,16 @@ export default function ApplicationsPage() {
             Manage your applications, API keys, and secrets
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Application
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowImportModal(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Import from Cluster
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Application
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -150,6 +159,15 @@ export default function ApplicationsPage() {
           }}
         />
       )}
+
+      <ImportApplicationsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          setShowImportModal(false);
+          refetch();
+        }}
+      />
     </div>
   );
 }
