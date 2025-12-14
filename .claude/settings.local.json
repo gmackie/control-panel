@@ -47,7 +47,21 @@
       "Bash(./test-monitoring.sh:*)",
       "Bash(./test-e2e-monitoring.sh:*)",
       "Bash(sed:*)",
-      "Bash(./setup-observability.sh:*)"
+      "Bash(./setup-observability.sh:*)",
+      "Bash(./update-cluster-secrets.sh)",
+      "Bash(./deploy-optimized.sh:*)",
+      "Bash(pkill:*)",
+      "Bash(docker inspect:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(./build.sh:*)",
+      "Bash(ssh -o StrictHostKeyChecking=no root@5.78.106.236 \"gunzip -c /tmp/control-panel.tar.gz | /usr/local/bin/k3s ctr images import - && rm /tmp/control-panel.tar.gz\")",
+      "Bash(scp:*)",
+      "Bash(ssh -o StrictHostKeyChecking=no root@5.78.125.172 \"gunzip -c /tmp/control-panel.tar.gz | /usr/local/bin/k3s ctr images import - && rm /tmp/control-panel.tar.gz\")",
+      "Bash(ssh root@5.78.106.236 \"/usr/local/bin/k3s ctr images ls | grep control-panel\")",
+      "Bash(ssh root@5.78.125.172 \"/usr/local/bin/k3s ctr images ls | grep control-panel\")",
+      "Bash(docker buildx build:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "additionalDirectories": [

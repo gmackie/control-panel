@@ -37,8 +37,8 @@ spec:
         fsGroup: 1001
       containers:
       - name: control-panel
-        image: ghcr.io/gmackie/control-panel:main
-        imagePullPolicy: Always
+        image: control-panel:latest
+        imagePullPolicy: Never
         ports:
         - name: http
           containerPort: 3000

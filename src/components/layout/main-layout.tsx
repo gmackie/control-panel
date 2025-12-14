@@ -27,7 +27,8 @@ import {
   FileText,
   HelpCircle,
   LogOut,
-  User
+  User,
+  Rocket
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -128,6 +129,33 @@ const navigation: NavItem[] = [
     title: 'Applications',
     href: '/applications',
     icon: Container
+  },
+  {
+    title: 'Deployments',
+    href: '/deployments',
+    icon: Rocket,
+    children: [
+      {
+        title: 'Overview',
+        href: '/deployments',
+        icon: Rocket
+      },
+      {
+        title: 'Applications',
+        href: '/deployments?tab=applications',
+        icon: Container
+      },
+      {
+        title: 'Repositories',
+        href: '/deployments?tab=repositories',
+        icon: GitBranch
+      },
+      {
+        title: 'Deploy New',
+        href: '/deployments?tab=deploy',
+        icon: Ship
+      }
+    ]
   },
   {
     title: 'Security',
@@ -333,29 +361,35 @@ function Header() {
 
         {/* Right side */}
         <div className="flex items-center space-x-3">
-          {/* System status indicator */}
-          <div className="hidden md:flex items-center space-x-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-xs font-medium">All Systems Operational</span>
-          </div>
+          {/* System status indicator - only show when authenticated */}
+          {authenticated && (
+            <div className="hidden md:flex items-center space-x-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs font-medium">All Systems Operational</span>
+            </div>
+          )}
 
-          {/* Notifications */}
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative"
-            >
-              <NotificationBell />
-            </Button>
-            <NotificationPanel 
-              isOpen={showNotifications}
-              onClose={() => setShowNotifications(false)}
-            />
-          </div>
+          {/* Notifications - only show when authenticated */}
+          {authenticated && (
+            <>
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative"
+                >
+                  <NotificationBell />
+                </Button>
+                <NotificationPanel
+                  isOpen={showNotifications}
+                  onClose={() => setShowNotifications(false)}
+                />
+              </div>
 
-          <div className="w-px h-6 bg-gray-200 dark:bg-gray-700" />
+              <div className="w-px h-6 bg-gray-200 dark:bg-gray-700" />
+            </>
+          )}
 
           {/* User menu */}
           {authenticated ? (

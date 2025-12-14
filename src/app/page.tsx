@@ -1,6 +1,6 @@
 'use client'
 
-import { useAuth } from '@/app/providers'
+import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -18,22 +18,21 @@ import { SystemHealth } from '@/components/dashboard/system-health'
 import { RealtimeMetrics } from '@/components/dashboard/realtime-metrics'
 import { ClerkAuthMetrics } from '@/components/dashboard/clerk-auth-metrics'
 import { fetchBusinessMetrics } from '@/lib/api'
-import UnauthenticatedHomePage from './page-unauthenticated'
 
 export default function Dashboard() {
-  const { authenticated } = useAuth()
+  const { data: session, status } = useSession()
   const [isLoading, setIsLoading] = useState(true)
   const { data: metrics } = useQuery({
     queryKey: ['business-metrics'],
     queryFn: fetchBusinessMetrics,
-    enabled: authenticated,
+    enabled: !!session,
   })
 
   useEffect(() => {
     setIsLoading(false)
   }, [])
 
-  if (isLoading) {
+  if (status === "loading" || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-pulse">Loading...</div>
@@ -41,8 +40,21 @@ export default function Dashboard() {
     )
   }
 
-  if (!authenticated) {
-    return <UnauthenticatedHomePage />
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">GMAC.IO Control Panel</h1>
+          <p className="text-muted-foreground mb-6">Please sign in to access the control panel.</p>
+          <a 
+            href="/api/auth/signin/github"
+            className="inline-flex items-center px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 transition-colors"
+          >
+            Sign in with GitHub
+          </a>
+        </div>
+      </div>
+    )
   }
 
   return (
