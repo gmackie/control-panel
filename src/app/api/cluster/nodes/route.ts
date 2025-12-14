@@ -1,78 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { K3sService } from '@/lib/k3s/k3s-service';
 
-interface KubernetesNode {
-  name: string;
-  status: 'Ready' | 'NotReady' | 'Unknown' | 'SchedulingDisabled';
-  roles: string[];
-  age: string;
-  version: string;
-  internalIP: string;
-  externalIP?: string;
-  usage: {
-    cpu: number;
-    memory: number;
-    pods: number;
-    storage: number;
-  };
-  capacity: {
-    cpu: string;
-    memory: string;
-    pods: string;
-  };
-  conditions: Array<{
-    type: string;
-    status: string;
-    lastTransitionTime: Date;
-    reason: string;
-    message: string;
-  }>;
-  createdAt: Date;
-  lastHeartbeat: Date;
-}
-
-function generateMockNodes(): KubernetesNode[] {
-  const now = new Date();
-  const nodeNames = ['k3s-master-01', 'k3s-worker-01', 'k3s-worker-02', 'k3s-worker-03'];
-  
-  return nodeNames.map((name, index) => {
-    const isMaster = index === 0;
-    const isReady = Math.random() > 0.05;
-    
-    return {
-      name,
-      status: isReady ? 'Ready' : 'NotReady',
-      roles: isMaster ? ['control-plane', 'master'] : ['worker'],
-      age: `${Math.floor(Math.random() * 30) + 5}d`,
-      version: 'v1.27.4+k3s1',
-      internalIP: `10.0.${index + 1}.100`,
-      externalIP: isMaster ? '192.168.1.100' : undefined,
-      usage: {
-        cpu: Math.random() * 100,
-        memory: Math.random() * 100,
-        pods: Math.floor(Math.random() * 15) + 5,
-        storage: Math.random() * 100
-      },
-      capacity: {
-        cpu: isMaster ? '4' : '8',
-        memory: isMaster ? '8Gi' : '16Gi',
-        pods: '110'
-      },
-      conditions: [
-        {
-          type: 'Ready',
-          status: isReady ? 'True' : 'False',
-          lastTransitionTime: new Date(now.getTime() - Math.random() * 3600000),
-          reason: isReady ? 'KubeletReady' : 'KubeletNotReady',
-          message: isReady ? 'kubelet is posting ready status' : 'kubelet has not posted ready status'
-        }
-      ],
-      createdAt: new Date(now.getTime() - (Math.random() * 30 + 5) * 24 * 60 * 60 * 1000),
-      lastHeartbeat: new Date(now.getTime() - Math.random() * 60000)
-    };
-  });
-}
+// Initialize K3s service
+const k3sService = new K3sService();
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,11 +18,77 @@ export async function GET(request: NextRequest) {
     const nodeName = searchParams.get('name');
     const status = searchParams.get('status');
 
-    const nodes = generateMockNodes();
-    let filteredNodes = nodes;
+    // Fetch real nodes from K3s cluster
+    const nodes = await k3sService.getNodes();
+    
+    if (nodes.length === 0) {
+      // Return empty state if no nodes found (might be connection issue)
+      return NextResponse.json({
+        nodes: [],
+        summary: {
+          totalNodes: 0,
+          readyNodes: 0,
+          averageCpuUsage: 0,
+          averageMemoryUsage: 0,
+          totalPods: 0,
+        },
+        timestamp: new Date().toISOString(),
+        warning: 'No nodes found. Check cluster connection.',
+      });
+    }
 
+    // Transform to expected format
+    let filteredNodes = nodes.map(node => {
+      // Calculate age
+      const createdAt = new Date(node.createdAt);
+      const ageMs = Date.now() - createdAt.getTime();
+      const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+      
+      // Parse memory capacity for display
+      const memMatch = node.capacity.memory.match(/(\d+)(Ki|Mi|Gi)/);
+      let memoryGi = '0Gi';
+      if (memMatch) {
+        const value = parseInt(memMatch[1]);
+        const unit = memMatch[2];
+        if (unit === 'Gi') memoryGi = `${value}Gi`;
+        else if (unit === 'Mi') memoryGi = `${Math.round(value / 1024)}Gi`;
+        else if (unit === 'Ki') memoryGi = `${Math.round(value / 1024 / 1024)}Gi`;
+      }
+
+      return {
+        name: node.name,
+        status: node.status as 'Ready' | 'NotReady' | 'Unknown' | 'SchedulingDisabled',
+        roles: node.roles,
+        age: `${ageDays}d`,
+        version: node.version,
+        internalIP: node.internalIP,
+        externalIP: node.externalIP,
+        usage: {
+          cpu: 0, // Would need metrics-server for actual usage
+          memory: 0,
+          pods: 0,
+          storage: 0,
+        },
+        capacity: {
+          cpu: node.capacity.cpu,
+          memory: memoryGi,
+          pods: node.capacity.pods,
+        },
+        conditions: node.conditions.map(c => ({
+          type: c.type,
+          status: c.status,
+          lastTransitionTime: new Date(),
+          reason: c.reason || '',
+          message: c.message || '',
+        })),
+        createdAt: new Date(node.createdAt),
+        lastHeartbeat: new Date(),
+      };
+    });
+
+    // Apply filters
     if (nodeName) {
-      filteredNodes = nodes.filter(node => node.name === nodeName);
+      filteredNodes = filteredNodes.filter(node => node.name === nodeName);
       if (filteredNodes.length === 0) {
         return NextResponse.json(
           { error: `Node '${nodeName}' not found` },
@@ -108,17 +106,20 @@ export async function GET(request: NextRequest) {
       summary: {
         totalNodes: filteredNodes.length,
         readyNodes: filteredNodes.filter(n => n.status === 'Ready').length,
-        averageCpuUsage: filteredNodes.reduce((sum, n) => sum + n.usage.cpu, 0) / filteredNodes.length,
-        averageMemoryUsage: filteredNodes.reduce((sum, n) => sum + n.usage.memory, 0) / filteredNodes.length,
-        totalPods: filteredNodes.reduce((sum, n) => sum + n.usage.pods, 0)
+        averageCpuUsage: 0, // Would need metrics-server
+        averageMemoryUsage: 0,
+        totalPods: 0,
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
   } catch (error) {
     console.error('Error fetching cluster nodes:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch cluster nodes' },
+      { 
+        error: 'Failed to fetch cluster nodes',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, nodeName, parameters = {} } = body;
+    const { action, nodeName } = body;
 
     if (!action || !nodeName) {
       return NextResponse.json(
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validActions = ['cordon', 'uncordon', 'drain', 'reboot'];
+    const validActions = ['cordon', 'uncordon', 'drain'];
     if (!validActions.includes(action)) {
       return NextResponse.json(
         { error: `Invalid action. Must be one of: ${validActions.join(', ')}` },
@@ -150,37 +151,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let result: any = {
-      action,
-      nodeName,
-      success: true,
-      timestamp: new Date().toISOString(),
-      performedBy: session.user?.email || 'unknown'
-    };
+    let result: { success: boolean; error?: string };
 
     switch (action) {
       case 'cordon':
-        result.message = `Node '${nodeName}' marked as unschedulable`;
+        result = await k3sService.cordonNode(nodeName);
         break;
       case 'uncordon':
-        result.message = `Node '${nodeName}' marked as schedulable`;
+        result = await k3sService.uncordonNode(nodeName);
         break;
       case 'drain':
-        result.message = `Draining node '${nodeName}'`;
-        result.jobId = `drain-${Date.now()}`;
+        result = await k3sService.drainNode(nodeName);
         break;
-      case 'reboot':
-        result.message = `Reboot initiated for node '${nodeName}'`;
-        result.jobId = `reboot-${Date.now()}`;
-        break;
+      default:
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    return NextResponse.json(result);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || 'Operation failed' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      action,
+      nodeName,
+      success: true,
+      message: `Successfully executed ${action} on node '${nodeName}'`,
+      timestamp: new Date().toISOString(),
+      performedBy: session.user?.email || 'unknown',
+    });
 
   } catch (error) {
     console.error('Error executing node operation:', error);
     return NextResponse.json(
-      { error: 'Failed to execute node operation' },
+      { 
+        error: 'Failed to execute node operation',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }

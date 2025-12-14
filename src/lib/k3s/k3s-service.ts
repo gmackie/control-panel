@@ -1,13 +1,16 @@
 import { K3sDeployment, ClusterInfo } from '@/types/deployments';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
+const execAsync = promisify(exec);
 
 export interface K3sConfig {
-  clusters: Array<{
-    name: string;
-    kubeconfig: string;
-    endpoint: string;
-    token?: string;
-    region: string;
-  }>;
+  apiUrl: string;
+  token: string;
+  kubeconfigPath?: string;
 }
 
 export interface DeploymentFilter {
@@ -19,245 +22,323 @@ export interface DeploymentFilter {
 
 export class K3sService {
   private config: K3sConfig;
+  private kubeconfigPath: string;
 
   constructor() {
     this.config = {
-      clusters: [
-        {
-          name: 'hetzner-k3s-prod',
-          kubeconfig: process.env.K3S_PROD_KUBECONFIG || '',
-          endpoint: process.env.K3S_PROD_ENDPOINT || 'https://k3s-prod.example.com:6443',
-          region: 'eu-central',
-        },
-        {
-          name: 'hetzner-k3s-staging',
-          kubeconfig: process.env.K3S_STAGING_KUBECONFIG || '',
-          endpoint: process.env.K3S_STAGING_ENDPOINT || 'https://k3s-staging.example.com:6443',
-          region: 'eu-central',
-        },
-        {
-          name: 'local-k3s-dev',
-          kubeconfig: process.env.K3S_DEV_KUBECONFIG || '',
-          endpoint: process.env.K3S_DEV_ENDPOINT || 'https://localhost:6443',
-          region: 'local',
-        },
-      ],
+      apiUrl: process.env.K8S_API_URL || process.env.K3S_API_URL || 'https://5.78.106.236:6443',
+      token: process.env.K3S_SA_TOKEN || process.env.K8S_TOKEN || '',
+      kubeconfigPath: process.env.KUBECONFIG,
     };
+
+    // Default kubeconfig path
+    this.kubeconfigPath = this.config.kubeconfigPath || 
+      path.join(os.homedir(), '.kube', 'config-hetzner');
+  }
+
+  private async executeKubectl(args: string[]): Promise<{ stdout: string; stderr: string }> {
+    const kubeconfigArg = fs.existsSync(this.kubeconfigPath) 
+      ? `--kubeconfig=${this.kubeconfigPath}` 
+      : '';
+    
+    const command = `kubectl ${kubeconfigArg} ${args.join(' ')}`;
+    
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        timeout: 30000, // 30 second timeout
+        env: { ...process.env, KUBECONFIG: this.kubeconfigPath },
+      });
+      return { stdout, stderr };
+    } catch (error: any) {
+      console.error('kubectl error:', error.message);
+      throw error;
+    }
+  }
+
+  private async fetchFromK8sAPI(endpoint: string): Promise<any> {
+    const url = `${this.config.apiUrl}${endpoint}`;
+    
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.config.token}`,
+          'Accept': 'application/json',
+        },
+        // Skip TLS verification for self-signed certs (common in K3s)
+        // @ts-ignore - Node.js fetch option
+        agent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`K8s API error: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('K8s API fetch error:', error);
+      throw error;
+    }
+  }
+
+  async getNodes(): Promise<Array<{
+    name: string;
+    status: string;
+    roles: string[];
+    version: string;
+    internalIP: string;
+    externalIP?: string;
+    capacity: { cpu: string; memory: string; pods: string };
+    allocatable: { cpu: string; memory: string; pods: string };
+    conditions: Array<{ type: string; status: string; reason?: string; message?: string }>;
+    createdAt: string;
+  }>> {
+    try {
+      const { stdout } = await this.executeKubectl([
+        'get', 'nodes', '-o', 'json'
+      ]);
+
+      const data = JSON.parse(stdout);
+      
+      return data.items.map((node: any) => {
+        const conditions = node.status?.conditions || [];
+        const readyCondition = conditions.find((c: any) => c.type === 'Ready');
+        const addresses = node.status?.addresses || [];
+        
+        // Determine roles from labels
+        const labels = node.metadata?.labels || {};
+        const roles: string[] = [];
+        if (labels['node-role.kubernetes.io/control-plane'] !== undefined || 
+            labels['node-role.kubernetes.io/master'] !== undefined) {
+          roles.push('control-plane', 'master');
+        }
+        if (labels['node-role.kubernetes.io/worker'] !== undefined || roles.length === 0) {
+          roles.push('worker');
+        }
+
+        return {
+          name: node.metadata?.name,
+          status: readyCondition?.status === 'True' ? 'Ready' : 'NotReady',
+          roles,
+          version: node.status?.nodeInfo?.kubeletVersion || 'unknown',
+          internalIP: addresses.find((a: any) => a.type === 'InternalIP')?.address || '',
+          externalIP: addresses.find((a: any) => a.type === 'ExternalIP')?.address,
+          capacity: {
+            cpu: node.status?.capacity?.cpu || '0',
+            memory: node.status?.capacity?.memory || '0',
+            pods: node.status?.capacity?.pods || '0',
+          },
+          allocatable: {
+            cpu: node.status?.allocatable?.cpu || '0',
+            memory: node.status?.allocatable?.memory || '0',
+            pods: node.status?.allocatable?.pods || '0',
+          },
+          conditions: conditions.map((c: any) => ({
+            type: c.type,
+            status: c.status,
+            reason: c.reason,
+            message: c.message,
+          })),
+          createdAt: node.metadata?.creationTimestamp,
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching nodes:', error);
+      return [];
+    }
   }
 
   async getDeployments(filter: DeploymentFilter = {}): Promise<K3sDeployment[]> {
     try {
-      // Mock implementation - replace with actual kubectl/K8s API calls
-      const mockDeployments: K3sDeployment[] = [
-        {
-          name: 'ecommerce-api',
-          namespace: 'production',
-          replicas: 3,
-          readyReplicas: 3,
-          availableReplicas: 3,
-          image: 'registry.example.com/ecommerce-api:1.2.3',
-          labels: {
-            app: 'ecommerce-api',
-            environment: 'production',
-            version: '1.2.3',
-          },
-          creationTimestamp: '2024-01-20T10:30:00Z',
-          conditions: [
-            {
-              type: 'Available',
-              status: 'True',
-              reason: 'MinimumReplicasAvailable',
-              message: 'Deployment has minimum availability.',
-              lastTransitionTime: '2024-01-20T10:30:00Z',
-            },
-            {
-              type: 'Progressing',
-              status: 'True',
-              reason: 'NewReplicaSetAvailable',
-              message: 'ReplicaSet "ecommerce-api-7d9b8c6f4" has successfully progressed.',
-              lastTransitionTime: '2024-01-20T10:30:00Z',
-            },
-          ],
-        },
-        {
-          name: 'frontend-app',
-          namespace: 'staging',
-          replicas: 2,
-          readyReplicas: 1,
-          availableReplicas: 1,
-          image: 'registry.example.com/frontend-app:2.1.0-rc.1',
-          labels: {
-            app: 'frontend-app',
-            environment: 'staging',
-            version: '2.1.0-rc.1',
-          },
-          creationTimestamp: '2024-01-20T11:45:00Z',
-          conditions: [
-            {
-              type: 'Available',
-              status: 'False',
-              reason: 'MinimumReplicasUnavailable',
-              message: 'Deployment does not have minimum availability.',
-              lastTransitionTime: '2024-01-20T11:47:00Z',
-            },
-            {
-              type: 'Progressing',
-              status: 'True',
-              reason: 'ReplicaSetUpdated',
-              message: 'ReplicaSet "frontend-app-8f7e9d5c2" is progressing.',
-              lastTransitionTime: '2024-01-20T11:47:00Z',
-            },
-          ],
-        },
-        {
-          name: 'analytics-service',
-          namespace: 'development',
-          replicas: 1,
-          readyReplicas: 0,
-          availableReplicas: 0,
-          image: 'registry.example.com/analytics-service:0.5.2',
-          labels: {
-            app: 'analytics-service',
-            environment: 'development',
-            version: '0.5.2',
-          },
-          creationTimestamp: '2024-01-20T09:15:00Z',
-          conditions: [
-            {
-              type: 'Available',
-              status: 'False',
-              reason: 'MinimumReplicasUnavailable',
-              message: 'Deployment does not have minimum availability.',
-              lastTransitionTime: '2024-01-20T09:18:30Z',
-            },
-            {
-              type: 'Progressing',
-              status: 'False',
-              reason: 'ProgressDeadlineExceeded',
-              message: 'ReplicaSet "analytics-service-6c5b4a8f1" has timed out progressing.',
-              lastTransitionTime: '2024-01-20T09:18:30Z',
-            },
-          ],
-        },
-      ];
+      const namespaceArg = filter.namespace ? `-n ${filter.namespace}` : '--all-namespaces';
+      const { stdout } = await this.executeKubectl([
+        'get', 'deployments', namespaceArg, '-o', 'json'
+      ]);
+
+      const data = JSON.parse(stdout);
+      
+      let deployments: K3sDeployment[] = data.items.map((dep: any) => ({
+        name: dep.metadata?.name,
+        namespace: dep.metadata?.namespace,
+        replicas: dep.spec?.replicas || 0,
+        readyReplicas: dep.status?.readyReplicas || 0,
+        availableReplicas: dep.status?.availableReplicas || 0,
+        image: dep.spec?.template?.spec?.containers?.[0]?.image || '',
+        labels: dep.metadata?.labels || {},
+        creationTimestamp: dep.metadata?.creationTimestamp,
+        conditions: (dep.status?.conditions || []).map((c: any) => ({
+          type: c.type,
+          status: c.status,
+          reason: c.reason,
+          message: c.message,
+          lastTransitionTime: c.lastTransitionTime,
+        })),
+      }));
 
       // Apply filters
-      let filtered = [...mockDeployments];
-
       if (filter.environment) {
-        filtered = filtered.filter(d => d.labels.environment === filter.environment);
-      }
-
-      if (filter.namespace) {
-        filtered = filtered.filter(d => d.namespace === filter.namespace);
-      }
-
-      if (filter.applicationId) {
-        // Map applicationId to deployment name (simplified)
-        const appNameMap: Record<string, string> = {
-          'app-1': 'ecommerce-api',
-          'app-2': 'frontend-app',
-          'app-3': 'analytics-service',
-        };
-        const appName = appNameMap[filter.applicationId];
-        if (appName) {
-          filtered = filtered.filter(d => d.name === appName);
-        }
+        deployments = deployments.filter(d => 
+          d.labels.environment === filter.environment ||
+          d.namespace === filter.environment
+        );
       }
 
       if (filter.labels) {
-        filtered = filtered.filter(deployment => {
+        deployments = deployments.filter(deployment => {
           return Object.entries(filter.labels!).every(([key, value]) =>
             deployment.labels[key] === value
           );
         });
       }
 
-      return filtered;
+      return deployments;
     } catch (error) {
       console.error('Error fetching K3s deployments:', error);
       return [];
     }
   }
 
-  async getClusterInfo(clusterName?: string): Promise<ClusterInfo[]> {
+  async getPods(namespace?: string): Promise<Array<{
+    name: string;
+    namespace: string;
+    status: string;
+    ready: string;
+    restarts: number;
+    age: string;
+    node: string;
+    ip: string;
+  }>> {
     try {
-      // Mock implementation - replace with actual kubectl/K8s API calls
-      const mockClusterInfo: ClusterInfo[] = [
-        {
-          name: 'hetzner-k3s-prod',
-          provider: 'k3s',
-          region: 'eu-central',
-          endpoint: 'https://k3s-prod.example.com:6443',
-          status: 'healthy',
-          nodes: {
-            total: 3,
-            ready: 3,
-          },
-          resources: {
-            cpu: {
-              total: 12,
-              used: 5.2,
-              percentage: 43,
-            },
-            memory: {
-              total: 24576, // MB
-              used: 8192,
-              percentage: 33,
-            },
-          },
-        },
-        {
-          name: 'hetzner-k3s-staging',
-          provider: 'k3s',
-          region: 'eu-central',
-          endpoint: 'https://k3s-staging.example.com:6443',
-          status: 'healthy',
-          nodes: {
-            total: 2,
-            ready: 2,
-          },
-          resources: {
-            cpu: {
-              total: 8,
-              used: 2.8,
-              percentage: 35,
-            },
-            memory: {
-              total: 16384, // MB
-              used: 4096,
-              percentage: 25,
-            },
-          },
-        },
-        {
-          name: 'local-k3s-dev',
-          provider: 'k3s',
-          region: 'local',
-          endpoint: 'https://localhost:6443',
-          status: 'degraded',
-          nodes: {
-            total: 1,
-            ready: 1,
-          },
-          resources: {
-            cpu: {
-              total: 4,
-              used: 3.2,
-              percentage: 80,
-            },
-            memory: {
-              total: 8192, // MB
-              used: 6144,
-              percentage: 75,
-            },
-          },
-        },
-      ];
+      const namespaceArg = namespace ? `-n ${namespace}` : '--all-namespaces';
+      const { stdout } = await this.executeKubectl([
+        'get', 'pods', namespaceArg, '-o', 'json'
+      ]);
 
-      return clusterName 
-        ? mockClusterInfo.filter(cluster => cluster.name === clusterName)
-        : mockClusterInfo;
+      const data = JSON.parse(stdout);
+      
+      return data.items.map((pod: any) => {
+        const containerStatuses = pod.status?.containerStatuses || [];
+        const readyCount = containerStatuses.filter((c: any) => c.ready).length;
+        const totalCount = containerStatuses.length || pod.spec?.containers?.length || 0;
+        const restarts = containerStatuses.reduce((sum: number, c: any) => sum + (c.restartCount || 0), 0);
+        
+        const createdAt = new Date(pod.metadata?.creationTimestamp);
+        const ageMs = Date.now() - createdAt.getTime();
+        const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+        const ageHours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const age = ageDays > 0 ? `${ageDays}d${ageHours}h` : `${ageHours}h`;
+
+        return {
+          name: pod.metadata?.name,
+          namespace: pod.metadata?.namespace,
+          status: pod.status?.phase,
+          ready: `${readyCount}/${totalCount}`,
+          restarts,
+          age,
+          node: pod.spec?.nodeName || '',
+          ip: pod.status?.podIP || '',
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching pods:', error);
+      return [];
+    }
+  }
+
+  async getServices(namespace?: string): Promise<Array<{
+    name: string;
+    namespace: string;
+    type: string;
+    clusterIP: string;
+    externalIP?: string;
+    ports: string;
+  }>> {
+    try {
+      const namespaceArg = namespace ? `-n ${namespace}` : '--all-namespaces';
+      const { stdout } = await this.executeKubectl([
+        'get', 'services', namespaceArg, '-o', 'json'
+      ]);
+
+      const data = JSON.parse(stdout);
+      
+      return data.items.map((svc: any) => {
+        const ports = (svc.spec?.ports || [])
+          .map((p: any) => `${p.port}${p.nodePort ? `:${p.nodePort}` : ''}/${p.protocol}`)
+          .join(', ');
+
+        return {
+          name: svc.metadata?.name,
+          namespace: svc.metadata?.namespace,
+          type: svc.spec?.type,
+          clusterIP: svc.spec?.clusterIP,
+          externalIP: svc.status?.loadBalancer?.ingress?.[0]?.ip,
+          ports,
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      return [];
+    }
+  }
+
+  async getNamespaces(): Promise<string[]> {
+    try {
+      const { stdout } = await this.executeKubectl([
+        'get', 'namespaces', '-o', 'jsonpath={.items[*].metadata.name}'
+      ]);
+
+      return stdout.trim().split(' ').filter(Boolean);
+    } catch (error) {
+      console.error('Error fetching namespaces:', error);
+      return [];
+    }
+  }
+
+  async getClusterInfo(): Promise<ClusterInfo[]> {
+    try {
+      const nodes = await this.getNodes();
+      const readyNodes = nodes.filter(n => n.status === 'Ready').length;
+
+      // Calculate resource usage (simplified - in production would use metrics-server)
+      let totalCpu = 0;
+      let totalMemoryMi = 0;
+      
+      nodes.forEach(node => {
+        // Parse CPU (e.g., "4" cores)
+        totalCpu += parseInt(node.capacity.cpu) || 0;
+        // Parse memory (e.g., "8Gi" -> 8192 Mi)
+        const memMatch = node.capacity.memory.match(/(\d+)(Ki|Mi|Gi)/);
+        if (memMatch) {
+          const value = parseInt(memMatch[1]);
+          const unit = memMatch[2];
+          if (unit === 'Gi') totalMemoryMi += value * 1024;
+          else if (unit === 'Mi') totalMemoryMi += value;
+          else if (unit === 'Ki') totalMemoryMi += value / 1024;
+        }
+      });
+
+      return [{
+        name: 'k3s-hetzner',
+        provider: 'k3s',
+        region: 'eu-central (Hetzner)',
+        endpoint: this.config.apiUrl,
+        status: readyNodes === nodes.length ? 'healthy' : (readyNodes > 0 ? 'degraded' : 'unhealthy'),
+        nodes: {
+          total: nodes.length,
+          ready: readyNodes,
+        },
+        resources: {
+          cpu: {
+            total: totalCpu,
+            used: 0, // Would need metrics-server for actual usage
+            percentage: 0,
+          },
+          memory: {
+            total: totalMemoryMi,
+            used: 0,
+            percentage: 0,
+          },
+        },
+      }];
     } catch (error) {
       console.error('Error fetching K3s cluster info:', error);
       return [];
@@ -265,23 +346,62 @@ export class K3sService {
   }
 
   async deployApplication(config: {
-    clusterName: string;
     namespace: string;
     appName: string;
     image: string;
     replicas: number;
-    environment: string;
+    environment?: string;
     labels?: Record<string, string>;
     envVars?: Record<string, string>;
+    port?: number;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      // Mock implementation - replace with actual kubectl apply
-      console.log('Deploying application to K3s:', config);
-      
-      // Simulate deployment delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      return { success: true };
+      // Create deployment manifest
+      const deployment = {
+        apiVersion: 'apps/v1',
+        kind: 'Deployment',
+        metadata: {
+          name: config.appName,
+          namespace: config.namespace,
+          labels: {
+            app: config.appName,
+            ...config.labels,
+          },
+        },
+        spec: {
+          replicas: config.replicas,
+          selector: {
+            matchLabels: { app: config.appName },
+          },
+          template: {
+            metadata: {
+              labels: { app: config.appName, ...config.labels },
+            },
+            spec: {
+              containers: [{
+                name: config.appName,
+                image: config.image,
+                ports: config.port ? [{ containerPort: config.port }] : [],
+                env: config.envVars 
+                  ? Object.entries(config.envVars).map(([name, value]) => ({ name, value }))
+                  : [],
+              }],
+            },
+          },
+        },
+      };
+
+      // Write to temp file and apply
+      const tmpFile = `/tmp/deployment-${config.appName}-${Date.now()}.yaml`;
+      fs.writeFileSync(tmpFile, JSON.stringify(deployment, null, 2));
+
+      try {
+        await this.executeKubectl(['apply', '-f', tmpFile]);
+        return { success: true };
+      } finally {
+        // Clean up temp file
+        fs.unlinkSync(tmpFile);
+      }
     } catch (error) {
       console.error('Error deploying to K3s:', error);
       return {
@@ -292,15 +412,16 @@ export class K3sService {
   }
 
   async scaleDeployment(
-    clusterName: string,
     namespace: string,
     deploymentName: string,
     replicas: number
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Mock implementation - replace with actual kubectl scale
-      console.log(`Scaling ${deploymentName} in ${namespace} to ${replicas} replicas`);
-      
+      await this.executeKubectl([
+        'scale', 'deployment', deploymentName,
+        '-n', namespace,
+        `--replicas=${replicas}`
+      ]);
       return { success: true };
     } catch (error) {
       console.error('Error scaling K3s deployment:', error);
@@ -312,14 +433,14 @@ export class K3sService {
   }
 
   async deleteDeployment(
-    clusterName: string,
     namespace: string,
     deploymentName: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Mock implementation - replace with actual kubectl delete
-      console.log(`Deleting ${deploymentName} from ${namespace}`);
-      
+      await this.executeKubectl([
+        'delete', 'deployment', deploymentName,
+        '-n', namespace
+      ]);
       return { success: true };
     } catch (error) {
       console.error('Error deleting K3s deployment:', error);
@@ -331,24 +452,18 @@ export class K3sService {
   }
 
   async getDeploymentLogs(
-    clusterName: string,
     namespace: string,
     deploymentName: string,
     lines: number = 100
   ): Promise<string[]> {
     try {
-      // Mock implementation - replace with actual kubectl logs
-      const mockLogs = [
-        '2024-01-20T12:00:00.123Z INFO  Starting application...',
-        '2024-01-20T12:00:01.456Z INFO  Database connection established',
-        '2024-01-20T12:00:02.789Z INFO  HTTP server listening on port 3000',
-        '2024-01-20T12:00:10.234Z INFO  Health check endpoint ready',
-        '2024-01-20T12:00:15.567Z DEBUG Processing request GET /api/health',
-        '2024-01-20T12:00:15.890Z DEBUG Response sent: 200 OK',
-        '2024-01-20T12:01:00.123Z INFO  Metrics endpoint scraped by Prometheus',
-      ];
+      const { stdout } = await this.executeKubectl([
+        'logs', `deployment/${deploymentName}`,
+        '-n', namespace,
+        `--tail=${lines}`
+      ]);
 
-      return mockLogs.slice(-lines);
+      return stdout.split('\n').filter(Boolean);
     } catch (error) {
       console.error('Error fetching K3s deployment logs:', error);
       return [];
@@ -356,7 +471,6 @@ export class K3sService {
   }
 
   async getDeploymentEvents(
-    clusterName: string,
     namespace: string,
     deploymentName: string
   ): Promise<Array<{
@@ -368,56 +482,76 @@ export class K3sService {
     lastTime: string;
   }>> {
     try {
-      // Mock implementation - replace with actual kubectl get events
-      const mockEvents = [
-        {
-          type: 'Normal' as const,
-          reason: 'ScalingReplicaSet',
-          message: 'Scaled up replica set ecommerce-api-7d9b8c6f4 to 3',
-          count: 1,
-          firstTime: '2024-01-20T10:25:00Z',
-          lastTime: '2024-01-20T10:25:00Z',
-        },
-        {
-          type: 'Normal' as const,
-          reason: 'SuccessfulCreate',
-          message: 'Created pod: ecommerce-api-7d9b8c6f4-abc12',
-          count: 1,
-          firstTime: '2024-01-20T10:25:30Z',
-          lastTime: '2024-01-20T10:25:30Z',
-        },
-      ];
+      const { stdout } = await this.executeKubectl([
+        'get', 'events',
+        '-n', namespace,
+        `--field-selector=involvedObject.name=${deploymentName}`,
+        '-o', 'json'
+      ]);
 
-      return mockEvents;
+      const data = JSON.parse(stdout);
+      
+      return data.items.map((event: any) => ({
+        type: event.type as 'Normal' | 'Warning',
+        reason: event.reason,
+        message: event.message,
+        count: event.count || 1,
+        firstTime: event.firstTimestamp,
+        lastTime: event.lastTimestamp,
+      }));
     } catch (error) {
       console.error('Error fetching K3s deployment events:', error);
       return [];
     }
   }
 
-  private getClusterConfig(clusterName: string) {
-    return this.config.clusters.find(cluster => cluster.name === clusterName);
-  }
-
-  private async executeKubectl(
-    clusterName: string,
-    command: string[]
-  ): Promise<{ stdout: string; stderr: string; success: boolean }> {
+  async cordonNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Mock implementation - replace with actual kubectl execution
-      console.log(`kubectl ${command.join(' ')} (cluster: ${clusterName})`);
-      
-      return {
-        stdout: 'Mock kubectl output',
-        stderr: '',
-        success: true,
-      };
+      await this.executeKubectl(['cordon', nodeName]);
+      return { success: true };
     } catch (error) {
       return {
-        stdout: '',
-        stderr: error instanceof Error ? error.message : 'Unknown error',
         success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  async uncordonNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.executeKubectl(['uncordon', nodeName]);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async drainNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.executeKubectl([
+        'drain', nodeName,
+        '--ignore-daemonsets',
+        '--delete-emptydir-data',
+        '--force'
+      ]);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      const { stdout } = await this.executeKubectl(['cluster-info']);
+      return stdout.includes('is running');
+    } catch {
+      return false;
     }
   }
 }

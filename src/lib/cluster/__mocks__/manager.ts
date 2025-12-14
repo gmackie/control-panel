@@ -1,4 +1,7 @@
-const getClusterStatus = jest.fn().mockResolvedValue({
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Jest mock for cluster manager
+
+export const getClusterStatus = jest.fn().mockResolvedValue({
   nodes: [
     {
       id: 'node-1',
@@ -38,7 +41,7 @@ const getClusterStatus = jest.fn().mockResolvedValue({
   ]
 });
 
-const getClusterMetrics = jest.fn().mockResolvedValue({
+export const getClusterMetrics = jest.fn().mockResolvedValue({
   cpu: {
     current: 37.5,
     average: 35,
@@ -59,7 +62,7 @@ const getClusterMetrics = jest.fn().mockResolvedValue({
   }
 });
 
-const getCostEstimate = jest.fn().mockResolvedValue({
+export const getCostEstimate = jest.fn().mockResolvedValue({
   current: 89.50,
   projected: 95.00,
   breakdown: {
@@ -69,25 +72,26 @@ const getCostEstimate = jest.fn().mockResolvedValue({
   }
 });
 
-const scaleDeployment = jest.fn().mockResolvedValue({
+export const deployApplication = jest.fn().mockResolvedValue({
+  success: true,
+  message: 'Application deployed successfully'
+});
+
+export const deleteApplication = jest.fn().mockResolvedValue({
+  success: true,
+  message: 'Application deleted successfully'
+});
+
+export const scaleDeployment = jest.fn().mockResolvedValue({
   success: true,
   message: 'Deployment scaled successfully'
 });
 
-const createNamespace = jest.fn().mockResolvedValue({
+export const createNamespace = jest.fn().mockResolvedValue({
   success: true,
   namespace: 'new-namespace'
 });
 
-const deleteNamespace = jest.fn().mockResolvedValue({
+export const deleteNamespace = jest.fn().mockResolvedValue({
   success: true
 });
-
-module.exports = {
-  getClusterStatus,
-  getClusterMetrics,
-  deployApplication,
-  scaleDeployment,
-  createNamespace,
-  deleteNamespace
-};
