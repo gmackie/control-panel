@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { ClusterOrchestrator } from '@/lib/cluster/orchestrator';
-import { RegistryManager } from '@/lib/cluster/modules/registry-manager';
+import { harborService } from '@/lib/harbor/service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,22 +10,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const orchestrator = await getOrchestrator();
-    const registry = orchestrator.get('registry-manager') as RegistryManager;
-    
-    if (!registry) {
-      return NextResponse.json(
-        { error: 'Registry not configured' },
-        { status: 503 }
-      );
+    const { searchParams } = new URL(request.url);
+    const project = searchParams.get('project');
+    const repo = searchParams.get('repo');
+
+    // Get specific repository details
+    if (project && repo) {
+      const repository = await harborService.getRepository(project, repo);
+      return NextResponse.json(repository);
     }
 
-    const repositories = await registry.listRepositories();
+    // List all repositories
+    const repositories = await harborService.listAllRepositories();
     return NextResponse.json(repositories);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching repositories:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch repositories';
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch repositories' },
+      { error: message },
       { status: 500 }
     );
   }
@@ -40,66 +41,81 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+    const project = searchParams.get('project');
     const repository = searchParams.get('repository');
     const tag = searchParams.get('tag');
+    const digest = searchParams.get('digest');
 
-    if (!repository || !tag) {
+    if (!project || !repository) {
       return NextResponse.json(
-        { error: 'Repository and tag are required' },
+        { error: 'Missing required parameters: project and repository' },
         { status: 400 }
       );
     }
 
-    const orchestrator = await getOrchestrator();
-    const registry = orchestrator.get('registry-manager') as RegistryManager;
-    
-    if (!registry) {
+    if (!tag && !digest) {
       return NextResponse.json(
-        { error: 'Registry not configured' },
-        { status: 503 }
+        { error: 'Must provide either tag or digest to delete' },
+        { status: 400 }
       );
     }
 
-    await registry.deleteImage(repository, tag);
-    return NextResponse.json({ message: 'Image deleted successfully' });
-  } catch (error: any) {
+    const reference = digest || tag!;
+    
+    if (tag) {
+      // Delete specific tag
+      await harborService.deleteTag(project, repository, reference, tag);
+    }
+
+    return NextResponse.json({ success: true, deleted: { project, repository, tag, digest } });
+  } catch (error: unknown) {
     console.error('Error deleting image:', error);
+    const message = error instanceof Error ? error.message : 'Failed to delete image';
     return NextResponse.json(
-      { error: error.message || 'Failed to delete image' },
+      { error: message },
       { status: 500 }
     );
   }
 }
 
-async function getOrchestrator(): Promise<ClusterOrchestrator> {
-  const hetznerToken = process.env.HETZNER_API_TOKEN;
-  const sshKeyPath = process.env.SSH_KEY_PATH || '/root/.ssh/id_rsa';
-  const clusterName = process.env.CLUSTER_NAME || 'gmac-io';
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  if (!hetznerToken) {
-    throw new Error('Missing required configuration');
+    const body = await request.json();
+    const { action, project, repository, reference, tag } = body;
+
+    if (!project || !repository || !reference) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: project, repository, and reference' },
+        { status: 400 }
+      );
+    }
+
+    switch (action) {
+      case 'scan':
+        await harborService.scanArtifact(project, repository, reference);
+        return NextResponse.json({ success: true, message: 'Scan triggered' });
+
+      case 'tag':
+        if (!tag) {
+          return NextResponse.json({ error: 'Missing tag name' }, { status: 400 });
+        }
+        await harborService.addTag(project, repository, reference, tag);
+        return NextResponse.json({ success: true, message: `Tag ${tag} added` });
+
+      default:
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+  } catch (error: unknown) {
+    console.error('Error in repository action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to perform action';
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
   }
-
-  const orchestrator = new ClusterOrchestrator({
-    hetznerApiToken: hetznerToken,
-    sshKeyPath,
-    clusterName,
-    kubeconfigEncryptionKey: process.env.KUBECONFIG_ENCRYPTION_KEY,
-    registry: {
-      enabled: true,
-      type: 'registry',
-      url: process.env.REGISTRY_URL || 'registry.gmac.io',
-      auth: {
-        username: process.env.REGISTRY_USERNAME || 'admin',
-        password: process.env.REGISTRY_PASSWORD || 'admin',
-      },
-      storage: {
-        type: 'filesystem',
-        config: {},
-      },
-    },
-  });
-
-  await orchestrator.initialize();
-  return orchestrator;
 }
