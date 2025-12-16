@@ -13,7 +13,7 @@ data:
   DRONE_SERVER: "https://ci.gmac.io"
   HARBOR_URL: "https://registry.gmac.io"
   ARGOCD_SERVER: "https://argocd.gmac.io"
-  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
+  PROMETHEUS_URL: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
   K8S_API_SERVER: "https://kubernetes.default.svc"
   DATABASE_HOST: "postgres-service.control-panel.svc.cluster.local"
   DATABASE_PORT: "5432"

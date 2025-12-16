@@ -7,8 +7,9 @@ metadata:
     app.kubernetes.io/name: control-panel
     app.kubernetes.io/component: integrations
 data:
-  # Grafana Configuration
-  GRAFANA_URL: "https://grafana.gmac.io"
+  # Grafana Configuration - internal URL for API access, external for links
+  GRAFANA_URL: "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local"
+  GRAFANA_EXTERNAL_URL: "https://grafana.gmac.io"
   GRAFANA_ORG_ID: "1"
   
   # Additional Prometheus Configuration
@@ -16,7 +17,7 @@ data:
   PROMETHEUS_SCRAPE_INTERVAL: "15s"
   
   # Harbor Configuration
-  HARBOR_PROJECT: "gmackie"
+  HARBOR_PROJECT: "library"
   HARBOR_REGISTRY: "registry.gmac.io"
   
   # Gitea Configuration

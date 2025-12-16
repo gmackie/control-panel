@@ -199,7 +199,8 @@ function getMockMetrics(): DashboardMetrics {
 }
 
 async function getGrafanaInfo(): Promise<DashboardResponse['grafana']> {
-  const grafanaUrl = process.env.GRAFANA_URL || 'https://grafana.gmac.io';
+  // Use external URL for browser links
+  const grafanaExternalUrl = process.env.GRAFANA_EXTERNAL_URL || process.env.GRAFANA_URL || 'https://grafana.gmac.io';
   
   try {
     const healthy = await grafana.healthCheck();
@@ -207,9 +208,9 @@ async function getGrafanaInfo(): Promise<DashboardResponse['grafana']> {
     if (!healthy) {
       return {
         available: false,
-        url: grafanaUrl,
+        url: grafanaExternalUrl,
         dashboards: [],
-        exploreUrl: `${grafanaUrl}/explore`,
+        exploreUrl: `${grafanaExternalUrl}/explore`,
       };
     }
 
@@ -218,22 +219,22 @@ async function getGrafanaInfo(): Promise<DashboardResponse['grafana']> {
     
     return {
       available: true,
-      url: grafanaUrl,
+      url: grafanaExternalUrl,
       dashboards: dashboards.slice(0, 10).map(d => ({
         name: d.title,
         uid: d.uid,
-        url: `${grafanaUrl}/d/${d.uid}`,
+        url: `${grafanaExternalUrl}/d/${d.uid}`,
         tags: d.tags,
       })),
-      exploreUrl: `${grafanaUrl}/explore`,
+      exploreUrl: `${grafanaExternalUrl}/explore`,
     };
   } catch (error) {
     console.error('Error connecting to Grafana:', error);
     return {
       available: false,
-      url: grafanaUrl,
+      url: grafanaExternalUrl,
       dashboards: [],
-      exploreUrl: `${grafanaUrl}/explore`,
+      exploreUrl: `${grafanaExternalUrl}/explore`,
     };
   }
 }

@@ -4,7 +4,8 @@
  */
 
 export interface GrafanaConfig {
-  url: string;
+  url: string;           // Internal URL for API calls
+  externalUrl?: string;  // External URL for browser links
   apiKey?: string;
 }
 
@@ -88,8 +89,16 @@ export class GrafanaClient {
   constructor(config?: Partial<GrafanaConfig>) {
     this.config = {
       url: config?.url || process.env.GRAFANA_URL || 'http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local',
+      externalUrl: config?.externalUrl || process.env.GRAFANA_EXTERNAL_URL || process.env.GRAFANA_URL || 'https://grafana.gmac.io',
       apiKey: config?.apiKey || process.env.GRAFANA_API_KEY || process.env.GRAFANA_TOKEN,
     };
+  }
+
+  /**
+   * Get the external URL for browser links
+   */
+  getExternalBaseUrl(): string {
+    return this.config.externalUrl || this.config.url;
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -184,14 +193,14 @@ export class GrafanaClient {
   }
 
   /**
-   * Generate a dashboard URL for an application
+   * Generate a dashboard URL for an application (uses external URL for browser)
    */
   getDashboardUrl(options: {
     namespace?: string;
     app?: string;
     dashboardUid?: string;
   }): string {
-    const baseUrl = this.config.url.replace(/\/$/, '');
+    const baseUrl = this.getExternalBaseUrl().replace(/\/$/, '');
     
     if (options.dashboardUid) {
       return `${baseUrl}/d/${options.dashboardUid}`;
@@ -208,10 +217,10 @@ export class GrafanaClient {
   }
 
   /**
-   * Generate explore URL for metrics
+   * Generate explore URL for metrics (uses external URL for browser)
    */
   getExploreUrl(query: string, datasource: string = 'prometheus'): string {
-    const baseUrl = this.config.url.replace(/\/$/, '');
+    const baseUrl = this.getExternalBaseUrl().replace(/\/$/, '');
     const encodedQuery = encodeURIComponent(query);
     return `${baseUrl}/explore?left={"datasource":"${datasource}","queries":[{"expr":"${encodedQuery}"}]}`;
   }

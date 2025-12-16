@@ -35,10 +35,12 @@ spec:
         runAsUser: 1001
         runAsGroup: 1001
         fsGroup: 1001
+      imagePullSecrets:
+      - name: harbor-registry
       containers:
       - name: control-panel
-        image: control-panel:latest
-        imagePullPolicy: Never
+        image: registry.gmac.io/library/control-panel:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 3000
@@ -117,6 +119,11 @@ spec:
             configMapKeyRef:
               name: control-panel-integrations
               key: GRAFANA_URL
+        - name: GRAFANA_EXTERNAL_URL
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-integrations
+              key: GRAFANA_EXTERNAL_URL
         - name: HARBOR_PROJECT
           valueFrom:
             configMapKeyRef:
