@@ -49,130 +49,64 @@ const navigation: NavItem[] = [
     icon: Home
   },
   {
-    title: 'Infrastructure',
-    href: '/infrastructure',
-    icon: Server,
-    children: [
-      {
-        title: 'Overview',
-        href: '/infrastructure',
-        icon: Monitor
-      },
-      {
-        title: 'Cluster Management',
-        href: '/infrastructure/cluster',
-        icon: Server
-      },
-      {
-        title: 'Network',
-        href: '/infrastructure/network',
-        icon: Network
-      }
-    ]
-  },
-  {
-    title: 'Monitoring',
-    href: '/monitoring',
-    icon: Activity,
-    children: [
-      {
-        title: 'Metrics',
-        href: '/monitoring/metrics',
-        icon: BarChart3
-      },
-      {
-        title: 'Alerts',
-        href: '/monitoring/alerts',
-        icon: AlertTriangle,
-        badge: '3'
-      },
-      {
-        title: 'Logs',
-        href: '/monitoring/logs',
-        icon: FileText
-      }
-    ]
-  },
-  {
-    title: 'Integrations',
-    href: '/integrations',
-    icon: GitBranch,
-    children: [
-      {
-        title: 'Overview',
-        href: '/integrations',
-        icon: GitBranch
-      },
-      {
-        title: 'Git (Gitea)',
-        href: '/integrations/gitea',
-        icon: GitBranch
-      },
-      {
-        title: 'CI/CD (Drone)',
-        href: '/integrations/drone',
-        icon: Activity
-      },
-      {
-        title: 'Registry (Harbor)',
-        href: '/integrations/harbor',
-        icon: Container
-      },
-      {
-        title: 'Deployment (ArgoCD)',
-        href: '/integrations/argocd',
-        icon: Ship
-      }
-    ]
-  },
-  {
     title: 'Applications',
     href: '/applications',
     icon: Container
   },
   {
-    title: 'Deployments',
-    href: '/deployments',
-    icon: Rocket,
-    children: [
-      {
-        title: 'Overview',
-        href: '/deployments',
-        icon: Rocket
-      },
-      {
-        title: 'Applications',
-        href: '/deployments?tab=applications',
-        icon: Container
-      },
-      {
-        title: 'Repositories',
-        href: '/deployments?tab=repositories',
-        icon: GitBranch
-      },
-      {
-        title: 'Deploy New',
-        href: '/deployments?tab=deploy',
-        icon: Ship
-      }
-    ]
+    title: 'CI/CD',
+    href: '/cicd',
+    icon: GitBranch
   },
   {
-    title: 'Security',
-    href: '/security',
-    icon: Shield,
-    children: [
-      {
-        title: 'Vulnerabilities',
-        href: '/security/vulnerabilities',
-        icon: Shield
-      },
-      {
-        title: 'Access Control',
-        href: '/security/access',
-        icon: Users
-      }
-    ]
+    title: 'Registry',
+    href: '/registry',
+    icon: Database
+  },
+  {
+    title: 'Deployments',
+    href: '/deployments',
+    icon: Rocket
+  },
+  {
+    title: 'Services',
+    href: '/services',
+    icon: Network
+  },
+  {
+    title: 'Cluster',
+    href: '/cluster',
+    icon: Server
+  },
+  {
+    title: 'Infrastructure',
+    href: '/infrastructure',
+    icon: Server
+  },
+  {
+    title: 'Monitoring',
+    href: '/monitoring',
+    icon: Activity
+  },
+  {
+    title: 'Health',
+    href: '/health',
+    icon: Activity
+  },
+  {
+    title: 'Alerts',
+    href: '/alerts',
+    icon: AlertTriangle
+  },
+  {
+    title: 'Costs',
+    href: '/costs',
+    icon: BarChart3
+  },
+  {
+    title: 'Integrations',
+    href: '/integrations',
+    icon: Network
   }
 ]
 
@@ -290,27 +224,7 @@ function Sidebar({ isCollapsed = false }: { isCollapsed?: boolean }) {
         ))}
       </nav>
 
-      <Separator />
 
-      {/* Bottom section */}
-      <div className="p-3 space-y-1">
-        <NavLink 
-          item={{
-            title: 'Settings',
-            href: '/settings',
-            icon: Settings
-          }}
-          isCollapsed={isCollapsed}
-        />
-        <NavLink 
-          item={{
-            title: 'Help',
-            href: '/help',
-            icon: HelpCircle
-          }}
-          isCollapsed={isCollapsed}
-        />
-      </div>
     </div>
   )
 }
