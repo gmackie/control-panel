@@ -1,11 +1,22 @@
-import { createClient, Client } from "@libsql/client";
-import { drizzle, LibSQLDatabase } from "drizzle-orm/libsql";
+/**
+ * Database connection module with lazy loading
+ * Uses dynamic imports to avoid loading native libsql module at build time
+ */
+
 import * as schema from "./schema";
 
-let client: Client | null = null;
-let dbInstance: LibSQLDatabase<typeof schema> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let client: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let dbInstance: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let initPromise: Promise<any> | null = null;
 
-const createDatabaseClient = (): Client | null => {
+// Async database initialization with dynamic imports
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const initDbAsync = async (): Promise<any> => {
+  if (dbInstance) return dbInstance;
+  
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
@@ -15,31 +26,37 @@ const createDatabaseClient = (): Client | null => {
   }
 
   try {
-    return createClient({
+    // Dynamic imports to avoid loading native module at build time
+    const { createClient } = await import("@libsql/client");
+    const { drizzle } = await import("drizzle-orm/libsql");
+    
+    client = createClient({
       url,
       authToken,
     });
+    
+    dbInstance = drizzle(client, { schema });
+    return dbInstance;
   } catch (error) {
     console.warn("Failed to create database client:", error);
     return null;
   }
 };
 
-// Initialize database connection
-const initDb = (): LibSQLDatabase<typeof schema> | null => {
-  if (dbInstance) return dbInstance;
-  
-  client = createDatabaseClient();
-  if (!client) return null;
-  
-  dbInstance = drizzle(client, { schema });
+// Export async database getter (recommended)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getDbAsync = async (): Promise<any> => {
+  if (!initPromise) {
+    initPromise = initDbAsync();
+  }
+  return initPromise;
+};
+
+// Synchronous getter - returns cached instance or null (for backward compat)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getDb = (): any => {
   return dbInstance;
 };
 
-// Export the database instance (lazy initialization)
-export const getDb = (): LibSQLDatabase<typeof schema> | null => {
-  return initDb();
-};
-
-// For backward compatibility - returns null if not initialized
-export const db = initDb();
+// For backward compatibility - always null at import time, use getDbAsync instead
+export const db = null;

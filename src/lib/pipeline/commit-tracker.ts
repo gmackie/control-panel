@@ -4,7 +4,7 @@
  * Uses in-memory storage when database is not available
  */
 
-import { getDb } from '@/lib/db';
+import { getDbAsync } from '@/lib/db';
 import { 
   commits, 
   pipelineRuns, 
@@ -13,9 +13,14 @@ import {
   webhookEvents,
   environmentStatus 
 } from '@/lib/schema';
-import { eq, desc, and } from 'drizzle-orm';
 import { GiteaService } from '@/lib/gitea/gitea-service';
 import { K3sService } from '@/lib/k3s/k3s-service';
+
+// Helper to get drizzle operators dynamically (avoids loading at build time)
+async function getDrizzleOps() {
+  const { eq, desc, and } = await import('drizzle-orm');
+  return { eq, desc, and };
+}
 
 // Generate simple unique IDs without uuid dependency
 function generateId(): string {
@@ -118,6 +123,7 @@ const memoryStore = {
   commits: new Map<string, CommitInfo>(),
   pipelines: new Map<string, PipelineInfo>(),
   deployments: new Map<string, DeploymentInfo>(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   environments: new Map<string, any>(),
 };
 
@@ -135,9 +141,10 @@ export class CommitTracker {
   // ==========================================
 
   async recordCommit(commit: CommitInfo): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
+      const { eq } = await getDrizzleOps();
       const now = new Date().toISOString();
       try {
         await db.insert(commits).values({
@@ -161,6 +168,8 @@ export class CommitTracker {
             branch: commit.branch,
           }
         });
+        // Silence unused variable warning
+        void eq;
       } catch (error) {
         console.error('Error recording commit to database:', error);
         // Fall back to memory
@@ -172,9 +181,10 @@ export class CommitTracker {
   }
 
   async getCommit(sha: string): Promise<CommitInfo | null> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
+      const { eq } = await getDrizzleOps();
       try {
         const result = await db.select().from(commits).where(eq(commits.sha, sha)).limit(1);
         if (result.length === 0) return null;
@@ -202,9 +212,10 @@ export class CommitTracker {
   }
 
   async getRecentCommits(repository: string, limit: number = 20): Promise<CommitInfo[]> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
+      const { eq, desc } = await getDrizzleOps();
       try {
         const result = await db.select()
           .from(commits)
@@ -242,7 +253,7 @@ export class CommitTracker {
   // ==========================================
 
   async recordPipelineRun(pipeline: Omit<PipelineInfo, 'stages'>): Promise<string> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
     const id = pipeline.id || generateId();
     
@@ -291,10 +302,11 @@ export class CommitTracker {
     conclusion?: string,
     finishedAt?: string
   ): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
 
     if (db) {
+      const { eq } = await getDrizzleOps();
       try {
         const startedAtResult = await db.select({ startedAt: pipelineRuns.startedAt })
           .from(pipelineRuns)
@@ -332,7 +344,7 @@ export class CommitTracker {
   }
 
   async recordPipelineStage(pipelineRunId: string, stage: StageInfo): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
       try {
@@ -371,9 +383,10 @@ export class CommitTracker {
   }
 
   async getPipelineRuns(commitSha: string): Promise<PipelineInfo[]> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
+      const { eq, desc } = await getDrizzleOps();
       try {
         const runs = await db.select()
           .from(pipelineRuns)
@@ -430,7 +443,7 @@ export class CommitTracker {
   // ==========================================
 
   async recordDeployment(deployment: DeploymentInfo): Promise<string> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
     const id = deployment.id || generateId();
     
@@ -476,10 +489,11 @@ export class CommitTracker {
     healthCheckStatus?: string,
     readyReplicas?: number
   ): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
     
     if (db) {
+      const { eq } = await getDrizzleOps();
       try {
         await db.update(deploymentEvents)
           .set({
@@ -505,9 +519,10 @@ export class CommitTracker {
   }
 
   async getDeployments(commitSha: string): Promise<DeploymentInfo[]> {
-    const db = getDb();
+    const db = await getDbAsync();
     
     if (db) {
+      const { eq, desc } = await getDrizzleOps();
       try {
         const result = await db.select()
           .from(deploymentEvents)
@@ -547,7 +562,7 @@ export class CommitTracker {
   // ==========================================
 
   async updateEnvironmentStatus(deployment: DeploymentInfo): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
     const id = `${deployment.repository}:${deployment.environment}`;
     
@@ -593,11 +608,13 @@ export class CommitTracker {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getEnvironmentStatus(repository: string, environment: string): Promise<any> {
-    const db = getDb();
+    const db = await getDbAsync();
     const id = `${repository}:${environment}`;
     
     if (db) {
+      const { eq, and } = await getDrizzleOps();
       try {
         const result = await db.select()
           .from(environmentStatus)
@@ -736,11 +753,12 @@ export class CommitTracker {
   async storeWebhookEvent(
     source: string,
     eventType: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload: any,
     repository?: string,
     signature?: string
   ): Promise<string> {
-    const db = getDb();
+    const db = await getDbAsync();
     const id = generateId();
     const now = new Date().toISOString();
 
@@ -765,10 +783,11 @@ export class CommitTracker {
   }
 
   async markWebhookProcessed(id: string, error?: string): Promise<void> {
-    const db = getDb();
+    const db = await getDbAsync();
     const now = new Date().toISOString();
     
     if (db) {
+      const { eq } = await getDrizzleOps();
       try {
         await db.update(webhookEvents)
           .set({
