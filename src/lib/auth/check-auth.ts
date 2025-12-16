@@ -1,17 +1,16 @@
-import { cookies } from 'next/headers';
+import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
+import { authOptions } from '@/lib/auth';
 
 export async function checkAuth() {
-  const cookieStore = cookies();
-  const authToken = cookieStore.get('auth-token');
-  const githubUser = cookieStore.get('github-user');
+  const session = await getServerSession(authOptions);
 
-  if (!authToken || !githubUser) {
+  if (!session?.user) {
     return null;
   }
 
   return {
-    user: githubUser.value,
+    user: session.user,
     authenticated: true,
   };
 }
