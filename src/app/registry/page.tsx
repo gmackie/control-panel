@@ -18,7 +18,12 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
-  Scan
+  Scan,
+  Rocket,
+  X,
+  CheckCircle,
+  Loader2,
+  ExternalLink
 } from "lucide-react";
 
 interface TagInfo {
@@ -67,11 +72,51 @@ interface RegistryStats {
   privateProjects: number;
 }
 
+interface DeployModalState {
+  isOpen: boolean;
+  image: string;
+  tag: string;
+  repoName: string;
+}
+
+interface DeployResult {
+  success: boolean;
+  deployment: {
+    name: string;
+    namespace: string;
+    image: string;
+    replicas: number;
+  };
+  service?: {
+    name: string;
+    port: number;
+  };
+  ingress?: {
+    host: string;
+    url: string;
+  };
+  message: string;
+}
+
 export default function RegistryPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const [deployModal, setDeployModal] = useState<DeployModalState>({
+    isOpen: false,
+    image: "",
+    tag: "",
+    repoName: "",
+  });
+  const [deployConfig, setDeployConfig] = useState({
+    environment: "staging" as "staging" | "production",
+    replicas: 1,
+    port: 3000,
+    createIngress: true,
+    customDomain: "",
+  });
+  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<RegistryStats>({
     queryKey: ['registry', 'stats'],
@@ -123,6 +168,71 @@ export default function RegistryPage() {
       queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
+
+  const deployMutation = useMutation({
+    mutationFn: async (params: {
+      image: string;
+      tag: string;
+      name?: string;
+      namespace?: string;
+      environment: "staging" | "production";
+      replicas: number;
+      port: number;
+      createIngress: boolean;
+      domain?: string;
+    }) => {
+      const response = await fetch('/api/registry/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to deploy');
+      }
+      return response.json() as Promise<DeployResult>;
+    },
+    onSuccess: (data) => {
+      setDeployResult(data);
+    },
+    onError: (error: Error) => {
+      alert(`Deployment failed: ${error.message}`);
+    },
+  });
+
+  const openDeployModal = (fullName: string, tagName: string, repoName: string) => {
+    setDeployModal({
+      isOpen: true,
+      image: fullName,
+      tag: tagName,
+      repoName,
+    });
+    setDeployResult(null);
+    setDeployConfig({
+      environment: "staging",
+      replicas: 1,
+      port: 3000,
+      createIngress: true,
+      customDomain: "",
+    });
+  };
+
+  const closeDeployModal = () => {
+    setDeployModal({ isOpen: false, image: "", tag: "", repoName: "" });
+    setDeployResult(null);
+  };
+
+  const handleDeploy = () => {
+    deployMutation.mutate({
+      image: deployModal.image,
+      tag: deployModal.tag,
+      environment: deployConfig.environment,
+      replicas: deployConfig.replicas,
+      port: deployConfig.port,
+      createIngress: deployConfig.createIngress,
+      domain: deployConfig.customDomain || undefined,
+    });
+  };
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -449,6 +559,13 @@ export default function RegistryPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <button
+                            onClick={() => openDeployModal(selectedRepo.fullName, tag.name, selectedRepo.name)}
+                            className="p-1.5 hover:bg-blue-800 rounded text-blue-400"
+                            title="Deploy to K3s"
+                          >
+                            <Rocket className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => copyDockerCommand(selectedRepo.fullName, tag.name)}
                             className="p-1.5 hover:bg-gray-800 rounded"
                             title="Copy pull command"
@@ -512,6 +629,202 @@ export default function RegistryPage() {
           )}
         </div>
       </div>
+
+      {/* Deploy Modal */}
+      {deployModal.isOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <Card className="w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold">Deploy to K3s</h2>
+                <p className="text-sm text-gray-400">
+                  {deployModal.image}:{deployModal.tag}
+                </p>
+              </div>
+              <button
+                onClick={closeDeployModal}
+                className="p-2 hover:bg-gray-800 rounded"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {deployResult ? (
+              // Success state
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 bg-green-950/30 border border-green-800 rounded-lg">
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                  <div>
+                    <p className="font-medium text-green-400">Deployment Successful</p>
+                    <p className="text-sm text-gray-400">{deployResult.message}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-900 rounded-lg space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-500">Deployment</p>
+                    <p className="font-mono text-sm">
+                      {deployResult.deployment.name} ({deployResult.deployment.namespace})
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Replicas</p>
+                    <p>{deployResult.deployment.replicas}</p>
+                  </div>
+                  {deployResult.ingress && (
+                    <div>
+                      <p className="text-xs text-gray-500">URL</p>
+                      <a
+                        href={deployResult.ingress.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline flex items-center gap-1"
+                      >
+                        {deployResult.ingress.url}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={closeDeployModal}>Close</Button>
+                </div>
+              </div>
+            ) : (
+              // Configuration form
+              <div className="space-y-4">
+                {/* Environment */}
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Environment</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setDeployConfig(c => ({ ...c, environment: "staging" }))}
+                      className={`flex-1 py-2 px-4 rounded-lg border ${
+                        deployConfig.environment === "staging"
+                          ? "border-blue-500 bg-blue-950/30"
+                          : "border-gray-700 hover:border-gray-600"
+                      }`}
+                    >
+                      Staging
+                    </button>
+                    <button
+                      onClick={() => setDeployConfig(c => ({ ...c, environment: "production" }))}
+                      className={`flex-1 py-2 px-4 rounded-lg border ${
+                        deployConfig.environment === "production"
+                          ? "border-red-500 bg-red-950/30"
+                          : "border-gray-700 hover:border-gray-600"
+                      }`}
+                    >
+                      Production
+                    </button>
+                  </div>
+                </div>
+
+                {/* Replicas */}
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Replicas</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setDeployConfig(c => ({ ...c, replicas: n }))}
+                        className={`flex-1 py-2 px-4 rounded-lg border ${
+                          deployConfig.replicas === n
+                            ? "border-blue-500 bg-blue-950/30"
+                            : "border-gray-700 hover:border-gray-600"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Port */}
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Container Port</label>
+                  <input
+                    type="number"
+                    value={deployConfig.port}
+                    onChange={(e) => setDeployConfig(c => ({ ...c, port: parseInt(e.target.value) || 3000 }))}
+                    className="w-full p-2 bg-gray-900 border border-gray-700 rounded-lg"
+                  />
+                </div>
+
+                {/* Ingress */}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={deployConfig.createIngress}
+                      onChange={(e) => setDeployConfig(c => ({ ...c, createIngress: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Create Ingress (public URL)</span>
+                  </label>
+                </div>
+
+                {deployConfig.createIngress && (
+                  <div>
+                    <label className="text-sm text-gray-400 mb-1 block">
+                      Custom Domain (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={deployConfig.customDomain}
+                      onChange={(e) => setDeployConfig(c => ({ ...c, customDomain: e.target.value }))}
+                      placeholder={`${deployModal.repoName}${deployConfig.environment === "staging" ? "-staging" : ""}.gmac.io`}
+                      className="w-full p-2 bg-gray-900 border border-gray-700 rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {/* Summary */}
+                <div className="p-4 bg-gray-900 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-2">Will create:</p>
+                  <ul className="text-sm space-y-1">
+                    <li>• Namespace: <span className="text-blue-400">{deployModal.repoName}{deployConfig.environment === "staging" ? "-staging" : ""}</span></li>
+                    <li>• Deployment with {deployConfig.replicas} replica(s)</li>
+                    <li>• Service on port {deployConfig.port}</li>
+                    {deployConfig.createIngress && (
+                      <li>• Ingress at <span className="text-blue-400">{deployConfig.customDomain || `${deployModal.repoName}${deployConfig.environment === "staging" ? "-staging" : ""}.gmac.io`}</span></li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={closeDeployModal}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleDeploy}
+                    disabled={deployMutation.isPending}
+                    className="flex-1"
+                  >
+                    {deployMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deploying...
+                      </>
+                    ) : (
+                      <>
+                        <Rocket className="h-4 w-4 mr-2" />
+                        Deploy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
