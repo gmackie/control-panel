@@ -207,3 +207,133 @@ export const usageAnalytics = sqliteTable("usage_analytics", {
   topEndpoints: text("top_endpoints").notNull(), // JSON string
   timestamp: text("timestamp").notNull(),
 });
+
+// ===========================================
+// Pipeline & Commit Tracking Tables
+// ===========================================
+
+// Commits table - tracks commits from Gitea
+export const commits = sqliteTable("commits", {
+  id: text("id").primaryKey(), // Use commit SHA as ID
+  sha: text("sha").notNull().unique(),
+  shortSha: text("short_sha").notNull(), // First 7 chars
+  message: text("message").notNull(),
+  author: text("author").notNull(),
+  authorEmail: text("author_email"),
+  authorAvatar: text("author_avatar"),
+  branch: text("branch").notNull(),
+  repository: text("repository").notNull(), // owner/repo format
+  timestamp: text("timestamp").notNull(),
+  url: text("url"), // Link to Gitea commit
+  parentSha: text("parent_sha"), // For tracking commit chain
+  createdAt: text("created_at").notNull(),
+});
+
+// Pipeline runs table - tracks CI/CD workflow runs
+export const pipelineRuns = sqliteTable("pipeline_runs", {
+  id: text("id").primaryKey(),
+  commitSha: text("commit_sha").notNull().references(() => commits.sha),
+  repository: text("repository").notNull(),
+  workflowName: text("workflow_name").notNull(),
+  workflowId: integer("workflow_id"), // Gitea workflow ID
+  runNumber: integer("run_number"),
+  status: text("status").notNull(), // pending, running, success, failure, cancelled
+  conclusion: text("conclusion"), // success, failure, cancelled, skipped, timed_out
+  branch: text("branch").notNull(),
+  event: text("event").notNull(), // push, pull_request, release, manual
+  triggeredBy: text("triggered_by"),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  duration: integer("duration"), // in seconds
+  url: text("url"), // Link to Gitea workflow run
+  logs: text("logs"), // JSON string of log entries
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Pipeline stages table - tracks individual stages within a pipeline
+export const pipelineStages = sqliteTable("pipeline_stages", {
+  id: text("id").primaryKey(),
+  pipelineRunId: text("pipeline_run_id").notNull().references(() => pipelineRuns.id),
+  name: text("name").notNull(),
+  status: text("status").notNull(), // pending, running, success, failure, skipped
+  order: integer("order").notNull(), // Stage order in pipeline
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  duration: integer("duration"), // in seconds
+  logs: text("logs"), // JSON string
+});
+
+// Deployment events table - tracks deployments to environments
+export const deploymentEvents = sqliteTable("deployment_events", {
+  id: text("id").primaryKey(),
+  commitSha: text("commit_sha").notNull(),
+  pipelineRunId: text("pipeline_run_id").references(() => pipelineRuns.id),
+  repository: text("repository").notNull(),
+  environment: text("environment").notNull(), // staging, production
+  namespace: text("namespace").notNull(), // K8s namespace
+  deploymentName: text("deployment_name").notNull(), // K8s deployment name
+  status: text("status").notNull(), // pending, deploying, deployed, failed, rolled_back
+  imageTag: text("image_tag").notNull(),
+  imageDigest: text("image_digest"),
+  replicas: integer("replicas"),
+  readyReplicas: integer("ready_replicas"),
+  previousImageTag: text("previous_image_tag"), // For rollback tracking
+  previousCommitSha: text("previous_commit_sha"),
+  deployedBy: text("deployed_by"),
+  deployedAt: text("deployed_at"),
+  healthCheckStatus: text("health_check_status"), // healthy, unhealthy, unknown
+  url: text("url"), // Application URL
+  notes: text("notes"), // Deployment notes or release notes
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Release table - tracks releases/versions
+export const releases = sqliteTable("releases", {
+  id: text("id").primaryKey(),
+  repository: text("repository").notNull(),
+  tagName: text("tag_name").notNull(),
+  name: text("name").notNull(),
+  body: text("body"), // Release notes
+  commitSha: text("commit_sha").notNull(),
+  draft: integer("draft").notNull().default(0), // boolean
+  prerelease: integer("prerelease").notNull().default(0), // boolean
+  author: text("author").notNull(),
+  url: text("url"),
+  createdAt: text("created_at").notNull(),
+  publishedAt: text("published_at"),
+});
+
+// Webhook events table - stores webhook events for replay/debugging
+export const webhookEvents = sqliteTable("webhook_events", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull(), // gitea, harbor, argocd, prometheus
+  eventType: text("event_type").notNull(), // push, pull_request, release, etc.
+  repository: text("repository"),
+  payload: text("payload").notNull(), // JSON string of full payload
+  signature: text("signature"), // Webhook signature for verification
+  processed: integer("processed").notNull().default(0), // boolean
+  processedAt: text("processed_at"),
+  error: text("error"), // Error message if processing failed
+  createdAt: text("created_at").notNull(),
+});
+
+// Environment status table - tracks current state of each environment
+export const environmentStatus = sqliteTable("environment_status", {
+  id: text("id").primaryKey(),
+  repository: text("repository").notNull(),
+  environment: text("environment").notNull(), // staging, production
+  namespace: text("namespace").notNull(),
+  deploymentName: text("deployment_name").notNull(),
+  currentCommitSha: text("current_commit_sha"),
+  currentImageTag: text("current_image_tag"),
+  currentVersion: text("current_version"),
+  status: text("status").notNull(), // healthy, degraded, unhealthy, unknown
+  replicas: integer("replicas"),
+  readyReplicas: integer("ready_replicas"),
+  lastDeployedAt: text("last_deployed_at"),
+  lastDeployedBy: text("last_deployed_by"),
+  url: text("url"),
+  updatedAt: text("updated_at").notNull(),
+});
