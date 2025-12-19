@@ -191,6 +191,21 @@ spec:
             secretKeyRef:
               name: control-panel-secrets
               key: WEBHOOK_SECRET
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: GITHUB_TOKEN
+        - name: K3S_SA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: K3S_SA_TOKEN
+        - name: HETZNER_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: HETZNER_API_TOKEN
         
         # Build DATABASE_URL from components
         - name: DATABASE_URL
