@@ -17,6 +17,7 @@ import UsageAnalytics from '@/components/UsageAnalytics'
 import { SystemHealth } from '@/components/dashboard/system-health'
 import { RealtimeMetrics } from '@/components/dashboard/realtime-metrics'
 import { ClerkAuthMetrics } from '@/components/dashboard/clerk-auth-metrics'
+import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { fetchBusinessMetrics } from '@/lib/api'
 
 export default function Dashboard() {
@@ -74,6 +75,9 @@ export default function Dashboard() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
+          {/* Dashboard Stats - Real PostgreSQL Data */}
+          <DashboardStats />
+
           {/* Real-time Monitoring */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RealtimeMetrics />

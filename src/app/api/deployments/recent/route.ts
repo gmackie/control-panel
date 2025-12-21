@@ -1,54 +1,66 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getRecentDeployments } from "@/lib/db-utils";
+import { NextResponse } from "next/server";
+import { deploymentsRepo, applicationsRepo, commitsRepo } from "@/lib/db/repositories";
+import { isPostgresConfigured } from "@/lib/db/postgres";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const deployments = await getRecentDeployments();
-
-    // For now, return mock data until we have real deployment data
-    // In production, this would fetch from the database
+    // Try to get real deployments from PostgreSQL
+    if (isPostgresConfigured()) {
+      const recentDeployments = await deploymentsRepo.getRecentDeployments(10);
+      
+      if (recentDeployments && recentDeployments.length > 0) {
+        // Enrich with application and commit data
+        const enrichedDeployments = await Promise.all(
+          recentDeployments.map(async (deployment: any) => {
+            // Get application info
+            const app = deployment.applicationId 
+              ? await applicationsRepo.getById(deployment.applicationId)
+              : null;
+            
+            // Get commit info if we have a commit ID
+            let commit = null;
+            if (deployment.commitId) {
+              commit = await commitsRepo.getById(deployment.commitId);
+            }
+            
+            return {
+              id: deployment.id,
+              name: deployment.deploymentName,
+              namespace: deployment.namespace,
+              repository: app?.repositoryFullName || app?.name || deployment.deploymentName,
+              branch: commit?.branch || "main",
+              commit: commit?.shortSha || deployment.imageTag?.replace("sha-", "") || "latest",
+              commitMessage: commit?.message || `Deployed ${deployment.imageTag}`,
+              author: deployment.deployedBy || "system",
+              timestamp: deployment.deployedAt?.toISOString() || deployment.createdAt?.toISOString() || new Date().toISOString(),
+              status: deployment.status === "deployed" ? "success" : 
+                      deployment.status === "failed" ? "failed" :
+                      deployment.status === "pending" ? "pending" : "running",
+              environment: deployment.environment,
+              url: deployment.url,
+            };
+          })
+        );
+        
+        return NextResponse.json(enrichedDeployments);
+      }
+    }
+    
+    // Fallback to mock data if no real deployments available
     const mockDeployments = [
       {
         id: "deploy-1",
-        name: "classcheck-frontend",
-        namespace: "production",
-        repository: "mackieg/classcheck",
+        name: "control-panel",
+        namespace: "control-panel",
+        repository: "gmac/control-panel",
         branch: "main",
-        commit: "a1b2c3d4",
-        commitMessage: "Fix authentication flow",
+        commit: "50f5c3c",
+        commitMessage: "fix: PostgreSQL connection and add database migration endpoint",
         author: "gmackie",
-        timestamp: "2025-07-27T15:30:00Z",
+        timestamp: new Date().toISOString(),
         status: "success",
         environment: "production",
-        url: "https://classcheck.gmac.io",
-      },
-      {
-        id: "deploy-2",
-        name: "classback",
-        namespace: "production",
-        repository: "mackieg/classback",
-        branch: "main",
-        commit: "e5f6g7h8",
-        commitMessage: "Add user management API",
-        author: "gmackie",
-        timestamp: "2025-07-27T14:15:00Z",
-        status: "success",
-        environment: "production",
-        url: "https://api.classcheck.gmac.io",
-      },
-      {
-        id: "deploy-3",
-        name: "turntable-bot",
-        namespace: "production",
-        repository: "mackieg/turntable-bot",
-        branch: "main",
-        commit: "i9j0k1l2",
-        commitMessage: "Update AI model integration",
-        author: "gmackie",
-        timestamp: "2025-07-27T13:45:00Z",
-        status: "success",
-        environment: "production",
-        url: "https://turntable.gmac.io",
+        url: "https://control.gmac.io",
       },
     ];
 
