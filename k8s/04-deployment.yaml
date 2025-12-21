@@ -207,9 +207,79 @@ spec:
               name: control-panel-secrets
               key: HETZNER_API_TOKEN
         
+        # SaaS Integration Tokens
+        - name: VERCEL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: VERCEL_TOKEN
+              optional: true
+        - name: VERCEL_TEAM_ID
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: VERCEL_TEAM_ID
+              optional: true
+        - name: SUPABASE_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: SUPABASE_ACCESS_TOKEN
+              optional: true
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: CLERK_SECRET_KEY
+              optional: true
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: STRIPE_SECRET_KEY
+              optional: true
+        - name: POSTHOG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: POSTHOG_API_KEY
+              optional: true
+        - name: POSTHOG_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: POSTHOG_PROJECT_ID
+              optional: true
+        - name: POSTHOG_HOST
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: POSTHOG_HOST
+              optional: true
+        - name: SENTRY_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: SENTRY_AUTH_TOKEN
+              optional: true
+        - name: SENTRY_ORG
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: SENTRY_ORG
+              optional: true
+        
         # Build DATABASE_URL from components
         - name: DATABASE_URL
           value: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+        
+        # Secrets encryption key for application secrets storage
+        - name: SECRETS_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: SECRETS_ENCRYPTION_KEY
+              optional: true
 
         resources:
           requests:

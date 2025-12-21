@@ -4,11 +4,12 @@ import { authOptions } from '@/lib/auth';
 import { deploymentIntegration } from '@/lib/deployment/deployment-integration';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/deployments/applications/[id] - Get specific application deployment
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -37,7 +38,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT /api/deployments/applications/[id] - Update application configuration
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -82,7 +84,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/deployments/applications/[id] - Remove application deployment
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

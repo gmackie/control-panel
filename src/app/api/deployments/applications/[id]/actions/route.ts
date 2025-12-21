@@ -5,7 +5,7 @@ import { deploymentIntegration } from '@/lib/deployment/deployment-integration';
 import { z } from 'zod';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const ApplicationActionSchema = z.object({
@@ -22,7 +22,8 @@ const ApplicationActionSchema = z.object({
 });
 
 // POST /api/deployments/applications/[id]/actions - Execute deployment actions
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -89,7 +90,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 // GET /api/deployments/applications/[id]/actions - Get available actions
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

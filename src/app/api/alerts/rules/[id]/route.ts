@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAlertRule, updateAlertRule, deleteAlertRule } from '@/lib/monitoring/alert-monitor';
 
 interface Params {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export async function GET(request: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const rule = await getAlertRule(params.id);
     
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function PUT(request: NextRequest, { params }: Params) {
+export async function PUT(request: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const body = await request.json();
     const updatedRule = await updateAlertRule(params.id, body);
@@ -50,7 +52,8 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: Params) {
+export async function DELETE(request: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const deleted = await deleteAlertRule(params.id);
     

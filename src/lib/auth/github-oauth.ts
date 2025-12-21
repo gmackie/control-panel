@@ -89,7 +89,7 @@ export class GitHubOAuth {
 
       // Create session
       const sessionToken = crypto.randomBytes(32).toString('hex');
-      const cookieStore = cookies();
+      const cookieStore = await cookies();
       
       // Store session (expires in 30 days)
       cookieStore.set('auth-token', sessionToken, {
@@ -117,13 +117,13 @@ export class GitHubOAuth {
   }
 
   static async signOut() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.delete('auth-token');
     cookieStore.delete('github-user');
   }
 
   static async getSession() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const authToken = cookieStore.get('auth-token');
     const githubUser = cookieStore.get('github-user');
 

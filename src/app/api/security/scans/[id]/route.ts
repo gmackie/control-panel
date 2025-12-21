@@ -4,11 +4,12 @@ import { authOptions } from '@/lib/auth';
 import { securityScanner } from '@/lib/security/security-scanner';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/security/scans/[id] - Get specific security scan with detailed results
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -55,7 +56,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/security/scans/[id] - Cancel a running scan
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

@@ -70,10 +70,8 @@ const mockServices: Record<string, AppService> = {
   },
 };
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const service = mockServices[params.id];
 
@@ -91,10 +89,8 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const body = await request.json();
 
@@ -116,11 +112,12 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     // In production, delete service from database and K8s
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, id: params.id });
   } catch (error) {
     console.error("Failed to delete service:", error);
     return NextResponse.json(

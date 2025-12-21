@@ -11,12 +11,13 @@ import {
 import { CreateDeploymentRequest } from '@/types/deployments';
 
 interface Params {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export async function GET(request: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function POST(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,8 @@ interface IntegrationConfig {
   };
 }
 
-export default function ApplicationIntegrationsPage({ params }: { params: { id: string } }) {
+export default function ApplicationIntegrationsPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
   const [showConfigForm, setShowConfigForm] = useState(false);
 
@@ -247,7 +248,6 @@ export default function ApplicationIntegrationsPage({ params }: { params: { id: 
           Add Integration
         </Button>
       </div>
-
       {/* Integration Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4">
@@ -293,7 +293,6 @@ export default function ApplicationIntegrationsPage({ params }: { params: { id: 
           </div>
         </Card>
       </div>
-
       {/* Integrations Grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -332,12 +331,10 @@ export default function ApplicationIntegrationsPage({ params }: { params: { id: 
                     {status.replace('_', ' ')}
                   </Badge>
                 </div>
-                
                 <h3 className="font-semibold text-lg mb-1">{integration.name}</h3>
                 <p className="text-sm text-gray-400 mb-4">
                   {template?.description || 'Third-party service integration'}
                 </p>
-                
                 {integration.configured && integration.metrics && (
                   <div className="space-y-2 mb-4">
                     {Object.entries(integration.metrics).slice(0, 3).map(([key, value]) => (
@@ -350,7 +347,6 @@ export default function ApplicationIntegrationsPage({ params }: { params: { id: 
                     ))}
                   </div>
                 )}
-                
                 <div className="flex items-center justify-between pt-4 border-t border-gray-800">
                   <Button size="sm" variant="outline">
                     <Settings className="h-3 w-3 mr-1" />

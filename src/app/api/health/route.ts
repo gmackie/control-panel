@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkPostgresHealth, isPostgresConfigured } from '@/lib/db/postgres';
 
 interface HealthCheck {
   service: string;
@@ -7,6 +8,7 @@ interface HealthCheck {
   timestamp: string;
   uptime?: number;
   version?: string;
+  latencyMs?: number;
 }
 
 interface SystemHealth {
@@ -21,14 +23,24 @@ const startTime = Date.now();
 
 async function checkDatabase(): Promise<HealthCheck> {
   try {
-    // In production, perform actual database connectivity check
-    // For now, simulate a check
-    const isHealthy = Math.random() > 0.05;
+    // Check if PostgreSQL is configured
+    if (!isPostgresConfigured()) {
+      return {
+        service: 'database',
+        status: 'unhealthy',
+        message: 'PostgreSQL not configured (DATABASE_URL missing)',
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    // Perform actual PostgreSQL health check
+    const health = await checkPostgresHealth();
     
     return {
       service: 'database',
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      message: isHealthy ? 'Connected to PostgreSQL' : 'Database connection failed',
+      status: health.healthy ? 'healthy' : 'unhealthy',
+      message: health.message,
+      latencyMs: health.latencyMs,
       timestamp: new Date().toISOString()
     };
   } catch (error) {

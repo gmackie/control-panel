@@ -5,7 +5,7 @@ import { deploymentWorkflowManager } from '@/lib/deployment/workflow-manager';
 import { z } from 'zod';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const WorkflowActionSchema = z.object({
@@ -15,7 +15,8 @@ const WorkflowActionSchema = z.object({
 });
 
 // POST /api/deployments/workflows/[id]/actions - Execute workflow actions
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -236,7 +237,8 @@ async function handleRetryWorkflow(workflowId: string, force: boolean, userId: s
 }
 
 // GET /api/deployments/workflows/[id]/actions - Get available actions for workflow
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

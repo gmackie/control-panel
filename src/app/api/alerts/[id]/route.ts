@@ -4,11 +4,12 @@ import { authOptions } from '@/lib/auth';
 import { alertManager } from '@/lib/alerting/alert-manager';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/alerts/[id] - Get specific alert
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -33,7 +34,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT /api/alerts/[id] - Update alert
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -59,7 +61,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/alerts/[id] - Delete alert
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

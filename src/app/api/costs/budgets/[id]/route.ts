@@ -5,7 +5,7 @@ import { costManager } from '@/lib/cost-tracking/cost-manager';
 import { z } from 'zod';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const UpdateBudgetSchema = z.object({
@@ -24,7 +24,8 @@ const UpdateBudgetSchema = z.object({
 });
 
 // GET /api/costs/budgets/[id] - Get specific budget with detailed spending
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -71,7 +72,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT /api/costs/budgets/[id] - Update specific budget
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -147,7 +149,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 }
 
 // PATCH /api/costs/budgets/[id] - Toggle budget enable/disable
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

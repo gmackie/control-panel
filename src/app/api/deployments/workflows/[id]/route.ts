@@ -4,11 +4,12 @@ import { authOptions } from '@/lib/auth';
 import { deploymentWorkflowManager } from '@/lib/deployment/workflow-manager';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/deployments/workflows/[id] - Get specific workflow with detailed logs
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -37,7 +38,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT /api/deployments/workflows/[id] - Update workflow (limited fields)
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     
@@ -84,7 +86,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/deployments/workflows/[id] - Cancel or delete workflow
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DeploymentManager } from '@/components/deployment/DeploymentManager';
 import { DeploymentList } from '@/components/deployment/DeploymentList';
@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  GitBranch, 
   Rocket, 
   Server, 
   Clock, 
@@ -71,7 +70,7 @@ interface Application {
   };
 }
 
-export default function DeploymentsPage() {
+function DeploymentsContent() {
   const searchParams = useSearchParams();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -458,5 +457,24 @@ export default function DeploymentsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function DeploymentsLoadingFallback() {
+  return (
+    <div className="container mx-auto p-6">
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading deployments...</span>
+      </div>
+    </div>
+  );
+}
+
+export default function DeploymentsPage() {
+  return (
+    <Suspense fallback={<DeploymentsLoadingFallback />}>
+      <DeploymentsContent />
+    </Suspense>
   );
 }
