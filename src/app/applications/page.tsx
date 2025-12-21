@@ -31,7 +31,9 @@ export default function ApplicationsPage() {
     queryFn: async () => {
       const response = await fetch("/api/applications");
       if (!response.ok) throw new Error("Failed to fetch applications");
-      return response.json();
+      const data = await response.json();
+      // Handle both formats: array or { applications: [...] }
+      return Array.isArray(data) ? data : (data.applications || []);
     },
   });
 

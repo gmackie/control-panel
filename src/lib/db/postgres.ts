@@ -32,13 +32,27 @@ const initDbAsync = async (): Promise<any> => {
     const { drizzle } = await import("drizzle-orm/node-postgres");
     const { Pool } = await import("pg");
 
+    // Check if we're connecting to an in-cluster PostgreSQL (no SSL needed)
+    // Also check for common K8s service patterns
+    const isInCluster = connectionString.includes('.svc.cluster.local') || 
+                        connectionString.includes('.svc.') ||
+                        connectionString.includes('localhost') ||
+                        connectionString.includes('127.0.0.1') ||
+                        connectionString.includes('postgres.control-panel');
+    
+    // Determine SSL mode - disable for in-cluster connections
+    const sslMode = isInCluster ? false : (process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false);
+    
+    console.log(`PostgreSQL connection: isInCluster=${isInCluster}, sslMode=${sslMode}, host=${connectionString.split('@')[1]?.split('/')[0] || 'unknown'}`);
+    
     const pool = new Pool({
       connectionString,
       // Connection pool settings
       max: 10, // Maximum number of connections
       idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
       connectionTimeoutMillis: 5000, // Timeout connecting to the database
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+      // Explicitly set SSL mode
+      ssl: sslMode,
     });
 
     // Test connection
@@ -51,6 +65,8 @@ const initDbAsync = async (): Promise<any> => {
     return dbInstance;
   } catch (error) {
     console.error("Failed to connect to PostgreSQL:", error);
+    // Reset the promise so next call will retry
+    initPromise = null;
     return null;
   }
 };
@@ -64,7 +80,12 @@ export const getPostgresDb = async (): Promise<any> => {
   if (!initPromise) {
     initPromise = initDbAsync();
   }
-  return initPromise;
+  const result = await initPromise;
+  // If connection failed, reset promise for next attempt
+  if (!result) {
+    initPromise = null;
+  }
+  return result;
 };
 
 /**

@@ -15,7 +15,7 @@ data:
   ARGOCD_SERVER: "https://argocd.gmac.io"
   PROMETHEUS_URL: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
   K8S_API_SERVER: "https://kubernetes.default.svc"
-  DATABASE_HOST: "postgres-service.control-panel.svc.cluster.local"
+  DATABASE_HOST: "postgres.control-panel.svc.cluster.local"
   DATABASE_PORT: "5432"
   DATABASE_NAME: "control_panel"
   REDIS_HOST: "redis-service.control-panel.svc.cluster.local"
