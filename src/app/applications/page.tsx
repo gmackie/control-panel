@@ -9,13 +9,12 @@ import {
   Plus,
   Code,
   Key,
-  Settings,
-  ExternalLink,
-  MoreVertical,
   Shield,
   Globe,
   Clock,
-  Download
+  Download,
+  LayoutDashboard,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { Application } from "@/types/applications";
@@ -86,54 +85,68 @@ export default function ApplicationsPage() {
       ) : applications && applications.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {applications.map((app) => (
-            <Link key={app.id} href={`/applications/${app.id}`}>
-              <Card className="p-6 hover:border-gray-700 transition-colors cursor-pointer h-full">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-950/20 rounded-lg">
-                      <Code className="h-6 w-6 text-blue-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">{app.name}</h3>
-                      <p className="text-sm text-gray-400">{app.slug}</p>
-                    </div>
+            <Card key={app.id} className="p-6 hover:border-gray-700 transition-colors h-full flex flex-col">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-950/20 rounded-lg">
+                    <Code className="h-6 w-6 text-blue-500" />
                   </div>
-                  <Badge variant={getEnvironmentColor(app.settings.environment) as any}>
-                    {app.settings.environment}
-                  </Badge>
+                  <div>
+                    <h3 className="font-semibold text-lg">{app.name}</h3>
+                    <p className="text-sm text-gray-400">{app.slug}</p>
+                  </div>
                 </div>
+                <Badge variant={getEnvironmentColor(app.settings.environment) as "default" | "warning" | "error" | "secondary"}>
+                  {app.settings.environment}
+                </Badge>
+              </div>
 
-                {app.description && (
-                  <p className="text-sm text-gray-400 mb-4">{app.description}</p>
+              {app.description && (
+                <p className="text-sm text-gray-400 mb-4 line-clamp-2">{app.description}</p>
+              )}
+
+              <div className="space-y-3 flex-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <Key className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-400">
+                    {app.apiKeys.length} API {app.apiKeys.length === 1 ? 'Key' : 'Keys'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-400">
+                    {app.secrets.length} {app.secrets.length === 1 ? 'Secret' : 'Secrets'}
+                  </span>
+                </div>
+                {app.settings.domain && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Globe className="h-4 w-4 text-gray-500" />
+                    <span className="text-gray-400 truncate">{app.settings.domain}</span>
+                  </div>
                 )}
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Key className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-400">
-                      {app.apiKeys.length} API {app.apiKeys.length === 1 ? 'Key' : 'Keys'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Shield className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-400">
-                      {app.secrets.length} {app.secrets.length === 1 ? 'Secret' : 'Secrets'}
-                    </span>
-                  </div>
-                  {app.settings.domain && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Globe className="h-4 w-4 text-gray-500" />
-                      <span className="text-gray-400">{app.settings.domain}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-800 text-xs text-gray-500">
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-800">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Clock className="h-3 w-3" />
                   <span>Created {new Date(app.createdAt).toLocaleDateString()}</span>
                 </div>
-              </Card>
-            </Link>
+                <div className="flex items-center gap-2">
+                  <Link href={`/applications/${app.id}/dashboard`}>
+                    <Button variant="outline" size="sm" className="h-7 px-2">
+                      <LayoutDashboard className="h-3 w-3 mr-1" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Link href={`/applications/${app.id}`}>
+                    <Button variant="ghost" size="sm" className="h-7 px-2">
+                      Details
+                      <ChevronRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </Card>
           ))}
         </div>
       ) : (
