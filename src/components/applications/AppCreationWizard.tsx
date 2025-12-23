@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,12 +35,19 @@ import {
   Info,
   AlertCircle,
   Rocket,
+  Eye,
+  EyeOff,
+  Key,
+  Lock,
+  BarChart,
+  Loader2,
 } from "lucide-react";
-import { INTEGRATION_TEMPLATES } from "@/types/applications";
 
-interface AppCreationWizardProps {
-  onClose: () => void;
-  onSuccess: (appId: string) => void;
+// Types for wizard configuration
+interface IntegrationConfig {
+  enabled: boolean;
+  config: Record<string, unknown>;
+  secrets: Record<string, string>;
 }
 
 interface AppConfig {
@@ -48,6 +55,11 @@ interface AppConfig {
   name: string;
   slug: string;
   description: string;
+  
+  // Tech Stack
+  language: "typescript" | "javascript" | "python" | "go";
+  framework: "nextjs" | "express" | "fastapi" | "django" | "gin" | "none";
+  type: "web" | "api" | "worker" | "cron";
   
   // Repository
   repository: {
@@ -59,13 +71,7 @@ interface AppConfig {
   };
   
   // Integrations
-  integrations: {
-    [key: string]: {
-      enabled: boolean;
-      config: Record<string, any>;
-      secrets: Record<string, string>;
-    };
-  };
+  integrations: Record<string, IntegrationConfig>;
   
   // Deployment
   deployment: {
@@ -84,14 +90,13 @@ interface AppConfig {
       };
     };
     
-    // Resource allocation
     resources: {
       cpu: {
-        request: number; // in millicores
+        request: number;
         limit: number;
       };
       memory: {
-        request: number; // in MB
+        request: number;
         limit: number;
       };
       replicas: {
@@ -100,14 +105,12 @@ interface AppConfig {
       };
     };
     
-    // Container registry
     registry: {
       provider: "harbor" | "dockerhub" | "gcr";
       namespace?: string;
       imageName?: string;
     };
     
-    // CI/CD
     cicd: {
       provider: "gitea-actions" | "github-actions" | "gitlab-ci";
       autoDeployStaging: boolean;
@@ -117,7 +120,6 @@ interface AppConfig {
     };
   };
   
-  // Monitoring
   monitoring: {
     enabled: boolean;
     provider: "prometheus" | "datadog" | "newrelic";
@@ -126,7 +128,6 @@ interface AppConfig {
     tracing: boolean;
   };
   
-  // Estimated cost
   estimatedCost?: {
     monthly: number;
     breakdown: {
@@ -138,10 +139,40 @@ interface AppConfig {
   };
 }
 
+// Types for API response
+interface IntegrationDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon?: string;
+  website?: string;
+  features?: string[];
+  secrets: Array<{
+    name: string;
+    description: string;
+    required: boolean;
+    autoProvision?: boolean;
+    pattern?: string;
+  }>;
+}
+
+interface ProvisioningStep {
+  name: string;
+  status: "pending" | "running" | "completed" | "failed" | "skipped";
+  message?: string;
+}
+
+interface AppCreationWizardProps {
+  onClose: () => void;
+  onSuccess: (appId: string) => void;
+}
+
 const STEPS = [
   { id: 'basic', title: 'Basic Info', icon: Code },
   { id: 'repository', title: 'Repository', icon: GitBranch },
   { id: 'integrations', title: 'Integrations', icon: Zap },
+  { id: 'secrets', title: 'Secrets', icon: Key },
   { id: 'deployment', title: 'Deployment', icon: Server },
   { id: 'resources', title: 'Resources', icon: Cpu },
   { id: 'monitoring', title: 'Monitoring', icon: Shield },
@@ -156,22 +187,54 @@ const AVAILABLE_CLUSTERS = [
 
 const REPOSITORY_TEMPLATES = [
   { id: 'blank', name: 'Blank Repository', description: 'Start from scratch' },
-  { id: 'nextjs', name: 'Next.js App', description: 'Full-stack React framework' },
-  { id: 'express', name: 'Express API', description: 'Node.js REST API' },
-  { id: 'fastapi', name: 'FastAPI', description: 'Python async API' },
-  { id: 'django', name: 'Django App', description: 'Python web framework' },
-  { id: 'rails', name: 'Rails App', description: 'Ruby on Rails application' },
+  { id: 'nextjs-starter', name: 'Next.js App', description: 'Full-stack React framework' },
+  { id: 'express-api', name: 'Express API', description: 'Node.js REST API' },
+  { id: 'fastapi-starter', name: 'FastAPI', description: 'Python async API' },
 ];
+
+const TECH_STACKS = [
+  { language: 'typescript' as const, framework: 'nextjs' as const, name: 'Next.js (TypeScript)', icon: Code },
+  { language: 'typescript' as const, framework: 'express' as const, name: 'Express (TypeScript)', icon: Server },
+  { language: 'python' as const, framework: 'fastapi' as const, name: 'FastAPI (Python)', icon: Zap },
+  { language: 'python' as const, framework: 'django' as const, name: 'Django (Python)', icon: Layers },
+  { language: 'go' as const, framework: 'gin' as const, name: 'Gin (Go)', icon: Package },
+];
+
+// Icon mapping for integrations
+const INTEGRATION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  clerk: Users,
+  stripe: CreditCard,
+  turso: Database,
+  supabase: Database,
+  openrouter: Brain,
+  openai: Brain,
+  elevenlabs: Mic,
+  resend: Mail,
+  sendgrid: Mail,
+  sentry: Shield,
+  posthog: BarChart,
+  s3: Cloud,
+  r2: Cloud,
+};
 
 export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [provisioningSteps, setProvisioningSteps] = useState<ProvisioningStep[]>([]);
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  
+  // Integrations loaded from API
+  const [availableIntegrations, setAvailableIntegrations] = useState<Record<string, IntegrationDefinition>>({});
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true);
   
   const [config, setConfig] = useState<AppConfig>({
     name: '',
     slug: '',
     description: '',
+    language: 'typescript',
+    framework: 'nextjs',
+    type: 'web',
     
     repository: {
       provider: 'gitea',
@@ -197,12 +260,12 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
       
       resources: {
         cpu: {
-          request: 100, // 100m
-          limit: 500,   // 500m
+          request: 100,
+          limit: 500,
         },
         memory: {
-          request: 128, // 128MB
-          limit: 512,   // 512MB
+          request: 128,
+          limit: 512,
         },
         replicas: {
           min: 1,
@@ -232,6 +295,24 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
     },
   });
   
+  // Load available integrations from API
+  useEffect(() => {
+    async function loadIntegrations() {
+      try {
+        const response = await fetch('/api/applications/create-wizard');
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableIntegrations(data.integrations || {});
+        }
+      } catch (error) {
+        console.error('Failed to load integrations:', error);
+      } finally {
+        setLoadingIntegrations(false);
+      }
+    }
+    loadIntegrations();
+  }, []);
+  
   // Auto-generate slug from name
   const handleNameChange = (name: string) => {
     setConfig(prev => ({
@@ -241,26 +322,33 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
     }));
   };
   
+  // Get enabled integrations
+  const getEnabledIntegrations = () => {
+    return Object.entries(config.integrations)
+      .filter(([_, i]) => i.enabled)
+      .map(([key]) => ({
+        key,
+        definition: availableIntegrations[key],
+      }))
+      .filter(i => i.definition);
+  };
+  
   // Calculate estimated cost
   const calculateCost = () => {
     let cost = 0;
     
-    // Base infrastructure cost
-    const cpuCost = (config.deployment.resources.cpu.limit / 1000) * 20; // $20 per vCPU
-    const memoryCost = (config.deployment.resources.memory.limit / 1024) * 10; // $10 per GB
-    const replicaCost = config.deployment.resources.replicas.max * 5; // $5 per replica
+    const cpuCost = (config.deployment.resources.cpu.limit / 1000) * 20;
+    const memoryCost = (config.deployment.resources.memory.limit / 1024) * 10;
+    const replicaCost = config.deployment.resources.replicas.max * 5;
     
     cost += cpuCost + memoryCost + replicaCost;
     
-    // Environment multiplier
     if (config.deployment.environments.staging.enabled) cost += 20;
     if (config.deployment.environments.production.enabled) cost += 50;
     
-    // Integration costs
     const integrationCount = Object.values(config.integrations).filter(i => i.enabled).length;
     cost += integrationCount * 10;
     
-    // Monitoring cost
     if (config.monitoring.enabled) cost += 15;
     
     return {
@@ -286,12 +374,37 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
         }
         break;
         
-      case 3: // Deployment
+      case 4: // Deployment
         if (config.deployment.environments.staging.enabled && !config.deployment.environments.staging.domain) {
-          newErrors.stagingDomain = 'Staging domain is required';
+          // Auto-generate domain if not provided
+          setConfig(prev => ({
+            ...prev,
+            deployment: {
+              ...prev.deployment,
+              environments: {
+                ...prev.deployment.environments,
+                staging: {
+                  ...prev.deployment.environments.staging,
+                  domain: `${prev.slug}-staging.gmac.io`
+                }
+              }
+            }
+          }));
         }
         if (config.deployment.environments.production.enabled && !config.deployment.environments.production.domain) {
-          newErrors.productionDomain = 'Production domain is required';
+          setConfig(prev => ({
+            ...prev,
+            deployment: {
+              ...prev.deployment,
+              environments: {
+                ...prev.deployment.environments,
+                production: {
+                  ...prev.deployment.environments.production,
+                  domain: `${prev.slug}.gmac.io`
+                }
+              }
+            }
+          }));
         }
         break;
     }
@@ -316,9 +429,9 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
   
   const handleCreate = async () => {
     setIsCreating(true);
+    setProvisioningSteps([]);
     
     try {
-      // Calculate final cost
       const estimatedCost = calculateCost();
       const finalConfig = { ...config, estimatedCost };
       
@@ -328,18 +441,45 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
         body: JSON.stringify(finalConfig),
       });
       
+      const result = await response.json();
+      
       if (!response.ok) {
-        throw new Error('Failed to create application');
+        setProvisioningSteps(result.steps || []);
+        throw new Error(result.error || 'Failed to create application');
       }
       
-      const { applicationId } = await response.json();
-      onSuccess(applicationId);
+      setProvisioningSteps(result.steps || []);
+      
+      // Wait a moment to show success state
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      onSuccess(result.applicationId);
     } catch (error) {
       console.error('Error creating application:', error);
-      setErrors({ submit: 'Failed to create application. Please try again.' });
+      setErrors({ submit: error instanceof Error ? error.message : 'Failed to create application. Please try again.' });
     } finally {
       setIsCreating(false);
     }
+  };
+  
+  const toggleSecretVisibility = (key: string) => {
+    setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+  
+  const updateIntegrationSecret = (integrationKey: string, secretName: string, value: string) => {
+    setConfig(prev => ({
+      ...prev,
+      integrations: {
+        ...prev.integrations,
+        [integrationKey]: {
+          ...prev.integrations[integrationKey],
+          secrets: {
+            ...prev.integrations[integrationKey]?.secrets,
+            [secretName]: value,
+          },
+        },
+      },
+    }));
   };
   
   const renderStepContent = () => {
@@ -384,6 +524,34 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                 placeholder="A brief description of your application..."
               />
             </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">Tech Stack</label>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                {TECH_STACKS.map((stack) => {
+                  const Icon = stack.icon;
+                  const isSelected = config.language === stack.language && config.framework === stack.framework;
+                  return (
+                    <button
+                      key={`${stack.language}-${stack.framework}`}
+                      onClick={() => setConfig(prev => ({
+                        ...prev,
+                        language: stack.language,
+                        framework: stack.framework,
+                      }))}
+                      className={`p-3 rounded-lg border text-left ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-950/20'
+                          : 'border-gray-800 hover:border-gray-700'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 mb-1" />
+                      <span className="text-sm">{stack.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         );
         
@@ -398,7 +566,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                     key={provider}
                     onClick={() => setConfig(prev => ({
                       ...prev,
-                      repository: { ...prev.repository, provider: provider as any }
+                      repository: { ...prev.repository, provider: provider as "gitea" | "github" | "gitlab" }
                     }))}
                     className={`p-3 rounded-lg border ${
                       config.repository.provider === provider
@@ -498,68 +666,67 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-medium mb-4">Select Integrations</h3>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                {Object.entries(INTEGRATION_TEMPLATES).map(([key, template]) => {
-                  const isEnabled = config.integrations[key]?.enabled || false;
-                  const iconMap: Record<string, any> = {
-                    stripe: CreditCard,
-                    clerk: Users,
-                    turso: Database,
-                    supabase: Database,
-                    elevenlabs: Mic,
-                    openrouter: Brain,
-                    planetscale: Database,
-                    sentry: Shield,
-                    aws: Cloud,
-                  };
-                  const Icon = iconMap[key] || Zap;
-                  
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        setConfig(prev => ({
-                          ...prev,
-                          integrations: {
-                            ...prev.integrations,
-                            [key]: {
-                              enabled: !isEnabled,
-                              config: {},
-                              secrets: {},
+              
+              {loadingIntegrations ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(availableIntegrations).map(([key, integration]) => {
+                    const isEnabled = config.integrations[key]?.enabled || false;
+                    const Icon = INTEGRATION_ICONS[key] || Zap;
+                    
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setConfig(prev => ({
+                            ...prev,
+                            integrations: {
+                              ...prev.integrations,
+                              [key]: {
+                                enabled: !isEnabled,
+                                config: {},
+                                secrets: {},
+                              },
                             },
-                          },
-                        }));
-                      }}
-                      className={`p-4 rounded-lg border text-left transition-colors ${
-                        isEnabled
-                          ? 'border-blue-500 bg-blue-950/20'
-                          : 'border-gray-800 hover:border-gray-700'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <Icon className="h-5 w-5 text-gray-400" />
-                        {isEnabled && <CheckCircle className="h-4 w-4 text-blue-500" />}
-                      </div>
-                      <div className="mt-2">
-                        <div className="font-medium text-sm">{template.name}</div>
-                        <div className="text-xs text-gray-400 mt-1 line-clamp-2">
-                          {template.description}
+                          }));
+                        }}
+                        className={`p-4 rounded-lg border text-left transition-colors ${
+                          isEnabled
+                            ? 'border-blue-500 bg-blue-950/20'
+                            : 'border-gray-800 hover:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <Icon className="h-5 w-5 text-gray-400" />
+                          {isEnabled && <CheckCircle className="h-4 w-4 text-blue-500" />}
                         </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        <div className="mt-2">
+                          <div className="font-medium text-sm">{integration.name}</div>
+                          <div className="text-xs text-gray-400 mt-1 line-clamp-2">
+                            {integration.description}
+                          </div>
+                          <Badge variant="outline" className="mt-2 text-xs">
+                            {integration.category}
+                          </Badge>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             
-            {Object.entries(config.integrations).filter(([_, i]) => i.enabled).length > 0 && (
+            {getEnabledIntegrations().length > 0 && (
               <div className="p-4 bg-blue-950/20 border border-blue-900 rounded-lg">
                 <div className="flex items-start gap-2">
                   <Info className="h-4 w-4 text-blue-400 mt-0.5" />
                   <div className="text-sm text-blue-300">
-                    <p className="font-medium mb-1">Integration Setup</p>
+                    <p className="font-medium mb-1">Selected: {getEnabledIntegrations().length} integrations</p>
                     <p className="text-xs text-blue-300/70">
-                      You&apos;ll be prompted to configure API keys and settings for each integration after the app is created.
+                      You can configure API keys and secrets in the next step.
                     </p>
                   </div>
                 </div>
@@ -568,7 +735,100 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
           </div>
         );
         
-      case 3: // Deployment
+      case 3: // Secrets
+        const enabledIntegrations = getEnabledIntegrations();
+        
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium mb-2">Configure Secrets</h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Enter API keys and credentials for your selected integrations. You can skip this step and configure them later.
+              </p>
+              
+              {enabledIntegrations.length === 0 ? (
+                <div className="p-8 text-center bg-gray-900/50 rounded-lg border border-gray-800">
+                  <Key className="h-12 w-12 mx-auto mb-3 text-gray-600" />
+                  <p className="text-gray-400">No integrations selected</p>
+                  <p className="text-sm text-gray-500 mt-1">Go back to select integrations that require secrets</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {enabledIntegrations.map(({ key, definition }) => (
+                    <div key={key} className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+                      <div className="flex items-center gap-2 mb-4">
+                        {(() => {
+                          const Icon = INTEGRATION_ICONS[key] || Zap;
+                          return <Icon className="h-5 w-5 text-gray-400" />;
+                        })()}
+                        <h4 className="font-medium">{definition.name}</h4>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {definition.secrets?.map((secret) => {
+                          const secretKey = `${key}.${secret.name}`;
+                          const isVisible = showSecrets[secretKey];
+                          const currentValue = config.integrations[key]?.secrets?.[secret.name] || '';
+                          
+                          return (
+                            <div key={secret.name}>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                  {secret.name}
+                                  {secret.required && <span className="text-red-400">*</span>}
+                                  {secret.autoProvision && (
+                                    <Badge variant="secondary" className="text-xs">Auto-provision available</Badge>
+                                  )}
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                  <input
+                                    type={isVisible ? 'text' : 'password'}
+                                    value={currentValue}
+                                    onChange={(e) => updateIntegrationSecret(key, secret.name, e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 pr-10"
+                                    placeholder={secret.description}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSecretVisibility(secretKey)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                                  >
+                                    {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">{secret.description}</p>
+                            </div>
+                          );
+                        })}
+                        
+                        {(!definition.secrets || definition.secrets.length === 0) && (
+                          <p className="text-sm text-gray-500">No secrets required for this integration.</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-yellow-950/20 border border-yellow-900 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Lock className="h-4 w-4 text-yellow-400 mt-0.5" />
+                <div className="text-sm text-yellow-300">
+                  <p className="font-medium mb-1">Security Notice</p>
+                  <p className="text-xs text-yellow-300/70">
+                    Secrets are encrypted with AES-256-GCM before storage and synced securely to Kubernetes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+        
+      case 4: // Deployment
         return (
           <div className="space-y-6">
             <div>
@@ -616,10 +876,9 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                             }
                           }))}
                           className="flex-1 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-sm"
-                          placeholder={`staging-${config.slug || 'app'}.gmac.io`}
+                          placeholder={`${config.slug || 'app'}-staging.gmac.io`}
                         />
                       </div>
-                      {errors.stagingDomain && <p className="text-red-500 text-xs mt-1">{errors.stagingDomain}</p>}
                     </div>
                     
                     <div>
@@ -695,7 +954,6 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                           placeholder={`${config.slug || 'app'}.gmac.io`}
                         />
                       </div>
-                      {errors.productionDomain && <p className="text-red-500 text-xs mt-1">{errors.productionDomain}</p>}
                     </div>
                     
                     <div>
@@ -790,7 +1048,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
           </div>
         );
         
-      case 4: // Resources
+      case 5: // Resources
         return (
           <div className="space-y-6">
             <div>
@@ -998,7 +1256,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
           </div>
         );
         
-      case 5: // Monitoring
+      case 6: // Monitoring
         return (
           <div className="space-y-6">
             <div>
@@ -1018,12 +1276,12 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                   <div>
                     <label className="block text-sm font-medium mb-2">Monitoring Provider</label>
                     <div className="grid grid-cols-3 gap-3">
-                      {['prometheus', 'datadog', 'newrelic'].map((provider) => (
+                      {(['prometheus', 'datadog', 'newrelic'] as const).map((provider) => (
                         <button
                           key={provider}
                           onClick={() => setConfig(prev => ({
                             ...prev,
-                            monitoring: { ...prev.monitoring, provider: provider as any }
+                            monitoring: { ...prev.monitoring, provider }
                           }))}
                           className={`p-3 rounded-lg border ${
                             config.monitoring.provider === provider
@@ -1101,14 +1359,35 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
           </div>
         );
         
-      case 6: // Review
+      case 7: // Review
         const cost = calculateCost();
-        const enabledIntegrations = Object.entries(config.integrations)
-          .filter(([_, i]) => i.enabled)
-          .map(([key]) => INTEGRATION_TEMPLATES[key as keyof typeof INTEGRATION_TEMPLATES]);
+        const enabledIntegrationsForReview = getEnabledIntegrations();
         
         return (
           <div className="space-y-6">
+            {/* Provisioning Progress */}
+            {isCreating && provisioningSteps.length > 0 && (
+              <div className="p-4 bg-gray-900 rounded-lg border border-gray-800 mb-6">
+                <h4 className="text-sm font-medium mb-4 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Provisioning Application...
+                </h4>
+                <div className="space-y-2">
+                  {provisioningSteps.map((step, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      {step.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                      {step.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                      {step.status === 'failed' && <X className="h-4 w-4 text-red-500" />}
+                      {step.status === 'pending' && <div className="h-4 w-4 rounded-full border border-gray-600" />}
+                      {step.status === 'skipped' && <div className="h-4 w-4 text-gray-500">-</div>}
+                      <span className={step.status === 'failed' ? 'text-red-400' : ''}>{step.name}</span>
+                      {step.message && <span className="text-gray-500 text-xs">({step.message})</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div>
               <h3 className="text-lg font-medium mb-4">Review Configuration</h3>
               
@@ -1123,6 +1402,10 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Slug:</span>
                     <span>{config.slug}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Stack:</span>
+                    <span className="capitalize">{config.framework} ({config.language})</span>
                   </div>
                   {config.description && (
                     <div className="flex justify-between text-sm">
@@ -1143,7 +1426,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Template:</span>
-                    <span>{REPOSITORY_TEMPLATES.find(t => t.id === config.repository.template)?.name}</span>
+                    <span>{REPOSITORY_TEMPLATES.find(t => t.id === config.repository.template)?.name || 'Blank'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Visibility:</span>
@@ -1153,13 +1436,15 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
               </div>
               
               {/* Integrations */}
-              {enabledIntegrations.length > 0 && (
+              {enabledIntegrationsForReview.length > 0 && (
                 <div className="p-4 bg-gray-900 rounded-lg mb-4">
-                  <h4 className="text-sm font-medium text-gray-400 mb-3">Integrations</h4>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3">
+                    Integrations ({enabledIntegrationsForReview.length})
+                  </h4>
                   <div className="flex flex-wrap gap-2">
-                    {enabledIntegrations.map(integration => (
-                      <Badge key={integration.provider} variant="secondary">
-                        {integration.name}
+                    {enabledIntegrationsForReview.map(({ key, definition }) => (
+                      <Badge key={key} variant="secondary">
+                        {definition.name}
                       </Badge>
                     ))}
                   </div>
@@ -1174,7 +1459,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                     <div>
                       <div className="font-medium text-sm mb-1">Staging</div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                        <span>Domain: {config.deployment.environments.staging.domain || 'Auto-generated'}</span>
+                        <span>Domain: {config.deployment.environments.staging.domain || `${config.slug}-staging.gmac.io`}</span>
                         <span>Cluster: {config.deployment.environments.staging.cluster}</span>
                       </div>
                     </div>
@@ -1183,7 +1468,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                     <div>
                       <div className="font-medium text-sm mb-1">Production</div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                        <span>Domain: {config.deployment.environments.production.domain || 'Auto-generated'}</span>
+                        <span>Domain: {config.deployment.environments.production.domain || `${config.slug}.gmac.io`}</span>
                         <span>Cluster: {config.deployment.environments.production.cluster}</span>
                       </div>
                     </div>
@@ -1253,7 +1538,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
               <Rocket className="h-6 w-6 text-blue-500" />
               Create New Application
             </h2>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={isCreating}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -1267,8 +1552,8 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                 return (
                   <button
                     key={step.id}
-                    onClick={() => index <= currentStep && setCurrentStep(index)}
-                    disabled={index > currentStep}
+                    onClick={() => !isCreating && index <= currentStep && setCurrentStep(index)}
+                    disabled={index > currentStep || isCreating}
                     className={`flex flex-col items-center gap-1 ${
                       index === currentStep
                         ? 'text-blue-500'
@@ -1297,7 +1582,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
             <Button
               variant="outline"
               onClick={handlePrevious}
-              disabled={currentStep === 0}
+              disabled={currentStep === 0 || isCreating}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Previous
@@ -1313,7 +1598,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
               <Button onClick={handleCreate} disabled={isCreating}>
                 {isCreating ? (
                   <>
-                    <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Creating...
                   </>
                 ) : (
@@ -1324,7 +1609,7 @@ export function AppCreationWizard({ onClose, onSuccess }: AppCreationWizardProps
                 )}
               </Button>
             ) : (
-              <Button onClick={handleNext}>
+              <Button onClick={handleNext} disabled={isCreating}>
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
