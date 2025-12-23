@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { commitTracker } from '@/lib/pipeline/commit-tracker';
+
+// Lazy import commitTracker to avoid module-level errors from libsql
+let commitTrackerModule: typeof import('@/lib/pipeline/commit-tracker') | null = null;
+async function getCommitTracker() {
+  if (!commitTrackerModule) {
+    try {
+      commitTrackerModule = await import('@/lib/pipeline/commit-tracker');
+    } catch (err) {
+      console.warn('Failed to load commitTracker module:', err);
+      return null;
+    }
+  }
+  return commitTrackerModule?.commitTracker;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,6 +22,14 @@ export async function GET(request: NextRequest) {
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const commitTracker = await getCommitTracker();
+    if (!commitTracker) {
+      return NextResponse.json(
+        { error: 'Pipeline tracking service unavailable' },
+        { status: 503 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
@@ -122,6 +143,14 @@ export async function POST(request: NextRequest) {
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const commitTracker = await getCommitTracker();
+    if (!commitTracker) {
+      return NextResponse.json(
+        { error: 'Pipeline tracking service unavailable' },
+        { status: 503 }
+      );
     }
 
     const body = await request.json();

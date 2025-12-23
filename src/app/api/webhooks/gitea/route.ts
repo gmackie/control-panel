@@ -1,12 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { commitTracker } from '@/lib/pipeline/commit-tracker'
 import { 
   applicationsRepo, 
   commitsRepo, 
   deploymentsRepo, 
   webhooksRepo 
 } from '@/lib/db/repositories'
+
+// Lazy import commitTracker to avoid module-level errors from libsql
+let commitTrackerModule: typeof import('@/lib/pipeline/commit-tracker') | null = null
+async function getCommitTracker() {
+  if (!commitTrackerModule) {
+    try {
+      commitTrackerModule = await import('@/lib/pipeline/commit-tracker')
+    } catch (err) {
+      console.warn('Failed to load commitTracker module:', err)
+      return null
+    }
+  }
+  return commitTrackerModule?.commitTracker
+}
+
+// Type for the commit tracker
+type CommitTrackerType = Awaited<ReturnType<typeof getCommitTracker>>
 
 interface GiteaCommit {
   id: string
@@ -146,24 +162,32 @@ export async function POST(request: NextRequest) {
       console.warn('Failed to store webhook in PostgreSQL:', err)
     }
     
-    // Also store in Turso for backward compatibility
-    const webhookEventId = await commitTracker.storeWebhookEvent(
-      'gitea',
-      event || 'unknown',
-      payload,
-      payload.repository?.full_name,
-      signature || undefined
-    )
+    // Also store in Turso for backward compatibility (optional - may fail if libsql not available)
+    let webhookEventId: string | undefined
+    const commitTracker = await getCommitTracker()
+    if (commitTracker) {
+      try {
+        webhookEventId = await commitTracker.storeWebhookEvent(
+          'gitea',
+          event || 'unknown',
+          payload,
+          payload.repository?.full_name,
+          signature || undefined
+        )
+      } catch (err) {
+        console.warn('Failed to store webhook in Turso:', err)
+      }
+    }
     
     try {
       // Process different event types
       switch (event) {
         case 'push':
-          await handlePushEvent(payload, applicationId)
+          await handlePushEvent(payload, applicationId, commitTracker)
           break
         
         case 'pull_request':
-          await handlePullRequestEvent(payload, applicationId)
+          await handlePullRequestEvent(payload, applicationId, commitTracker)
           break
         
         case 'issues':
@@ -171,11 +195,11 @@ export async function POST(request: NextRequest) {
           break
         
         case 'release':
-          await handleReleaseEvent(payload, applicationId)
+          await handleReleaseEvent(payload, applicationId, commitTracker)
           break
 
         case 'workflow_run':
-          await handleWorkflowRunEvent(payload, applicationId)
+          await handleWorkflowRunEvent(payload, applicationId, commitTracker)
           break
         
         default:
@@ -183,7 +207,13 @@ export async function POST(request: NextRequest) {
       }
       
       // Mark webhook as processed in both databases
-      await commitTracker.markWebhookProcessed(webhookEventId)
+      if (webhookEventId && commitTracker) {
+        try {
+          await commitTracker.markWebhookProcessed(webhookEventId)
+        } catch (err) {
+          console.warn('Failed to mark Turso webhook as processed:', err)
+        }
+      }
       if (pgWebhookEventId) {
         try {
           await webhooksRepo.markWebhookProcessed(pgWebhookEventId)
@@ -194,7 +224,13 @@ export async function POST(request: NextRequest) {
       
     } catch (error) {
       // Mark webhook with error
-      await commitTracker.markWebhookProcessed(webhookEventId, String(error))
+      if (webhookEventId && commitTracker) {
+        try {
+          await commitTracker.markWebhookProcessed(webhookEventId, String(error))
+        } catch (err) {
+          console.warn('Failed to mark Turso webhook error:', err)
+        }
+      }
       if (pgWebhookEventId) {
         try {
           await webhooksRepo.markWebhookProcessed(pgWebhookEventId, String(error))
@@ -221,7 +257,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: string) {
+async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: string, commitTracker?: CommitTrackerType) {
   const repo = payload.repository?.full_name
   const branch = payload.ref?.replace('refs/heads/', '')
   const pusher = payload.pusher?.username
@@ -233,19 +269,25 @@ async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: str
   
   // Record each commit
   for (const commit of commits) {
-    // Record in Turso (backward compatibility)
-    await commitTracker.recordCommit({
-      sha: commit.id,
-      shortSha: commit.id.substring(0, 7),
-      message: commit.message.split('\n')[0], // First line only
-      author: commit.author.name,
-      authorEmail: commit.author.email,
-      authorAvatar: payload.pusher?.avatar_url,
-      branch,
-      repository: repo,
-      timestamp: commit.timestamp || new Date().toISOString(),
-      url: commit.url || `${payload.repository?.html_url}/commit/${commit.id}`,
-    })
+    // Record in Turso (backward compatibility - optional)
+    if (commitTracker) {
+      try {
+        await commitTracker.recordCommit({
+          sha: commit.id,
+          shortSha: commit.id.substring(0, 7),
+          message: commit.message.split('\n')[0], // First line only
+          author: commit.author.name,
+          authorEmail: commit.author.email,
+          authorAvatar: payload.pusher?.avatar_url,
+          branch,
+          repository: repo,
+          timestamp: commit.timestamp || new Date().toISOString(),
+          url: commit.url || `${payload.repository?.html_url}/commit/${commit.id}`,
+        })
+      } catch (err) {
+        console.warn('Failed to record commit in Turso:', err)
+      }
+    }
     
     // Record in PostgreSQL if applicationId is known
     if (applicationId) {
@@ -270,17 +312,23 @@ async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: str
     
     // Create a pending pipeline run for main/master branch
     if (branch === 'main' || branch === 'master') {
-      await commitTracker.recordPipelineRun({
-        id: `gitea-push-${commit.id.substring(0, 7)}-${Date.now()}`,
-        commitSha: commit.id,
-        repository: repo,
-        workflowName: 'CI/CD Pipeline',
-        status: 'pending',
-        branch,
-        event: 'push',
-        triggeredBy: pusher,
-        startedAt: new Date().toISOString(),
-      })
+      if (commitTracker) {
+        try {
+          await commitTracker.recordPipelineRun({
+            id: `gitea-push-${commit.id.substring(0, 7)}-${Date.now()}`,
+            commitSha: commit.id,
+            repository: repo,
+            workflowName: 'CI/CD Pipeline',
+            status: 'pending',
+            branch,
+            event: 'push',
+            triggeredBy: pusher,
+            startedAt: new Date().toISOString(),
+          })
+        } catch (err) {
+          console.warn('Failed to record pipeline run in Turso:', err)
+        }
+      }
       
       // Also record in PostgreSQL
       if (applicationId) {
@@ -303,18 +351,24 @@ async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: str
   
   // Record head commit separately if not in commits array
   if (payload.head_commit && !commits.find(c => c.id === payload.head_commit?.id)) {
-    await commitTracker.recordCommit({
-      sha: payload.head_commit.id,
-      shortSha: payload.head_commit.id.substring(0, 7),
-      message: payload.head_commit.message.split('\n')[0],
-      author: payload.head_commit.author.name,
-      authorEmail: payload.head_commit.author.email,
-      authorAvatar: payload.pusher?.avatar_url,
-      branch,
-      repository: repo,
-      timestamp: payload.head_commit.timestamp || new Date().toISOString(),
-      url: payload.head_commit.url || `${payload.repository?.html_url}/commit/${payload.head_commit.id}`,
-    })
+    if (commitTracker) {
+      try {
+        await commitTracker.recordCommit({
+          sha: payload.head_commit.id,
+          shortSha: payload.head_commit.id.substring(0, 7),
+          message: payload.head_commit.message.split('\n')[0],
+          author: payload.head_commit.author.name,
+          authorEmail: payload.head_commit.author.email,
+          authorAvatar: payload.pusher?.avatar_url,
+          branch,
+          repository: repo,
+          timestamp: payload.head_commit.timestamp || new Date().toISOString(),
+          url: payload.head_commit.url || `${payload.repository?.html_url}/commit/${payload.head_commit.id}`,
+        })
+      } catch (err) {
+        console.warn('Failed to record head commit in Turso:', err)
+      }
+    }
     
     // Record in PostgreSQL
     if (applicationId) {
@@ -339,7 +393,7 @@ async function handlePushEvent(payload: GiteaWebhookPayload, applicationId?: str
   }
 }
 
-async function handlePullRequestEvent(payload: GiteaWebhookPayload, applicationId?: string) {
+async function handlePullRequestEvent(payload: GiteaWebhookPayload, applicationId?: string, commitTracker?: CommitTrackerType) {
   const pr = payload.pull_request
   const action = payload.action
   const repo = payload.repository?.full_name
@@ -350,16 +404,22 @@ async function handlePullRequestEvent(payload: GiteaWebhookPayload, applicationI
   
   // Record the PR head commit if available
   if (pr.head?.sha) {
-    await commitTracker.recordCommit({
-      sha: pr.head.sha,
-      shortSha: pr.head.sha.substring(0, 7),
-      message: `PR #${pr.id}: ${pr.title}`,
-      author: payload.sender?.username || 'Unknown',
-      authorAvatar: payload.sender?.avatar_url,
-      branch: pr.head.ref,
-      repository: repo,
-      timestamp: new Date().toISOString(),
-    })
+    if (commitTracker) {
+      try {
+        await commitTracker.recordCommit({
+          sha: pr.head.sha,
+          shortSha: pr.head.sha.substring(0, 7),
+          message: `PR #${pr.id}: ${pr.title}`,
+          author: payload.sender?.username || 'Unknown',
+          authorAvatar: payload.sender?.avatar_url,
+          branch: pr.head.ref,
+          repository: repo,
+          timestamp: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.warn('Failed to record PR commit in Turso:', err)
+      }
+    }
     
     // Record in PostgreSQL
     if (applicationId) {
@@ -382,17 +442,23 @@ async function handlePullRequestEvent(payload: GiteaWebhookPayload, applicationI
     
     // Record pipeline for PR
     if (action === 'opened' || action === 'synchronize') {
-      await commitTracker.recordPipelineRun({
-        id: `gitea-pr-${pr.id}-${Date.now()}`,
-        commitSha: pr.head.sha,
-        repository: repo,
-        workflowName: 'PR Build',
-        status: 'pending',
-        branch: pr.head.ref,
-        event: 'pull_request',
-        triggeredBy: payload.sender?.username,
-        startedAt: new Date().toISOString(),
-      })
+      if (commitTracker) {
+        try {
+          await commitTracker.recordPipelineRun({
+            id: `gitea-pr-${pr.id}-${Date.now()}`,
+            commitSha: pr.head.sha,
+            repository: repo,
+            workflowName: 'PR Build',
+            status: 'pending',
+            branch: pr.head.ref,
+            event: 'pull_request',
+            triggeredBy: payload.sender?.username,
+            startedAt: new Date().toISOString(),
+          })
+        } catch (err) {
+          console.warn('Failed to record PR pipeline in Turso:', err)
+        }
+      }
       
       // Record in PostgreSQL
       if (applicationId) {
@@ -424,7 +490,7 @@ async function handleIssueEvent(payload: GiteaWebhookPayload) {
   // Issues don't directly affect pipeline, just log for now
 }
 
-async function handleReleaseEvent(payload: GiteaWebhookPayload, applicationId?: string) {
+async function handleReleaseEvent(payload: GiteaWebhookPayload, applicationId?: string, commitTracker?: CommitTrackerType) {
   const release = payload.release
   const repo = payload.repository?.full_name
   
@@ -452,17 +518,23 @@ async function handleReleaseEvent(payload: GiteaWebhookPayload, applicationId?: 
   // Record release commit if available
   if (release.target_commitish) {
     // Create a deployment event for production in Turso
-    await commitTracker.recordDeployment({
-      id: `release-${release.tag_name}-${Date.now()}`,
-      commitSha: release.target_commitish,
-      repository: repo,
-      environment: 'production',
-      namespace: repo.split('/')[1] || 'default',
-      deploymentName: repo.split('/')[1] || 'app',
-      status: 'pending',
-      imageTag: release.tag_name,
-      deployedBy: release.author?.username,
-    })
+    if (commitTracker) {
+      try {
+        await commitTracker.recordDeployment({
+          id: `release-${release.tag_name}-${Date.now()}`,
+          commitSha: release.target_commitish,
+          repository: repo,
+          environment: 'production',
+          namespace: repo.split('/')[1] || 'default',
+          deploymentName: repo.split('/')[1] || 'app',
+          status: 'pending',
+          imageTag: release.tag_name,
+          deployedBy: release.author?.username,
+        })
+      } catch (err) {
+        console.warn('Failed to record release deployment in Turso:', err)
+      }
+    }
     
     // Create deployment in PostgreSQL
     if (applicationId) {
@@ -483,7 +555,7 @@ async function handleReleaseEvent(payload: GiteaWebhookPayload, applicationId?: 
   }
 }
 
-async function handleWorkflowRunEvent(payload: GiteaWebhookPayload, applicationId?: string) {
+async function handleWorkflowRunEvent(payload: GiteaWebhookPayload, applicationId?: string, commitTracker?: CommitTrackerType) {
   const workflowRun = payload.workflow_run
   const repo = payload.repository?.full_name
   
@@ -515,19 +587,25 @@ async function handleWorkflowRunEvent(payload: GiteaWebhookPayload, applicationI
   const pipelineId = `gitea-workflow-${workflowRun.id}`
   
   if (payload.action === 'created' || payload.action === 'requested') {
-    await commitTracker.recordPipelineRun({
-      id: pipelineId,
-      commitSha: workflowRun.head_sha,
-      repository: repo,
-      workflowName: workflowRun.name,
-      status,
-      conclusion: workflowRun.conclusion,
-      branch: workflowRun.head_branch,
-      event: workflowRun.event,
-      triggeredBy: workflowRun.actor?.login,
-      startedAt: workflowRun.created_at,
-      url: `${payload.repository?.html_url}/actions/runs/${workflowRun.id}`,
-    })
+    if (commitTracker) {
+      try {
+        await commitTracker.recordPipelineRun({
+          id: pipelineId,
+          commitSha: workflowRun.head_sha,
+          repository: repo,
+          workflowName: workflowRun.name,
+          status,
+          conclusion: workflowRun.conclusion,
+          branch: workflowRun.head_branch,
+          event: workflowRun.event,
+          triggeredBy: workflowRun.actor?.login,
+          startedAt: workflowRun.created_at,
+          url: `${payload.repository?.html_url}/actions/runs/${workflowRun.id}`,
+        })
+      } catch (err) {
+        console.warn('Failed to record pipeline run in Turso:', err)
+      }
+    }
     
     // Record in PostgreSQL
     if (applicationId) {
@@ -549,12 +627,18 @@ async function handleWorkflowRunEvent(payload: GiteaWebhookPayload, applicationI
       }
     }
   } else if (payload.action === 'completed') {
-    await commitTracker.updatePipelineStatus(
-      pipelineId,
-      status,
-      workflowRun.conclusion,
-      workflowRun.updated_at
-    )
+    if (commitTracker) {
+      try {
+        await commitTracker.updatePipelineStatus(
+          pipelineId,
+          status,
+          workflowRun.conclusion,
+          workflowRun.updated_at
+        )
+      } catch (err) {
+        console.warn('Failed to update pipeline status in Turso:', err)
+      }
+    }
     
     // Calculate duration
     let duration: number | undefined
@@ -567,17 +651,23 @@ async function handleWorkflowRunEvent(payload: GiteaWebhookPayload, applicationI
     // If workflow succeeded on main/master, create staging deployment
     if (status === 'success' && 
         (workflowRun.head_branch === 'main' || workflowRun.head_branch === 'master')) {
-      await commitTracker.recordDeployment({
-        id: `auto-staging-${workflowRun.head_sha.substring(0, 7)}-${Date.now()}`,
-        commitSha: workflowRun.head_sha,
-        repository: repo,
-        environment: 'staging',
-        namespace: `${repo.split('/')[1]}-staging`,
-        deploymentName: repo.split('/')[1] || 'app',
-        status: 'pending',
-        imageTag: `sha-${workflowRun.head_sha.substring(0, 7)}`,
-        deployedBy: workflowRun.actor?.login,
-      })
+      if (commitTracker) {
+        try {
+          await commitTracker.recordDeployment({
+            id: `auto-staging-${workflowRun.head_sha.substring(0, 7)}-${Date.now()}`,
+            commitSha: workflowRun.head_sha,
+            repository: repo,
+            environment: 'staging',
+            namespace: `${repo.split('/')[1]}-staging`,
+            deploymentName: repo.split('/')[1] || 'app',
+            status: 'pending',
+            imageTag: `sha-${workflowRun.head_sha.substring(0, 7)}`,
+            deployedBy: workflowRun.actor?.login,
+          })
+        } catch (err) {
+          console.warn('Failed to record staging deployment in Turso:', err)
+        }
+      }
       
       // Create staging deployment in PostgreSQL
       if (applicationId) {

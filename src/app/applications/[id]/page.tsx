@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Activity,
   Code,
   GitCommit,
   GitBranch,
@@ -39,6 +40,7 @@ import {
   UsersTab,
   AnalyticsTab,
   PaymentsTab,
+  ActivityTab,
 } from "@/components/applications/tabs";
 
 // Import existing components for secrets/integrations/settings
@@ -140,6 +142,7 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
 
   const tabs = [
     { id: "overview", label: "Overview", icon: Code },
+    { id: "activity", label: "Activity", icon: Activity },
     { id: "commits", label: "Commits", icon: GitCommit },
     { id: "pipelines", label: "Pipelines", icon: PlayCircle },
     { id: "deployments", label: "Deployments", icon: Rocket },
@@ -460,6 +463,11 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
               )}
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Activity Tab */}
+        <TabsContent value="activity">
+          <ActivityTab appId={params.id} />
         </TabsContent>
 
         {/* Commits Tab */}
