@@ -39,10 +39,11 @@ htmlcov/
 tmp/
 temp/
 
-# Kubernetes secrets
+# Kubernetes secrets (YAML files only, not code directories)
 *-secret.yaml
 *-secrets.yaml
-secrets/
+/secrets/
+k8s/secrets/
 
 # Docker
 *.tar
