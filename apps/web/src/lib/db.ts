@@ -3,12 +3,12 @@
  * Uses Neon PostgreSQL with serverless driver
  */
 
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { neon, NeonQueryFunction } from "@neondatabase/serverless";
+import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
 import * as schema from "@repo/db";
 
 // Type for database instance
-type Database = ReturnType<typeof drizzle<typeof schema>>;
+type Database = NeonHttpDatabase<typeof schema>;
 
 let dbInstance: Database | null = null;
 
@@ -30,8 +30,8 @@ const initDb = (): Database | null => {
   if (!url) return null;
 
   try {
-    const sql = neon(url);
-    dbInstance = drizzle(sql as ReturnType<typeof neon>, { schema });
+    const sql = neon(url) as NeonQueryFunction<false, false>;
+    dbInstance = drizzle(sql, { schema });
     return dbInstance;
   } catch (error) {
     console.warn("Failed to create database client:", error);
