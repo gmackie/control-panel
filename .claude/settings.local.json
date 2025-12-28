@@ -61,7 +61,8 @@
       "Bash(ssh root@5.78.106.236 \"/usr/local/bin/k3s ctr images ls | grep control-panel\")",
       "Bash(ssh root@5.78.125.172 \"/usr/local/bin/k3s ctr images ls | grep control-panel\")",
       "Bash(docker buildx build:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Skill(superpowers:brainstorming)"
     ],
     "deny": [],
     "additionalDirectories": [

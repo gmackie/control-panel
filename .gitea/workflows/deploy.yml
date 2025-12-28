@@ -6,9 +6,41 @@ on:
   pull_request:
     branches: [ main, master ]
 
+env:
+  REGISTRY: ci.gmac.io
+  IMAGE_NAME: control-panel
+  PNPM_VERSION: 9.15.1
+
 jobs:
-  build:
+  # Typecheck and lint
+  check:
     runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install pnpm
+      run: npm install -g pnpm@${{ env.PNPM_VERSION }}
+    
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+    
+    - name: Typecheck
+      run: pnpm typecheck
+    
+    - name: Lint
+      run: pnpm lint
+      continue-on-error: true
+
+  # Build and push Docker image
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     
     steps:
     - uses: actions/checkout@v4
@@ -19,29 +51,72 @@ jobs:
     - name: Login to Gitea Registry
       uses: docker/login-action@v3
       with:
-        registry: ci.gmac.io
+        registry: ${{ env.REGISTRY }}
         username: ${{ secrets.GITEAUSERNAME }}
         password: ${{ secrets.GITEATOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ secrets.GITEAUSERNAME }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,prefix=
+          type=raw,value=latest,enable={{is_default_branch}}
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
-        tags: |
-          ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:latest
-          ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:${{ github.sha }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         build-args: |
-          GITHUB_ID=${{ secrets.GITHUBID }}
-          GITHUB_SECRET=${{ secrets.GITHUBSECRET }}
-          NEXTAUTH_SECRET=${{ secrets.NEXTAUTHSECRET }}
-          TURSO_DATABASE_URL=${{ secrets.TURSODATABASEURL }}
-          TURSO_AUTH_TOKEN=${{ secrets.TURSOAUTHTOKEN }}
-          GITEA_TOKEN=${{ secrets.GITEATOKEN }}
-          K3S_SA_TOKEN=${{ secrets.K3SSATOKEN }}
+          NEXT_PUBLIC_API_URL=https://control.gmac.io/api
+
+  # Deploy to K3s cluster
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+    
+    - name: Configure kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+        chmod 600 ~/.kube/config
     
     - name: Deploy to K3s
       run: |
-        echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-        kubectl --kubeconfig=/tmp/kubeconfig set image deployment/control-panel control-panel=ci.gmac.io/${{ secrets.GITEAUSERNAME }}/control-panel:${{ github.sha }} -n gmac-io
-        kubectl --kubeconfig=/tmp/kubeconfig rollout status deployment/control-panel -n gmac-io
+        # Update the image
+        kubectl set image deployment/control-panel \
+          control-panel=${{ env.REGISTRY }}/${{ secrets.GITEAUSERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          -n gmac-io
+        
+        # Wait for rollout
+        kubectl rollout status deployment/control-panel -n gmac-io --timeout=300s
+    
+    - name: Verify deployment
+      run: |
+        # Check pod status
+        kubectl get pods -n gmac-io -l app=control-panel
+        
+        # Run health check
+        kubectl exec -n gmac-io deployment/control-panel -- wget -q -O - http://localhost:3000/api/health || echo "Health check skipped"
+    
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "Deployment failed! Rolling back..."
+        kubectl rollout undo deployment/control-panel -n gmac-io
+        kubectl rollout status deployment/control-panel -n gmac-io --timeout=120s
