@@ -5,6 +5,7 @@
  */
 
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import type { TRPCError } from "@trpc/server";
 import { appRouter, createContext } from "@repo/api";
 
 /**
@@ -36,8 +37,8 @@ const handler = (req: Request) =>
         userId,
       });
     },
-    onError: ({ error, path }) => {
-      console.error(`tRPC error on ${path}:`, error);
+    onError: ({ error, path }: { error: TRPCError; path?: string }) => {
+      console.error(`tRPC error on ${path ?? "unknown"}:`, error);
     },
   });
 
