@@ -410,7 +410,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             {filteredCommands.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No results found for "{search}"</p>
+                <p>No results found for &quot;{search}&quot;</p>
                 <p className="text-sm mt-1">Try searching for applications, services, or commands</p>
               </div>
             ) : (

@@ -39,23 +39,6 @@ export function GenericIntegrationForm({
 }: GenericIntegrationFormProps) {
   const template = INTEGRATION_TEMPLATES[provider as keyof typeof INTEGRATION_TEMPLATES];
   
-  if (!template) {
-    return (
-      <Card className="p-6">
-        <div className="text-center py-8">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium mb-2">Unknown Integration</h3>
-          <p className="text-gray-400">
-            No template found for provider: {provider}
-          </p>
-          <Button onClick={onCancel} className="mt-4">
-            Go Back
-          </Button>
-        </div>
-      </Card>
-    );
-  }
-
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true);
@@ -91,6 +74,23 @@ export function GenericIntegrationForm({
       setTestMessage(error.message);
     },
   });
+  
+  if (!template) {
+    return (
+      <Card className="p-6">
+        <div className="text-center py-8">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium mb-2">Unknown Integration</h3>
+          <p className="text-gray-400">
+            No template found for provider: {provider}
+          </p>
+          <Button onClick={onCancel} className="mt-4">
+            Go Back
+          </Button>
+        </div>
+      </Card>
+    );
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

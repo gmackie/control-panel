@@ -31,8 +31,7 @@ const initDb = (): Database | null => {
 
   try {
     const sql = neon(url);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    dbInstance = drizzle(sql as any, { schema });
+    dbInstance = drizzle(sql as ReturnType<typeof neon>, { schema });
     return dbInstance;
   } catch (error) {
     console.warn("Failed to create database client:", error);
