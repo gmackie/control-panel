@@ -1,0 +1,54 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "globalEnv": [
+    "TURSO_DATABASE_URL",
+    "TURSO_AUTH_TOKEN",
+    "GITHUB_ID",
+    "GITHUB_SECRET",
+    "NEXTAUTH_URL",
+    "NEXTAUTH_SECRET",
+    "GITEA_URL",
+    "GITEA_TOKEN",
+    "HETZNER_API_TOKEN",
+    "K3S_SA_TOKEN",
+    "CLUSTER_API_URL",
+    "STRIPE_API_KEY",
+    "CLERK_API_KEY",
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_DSN",
+    "SLACK_WEBHOOK_URL",
+    "SENDGRID_API_KEY",
+    "EXPO_PUBLIC_API_URL",
+    "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "@repo/mobile#build": {
+      "dependsOn": [],
+      "outputs": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

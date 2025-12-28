@@ -1,0 +1,109 @@
+# Node modules (installed fresh during build)
+node_modules/
+**/node_modules/
+
+# Other apps in the monorepo (not needed for mobile)
+apps/web/
+../web/
+
+# Build outputs and caches
+dist/
+build/
+.expo/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+*.tsbuildinfo
+
+# Test files
+__tests__/
+**/__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage/
+**/coverage/
+tests/
+**/tests/
+test-results/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.vim
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+docs/
+**/docs/
+
+# Root level files not needed
+*.md
+LICENSE
+CLAUDE.md
+
+# Package manager
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Turbo cache
+.turbo/
+
+# Development configs
+drizzle/
+drizzle-pg/
+*.config.ts
+*.config.js
+!app.json
+!metro.config.js
+!babel.config.js
+
+# Scripts
+scripts/
+
+# Kubernetes and deployment
+k8s/
+deployment/
+deployment-system/
+
+# AI and ML (not needed for mobile build)
+ai-operations/
+ai-services/
+ml-analytics/
+
+# Backend Python
+backend/
+*.py
+
+# Other infrastructure
+monitoring/
+observability/
+security/
+sre/
+support/
+runbooks/
+enterprise-integration/
+multi-cloud/
+disaster-recovery/
+continuous-improvement/
+analytics-bi/
+service-orchestration/
+performance/
+production/
+tooling/
