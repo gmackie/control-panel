@@ -1,15 +1,15 @@
 /**
  * Database Client
  * 
- * Turso/LibSQL connection setup
+ * Neon/PostgreSQL connection setup
  */
 
-import { createClient } from "@libsql/client";
-import { drizzle, LibSQLDatabase } from "drizzle-orm/libsql";
+import { neon } from "@neondatabase/serverless";
+import { drizzle, NeonHttpDatabase } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 // Type for the database instance
-export type Database = LibSQLDatabase<typeof schema>;
+export type Database = NeonHttpDatabase<typeof schema>;
 
 // Singleton database instance
 let dbInstance: Database | null = null;
@@ -18,30 +18,19 @@ let dbInstance: Database | null = null;
  * Get database URL from environment
  */
 function getDatabaseUrl(): string {
-  const url = process.env.TURSO_DATABASE_URL;
+  const url = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
   if (!url) {
-    throw new Error("TURSO_DATABASE_URL is not set");
+    throw new Error("DATABASE_URL or NEON_DATABASE_URL is not set");
   }
   return url;
-}
-
-/**
- * Get auth token from environment
- */
-function getAuthToken(): string | undefined {
-  return process.env.TURSO_AUTH_TOKEN;
 }
 
 /**
  * Initialize the database client
  */
 function initializeDb(): Database {
-  const client = createClient({
-    url: getDatabaseUrl(),
-    authToken: getAuthToken(),
-  });
-  
-  return drizzle(client, { schema });
+  const sql = neon(getDatabaseUrl());
+  return drizzle(sql, { schema });
 }
 
 /**

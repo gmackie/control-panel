@@ -7,19 +7,20 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "db:generate": "drizzle-kit generate:sqlite",
-    "db:migrate": "tsx src/migrate.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@libsql/client": "^0.5.0",
-    "drizzle-orm": "^0.29.0"
+    "@neondatabase/serverless": "^0.10.0",
+    "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "dotenv": "^16.3.0",
-    "drizzle-kit": "^0.20.0",
+    "dotenv": "^16.4.0",
+    "drizzle-kit": "^0.31.8",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"
   }

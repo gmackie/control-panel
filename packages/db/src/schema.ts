@@ -1,150 +1,517 @@
 /**
  * Database Schema
  * 
- * Drizzle ORM schema definitions for Turso/SQLite
+ * Drizzle ORM schema definitions for Neon/PostgreSQL
  */
 
-import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, real, timestamp, boolean, index, uuid, varchar } from "drizzle-orm/pg-core";
 
 // ===================================
 // Applications
 // ===================================
 
-export const applications = sqliteTable("applications", {
-  id: text("id").primaryKey(),
+export const applications = pgTable("applications", {
+  id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
   description: text("description"),
   repositoryUrl: text("repository_url"),
-  status: text("status").notNull().default("active"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // ===================================
 // Activity Events
 // ===================================
 
-export const activityEvents = sqliteTable("activity_events", {
-  id: text("id").primaryKey(),
-  timestamp: text("timestamp").notNull(),
-  source: text("source").notNull(),
-  category: text("category").notNull(),
-  eventType: text("event_type").notNull(),
-  severity: text("severity").notNull(),
-  appId: text("app_id"),
+export const activityEvents = pgTable("activity_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  source: varchar("source", { length: 100 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  severity: varchar("severity", { length: 50 }).notNull(),
+  appId: uuid("app_id"),
   appName: text("app_name"),
-  environment: text("environment"),
+  environment: varchar("environment", { length: 50 }),
   title: text("title").notNull(),
   description: text("description"),
-  actorType: text("actor_type"),
+  actorType: varchar("actor_type", { length: 50 }),
   actorId: text("actor_id"),
   actorName: text("actor_name"),
   actorEmail: text("actor_email"),
   actorAvatar: text("actor_avatar"),
-  links: text("links"),
-  metadata: text("metadata"),
-  createdAt: text("created_at").notNull(),
+  links: text("links"), // JSON
+  metadata: text("metadata"), // JSON
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ===================================
 // Notifications
 // ===================================
 
-export const notifications = sqliteTable("notifications", {
-  id: text("id").primaryKey(),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-  source: text("source").notNull(),
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  source: varchar("source", { length: 100 }).notNull(),
   sourceEventId: text("source_event_id"),
-  activityEventId: text("activity_event_id"),
-  category: text("category").notNull(),
-  severity: text("severity").notNull(),
+  activityEventId: uuid("activity_event_id"),
+  category: varchar("category", { length: 100 }).notNull(),
+  severity: varchar("severity", { length: 50 }).notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
-  appId: text("app_id"),
+  appId: uuid("app_id"),
   appName: text("app_name"),
-  environment: text("environment"),
-  actions: text("actions"),
-  links: text("links"),
-  status: text("status").notNull().default("new"),
+  environment: varchar("environment", { length: 50 }),
+  actions: text("actions"), // JSON
+  links: text("links"), // JSON
+  status: varchar("status", { length: 50 }).notNull().default("new"),
   acknowledgedBy: text("acknowledged_by"),
-  acknowledgedAt: text("acknowledged_at"),
+  acknowledgedAt: timestamp("acknowledged_at"),
   resolvedBy: text("resolved_by"),
-  resolvedAt: text("resolved_at"),
-  snoozedUntil: text("snoozed_until"),
+  resolvedAt: timestamp("resolved_at"),
+  snoozedUntil: timestamp("snoozed_until"),
   groupKey: text("group_key"),
   groupCount: integer("group_count").default(1),
-  deliveredVia: text("delivered_via"),
+  deliveredVia: text("delivered_via"), // JSON
   userId: text("user_id"),
-  metadata: text("metadata"),
+  metadata: text("metadata"), // JSON
 });
 
-export const notificationRules = sqliteTable("notification_rules", {
-  id: text("id").primaryKey(),
+export const notificationRules = pgTable("notification_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  enabled: integer("enabled").notNull().default(1),
+  enabled: boolean("enabled").notNull().default(true),
   priority: integer("priority").notNull().default(0),
-  conditions: text("conditions").notNull(),
-  channels: text("channels").notNull(),
-  dedupe: text("dedupe"),
-  schedule: text("schedule"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  conditions: text("conditions").notNull(), // JSON
+  channels: text("channels").notNull(), // JSON
+  dedupe: text("dedupe"), // JSON
+  schedule: text("schedule"), // JSON
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdBy: text("created_by"),
 });
 
-export const notificationPreferences = sqliteTable("notification_preferences", {
-  id: text("id").primaryKey(),
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull().unique(),
-  emailEnabled: integer("email_enabled").notNull().default(1),
-  slackEnabled: integer("slack_enabled").notNull().default(1),
-  pushEnabled: integer("push_enabled").notNull().default(1),
-  inAppEnabled: integer("in_app_enabled").notNull().default(1),
-  categoryPreferences: text("category_preferences"),
-  quietHours: text("quiet_hours"),
-  emailDigest: text("email_digest"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  emailEnabled: boolean("email_enabled").notNull().default(true),
+  slackEnabled: boolean("slack_enabled").notNull().default(true),
+  pushEnabled: boolean("push_enabled").notNull().default(true),
+  inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+  categoryPreferences: text("category_preferences"), // JSON
+  quietHours: text("quiet_hours"), // JSON
+  emailDigest: text("email_digest"), // JSON
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const pushSubscriptions = sqliteTable("push_subscriptions", {
-  id: text("id").primaryKey(),
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   deviceId: text("device_id").notNull(),
   deviceName: text("device_name"),
-  platform: text("platform").notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
   pushToken: text("push_token").notNull(),
-  active: integer("active").notNull().default(1),
-  lastUsedAt: text("last_used_at"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  active: boolean("active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const notificationDeliveryLog = sqliteTable("notification_delivery_log", {
-  id: text("id").primaryKey(),
-  notificationId: text("notification_id").notNull(),
-  channel: text("channel").notNull(),
-  success: integer("success").notNull(),
+export const notificationDeliveryLog = pgTable("notification_delivery_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  notificationId: uuid("notification_id").notNull(),
+  channel: varchar("channel", { length: 50 }).notNull(),
+  success: boolean("success").notNull(),
   error: text("error"),
   messageId: text("message_id"),
-  createdAt: text("created_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ===================================
 // Users (for internal tracking)
 // ===================================
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name"),
   avatar: text("avatar"),
-  role: text("role").notNull().default("user"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  role: varchar("role", { length: 50 }).notNull().default("user"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ===================================
+// Alerts
+// ===================================
+
+export const alerts = pgTable("alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  severity: varchar("severity", { length: 50 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull(),
+  startsAt: timestamp("starts_at").notNull(),
+  endsAt: timestamp("ends_at"),
+  summary: text("summary").notNull(),
+  description: text("description"),
+  labels: text("labels"), // JSON
+});
+
+// ===================================
+// Services
+// ===================================
+
+export const services = pgTable("services", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  type: varchar("type", { length: 100 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("unknown"),
+  uptime: varchar("uptime", { length: 20 }).default("0%"),
+  version: varchar("version", { length: 50 }).default("1.0.0"),
+  environment: varchar("environment", { length: 50 }).default("development"),
+  url: text("url"),
+  lastChecked: timestamp("last_checked").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const serviceMetrics = pgTable("service_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serviceId: uuid("service_id").notNull().references(() => services.id),
+  cpu: real("cpu"),
+  memory: real("memory"),
+  requests: integer("requests"),
+  responseTime: real("response_time"),
+  errorRate: real("error_rate"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+export const serviceIntegrations = pgTable("service_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serviceId: uuid("service_id").notNull().references(() => services.id),
+  type: varchar("type", { length: 100 }).notNull(),
+  provider: varchar("provider", { length: 100 }).notNull(),
+  name: text("name").notNull(),
+  config: text("config").notNull(), // JSON
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  lastChecked: timestamp("last_checked").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===================================
+// Deployments
+// ===================================
+
+export const deployments = pgTable("deployments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  namespace: varchar("namespace", { length: 255 }).notNull(),
+  repository: text("repository").notNull(),
+  branch: varchar("branch", { length: 255 }).notNull(),
+  commit: varchar("commit", { length: 255 }).notNull(),
+  commitMessage: text("commit_message").notNull(),
+  author: text("author").notNull(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  status: varchar("status", { length: 50 }).notNull(),
+  environment: varchar("environment", { length: 50 }).notNull(),
+  url: text("url"),
+});
+
+// ===================================
+// Databases
+// ===================================
+
+export const databases = pgTable("databases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  appId: uuid("app_id").notNull(),
+  location: varchar("location", { length: 100 }).notNull(),
+  size: integer("size").notNull(),
+  connections: integer("connections").notNull(),
+  status: varchar("status", { length: 50 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const databaseOperations = pgTable("database_operations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  databaseId: uuid("database_id").notNull().references(() => databases.id),
+  reads: integer("reads").notNull().default(0),
+  writes: integer("writes").notNull().default(0),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+// ===================================
+// Customers & Revenue
+// ===================================
+
+export const customers = pgTable("customers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  company: text("company"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const customerSubscriptions = pgTable("customer_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  plan: varchar("plan", { length: 100 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  mrr: real("mrr").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const customerUsage = pgTable("customer_usage", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  apiCalls: integer("api_calls").notNull().default(0),
+  dataProcessed: integer("data_processed").notNull().default(0),
+  activeUsers: integer("active_users").notNull().default(0),
+  period: varchar("period", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+export const revenueMetrics = pgTable("revenue_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mrr: real("mrr").notNull(),
+  arr: real("arr").notNull(),
+  newCustomers: integer("new_customers").notNull().default(0),
+  churnedCustomers: integer("churned_customers").notNull().default(0),
+  revenue: text("revenue").notNull(), // JSON
+  topPlans: text("top_plans").notNull(), // JSON
+  period: varchar("period", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+// ===================================
+// Usage Analytics
+// ===================================
+
+export const usageAnalytics = pgTable("usage_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  appId: uuid("app_id").notNull(),
+  period: varchar("period", { length: 50 }).notNull(),
+  requests: integer("requests").notNull(),
+  uniqueUsers: integer("unique_users").notNull(),
+  avgResponseTime: real("avg_response_time").notNull(),
+  errorRate: real("error_rate").notNull(),
+  p95ResponseTime: real("p95_response_time").notNull(),
+  p99ResponseTime: real("p99_response_time").notNull(),
+  topEndpoints: text("top_endpoints").notNull(), // JSON
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+// ===================================
+// Cost Tracking
+// ===================================
+
+/**
+ * Cost entries - individual cost records from various providers
+ * This is the main table for tracking all infrastructure and service costs
+ */
+export const costEntries = pgTable("cost_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Provider information
+  provider: varchar("provider", { length: 100 }).notNull(), // hetzner, aws, gcp, azure, stripe, turso, openrouter, etc.
+  service: varchar("service", { length: 100 }).notNull(), // specific service name (e.g., "EC2", "Lambda", "VPS")
+  
+  // Resource identification
+  resourceId: text("resource_id").notNull(), // external resource ID
+  resourceName: text("resource_name").notNull(),
+  resourceType: varchar("resource_type", { length: 100 }).notNull(), // server, database, storage, api, etc.
+  
+  // Application attribution (critical for per-app cost tracking)
+  applicationId: uuid("application_id"), // links to applications table
+  applicationName: text("application_name"),
+  environment: varchar("environment", { length: 50 }), // production, staging, development
+  namespace: varchar("namespace", { length: 255 }), // k8s namespace if applicable
+  
+  // Cost data
+  amount: real("amount").notNull(), // cost amount
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  period: varchar("period", { length: 50 }).notNull(), // hourly, daily, monthly
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Usage metrics
+  usageQuantity: real("usage_quantity"),
+  usageUnit: varchar("usage_unit", { length: 50 }), // hours, GB, requests, tokens, etc.
+  
+  // Categorization
+  category: varchar("category", { length: 100 }).notNull(), // compute, storage, network, database, api, monitoring, other
+  
+  // Metadata
+  tags: text("tags"), // JSON array of tags
+  metadata: text("metadata"), // JSON object for additional data
+  
+  // Timestamps
+  collectedAt: timestamp("collected_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  providerIdx: index("cost_entries_provider_idx").on(table.provider),
+  applicationIdx: index("cost_entries_application_idx").on(table.applicationId),
+  periodStartIdx: index("cost_entries_period_start_idx").on(table.periodStart),
+  categoryIdx: index("cost_entries_category_idx").on(table.category),
+}));
+
+/**
+ * Cost aggregations - pre-computed daily/monthly summaries for fast queries
+ */
+export const costAggregations = pgTable("cost_aggregations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Aggregation dimensions
+  aggregationType: varchar("aggregation_type", { length: 50 }).notNull(), // daily, monthly
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Grouping dimensions (any can be null for totals)
+  provider: varchar("provider", { length: 100 }),
+  applicationId: uuid("application_id"),
+  applicationName: text("application_name"),
+  environment: varchar("environment", { length: 50 }),
+  category: varchar("category", { length: 100 }),
+  
+  // Aggregated values
+  totalAmount: real("total_amount").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  entryCount: integer("entry_count").notNull(),
+  
+  // Breakdown (JSON for flexibility)
+  byResourceType: text("by_resource_type"), // JSON: { "server": 100, "storage": 50 }
+  byService: text("by_service"), // JSON: { "EC2": 80, "S3": 20 }
+  
+  // Comparison data
+  previousPeriodAmount: real("previous_period_amount"),
+  changePercent: real("change_percent"),
+  
+  // Timestamps
+  calculatedAt: timestamp("calculated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  typeIdx: index("cost_agg_type_idx").on(table.aggregationType),
+  periodIdx: index("cost_agg_period_idx").on(table.periodStart),
+  appIdx: index("cost_agg_app_idx").on(table.applicationId),
+}));
+
+/**
+ * Budgets - spending limits and alerts
+ */
+export const budgets = pgTable("budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Scope
+  applicationId: uuid("application_id"), // null = all apps
+  environment: varchar("environment", { length: 50 }), // null = all environments
+  provider: varchar("provider", { length: 100 }), // null = all providers
+  category: varchar("category", { length: 100 }), // null = all categories
+  
+  // Budget configuration
+  amount: real("amount").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  period: varchar("period", { length: 50 }).notNull(), // monthly, quarterly, yearly
+  
+  // Current spend tracking
+  currentSpend: real("current_spend").notNull().default(0),
+  lastCalculatedAt: timestamp("last_calculated_at"),
+  
+  // Alerts
+  alertThresholds: text("alert_thresholds"), // JSON: [{ percent: 80, notified: false }, ...]
+  alertChannels: text("alert_channels"), // JSON: ["email", "slack"]
+  
+  // Status
+  enabled: boolean("enabled").notNull().default(true),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Cost alerts - triggered budget/anomaly alerts
+ */
+export const costAlerts = pgTable("cost_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Alert type
+  alertType: varchar("alert_type", { length: 50 }).notNull(), // budget_threshold, anomaly, spike, forecast
+  severity: varchar("severity", { length: 50 }).notNull(), // warning, critical
+  
+  // Reference
+  budgetId: uuid("budget_id"), // for budget alerts
+  applicationId: uuid("application_id"),
+  provider: varchar("provider", { length: 100 }),
+  
+  // Alert details
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  thresholdPercent: real("threshold_percent"),
+  currentAmount: real("current_amount"),
+  budgetAmount: real("budget_amount"),
+  
+  // Status
+  status: varchar("status", { length: 50 }).notNull().default("active"), // active, acknowledged, resolved
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Notifications
+  notifiedVia: text("notified_via"), // JSON array of channels notified
+  
+  // Timestamps
+  triggeredAt: timestamp("triggered_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Third-party integration costs - API usage costs from external services
+ */
+export const integrationCosts = pgTable("integration_costs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Integration identification
+  integrationId: text("integration_id").notNull(),
+  integrationType: varchar("integration_type", { length: 100 }).notNull(), // stripe, openrouter, elevenlabs, turso, etc.
+  applicationId: uuid("application_id"),
+  applicationName: text("application_name"),
+  
+  // Period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Usage metrics
+  usageType: varchar("usage_type", { length: 100 }).notNull(), // api_calls, tokens, messages, storage, transactions
+  usageQuantity: real("usage_quantity").notNull(),
+  usageUnit: varchar("usage_unit", { length: 50 }).notNull(),
+  
+  // Cost
+  amount: real("amount").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  
+  // Additional details
+  breakdown: text("breakdown"), // JSON for detailed breakdown
+  metadata: text("metadata"),
+  
+  // Timestamps
+  collectedAt: timestamp("collected_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  integrationIdx: index("int_costs_integration_idx").on(table.integrationType),
+  appIdx: index("int_costs_app_idx").on(table.applicationId),
+  periodIdx: index("int_costs_period_idx").on(table.periodStart),
+}));
 
 // ===================================
 // Type Exports
@@ -171,212 +538,14 @@ export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
-// ===================================
-// Cost Tracking
-// ===================================
+export type Alert = typeof alerts.$inferSelect;
+export type NewAlert = typeof alerts.$inferInsert;
 
-/**
- * Cost entries - individual cost records from various providers
- * This is the main table for tracking all infrastructure and service costs
- */
-export const costEntries = sqliteTable("cost_entries", {
-  id: text("id").primaryKey(),
-  
-  // Provider information
-  provider: text("provider").notNull(), // hetzner, aws, gcp, azure, stripe, turso, openrouter, etc.
-  service: text("service").notNull(), // specific service name (e.g., "EC2", "Lambda", "VPS")
-  
-  // Resource identification
-  resourceId: text("resource_id").notNull(), // external resource ID
-  resourceName: text("resource_name").notNull(),
-  resourceType: text("resource_type").notNull(), // server, database, storage, api, etc.
-  
-  // Application attribution (critical for per-app cost tracking)
-  applicationId: text("application_id"), // links to applications table
-  applicationName: text("application_name"),
-  environment: text("environment"), // production, staging, development
-  namespace: text("namespace"), // k8s namespace if applicable
-  
-  // Cost data
-  amount: real("amount").notNull(), // cost amount
-  currency: text("currency").notNull().default("USD"),
-  period: text("period").notNull(), // hourly, daily, monthly
-  periodStart: text("period_start").notNull(),
-  periodEnd: text("period_end").notNull(),
-  
-  // Usage metrics
-  usageQuantity: real("usage_quantity"),
-  usageUnit: text("usage_unit"), // hours, GB, requests, tokens, etc.
-  
-  // Categorization
-  category: text("category").notNull(), // compute, storage, network, database, api, monitoring, other
-  
-  // Metadata
-  tags: text("tags"), // JSON array of tags
-  metadata: text("metadata"), // JSON object for additional data
-  
-  // Timestamps
-  collectedAt: text("collected_at").notNull(),
-  createdAt: text("created_at").notNull(),
-}, (table) => ({
-  providerIdx: index("cost_entries_provider_idx").on(table.provider),
-  applicationIdx: index("cost_entries_application_idx").on(table.applicationId),
-  periodStartIdx: index("cost_entries_period_start_idx").on(table.periodStart),
-  categoryIdx: index("cost_entries_category_idx").on(table.category),
-}));
+export type Service = typeof services.$inferSelect;
+export type NewService = typeof services.$inferInsert;
 
-/**
- * Cost aggregations - pre-computed daily/monthly summaries for fast queries
- */
-export const costAggregations = sqliteTable("cost_aggregations", {
-  id: text("id").primaryKey(),
-  
-  // Aggregation dimensions
-  aggregationType: text("aggregation_type").notNull(), // daily, monthly
-  periodStart: text("period_start").notNull(),
-  periodEnd: text("period_end").notNull(),
-  
-  // Grouping dimensions (any can be null for totals)
-  provider: text("provider"),
-  applicationId: text("application_id"),
-  applicationName: text("application_name"),
-  environment: text("environment"),
-  category: text("category"),
-  
-  // Aggregated values
-  totalAmount: real("total_amount").notNull(),
-  currency: text("currency").notNull().default("USD"),
-  entryCount: integer("entry_count").notNull(),
-  
-  // Breakdown (JSON for flexibility)
-  byResourceType: text("by_resource_type"), // JSON: { "server": 100, "storage": 50 }
-  byService: text("by_service"), // JSON: { "EC2": 80, "S3": 20 }
-  
-  // Comparison data
-  previousPeriodAmount: real("previous_period_amount"),
-  changePercent: real("change_percent"),
-  
-  // Timestamps
-  calculatedAt: text("calculated_at").notNull(),
-  createdAt: text("created_at").notNull(),
-}, (table) => ({
-  typeIdx: index("cost_agg_type_idx").on(table.aggregationType),
-  periodIdx: index("cost_agg_period_idx").on(table.periodStart),
-  appIdx: index("cost_agg_app_idx").on(table.applicationId),
-}));
-
-/**
- * Budgets - spending limits and alerts
- */
-export const budgets = sqliteTable("budgets", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  
-  // Scope
-  applicationId: text("application_id"), // null = all apps
-  environment: text("environment"), // null = all environments
-  provider: text("provider"), // null = all providers
-  category: text("category"), // null = all categories
-  
-  // Budget configuration
-  amount: real("amount").notNull(),
-  currency: text("currency").notNull().default("USD"),
-  period: text("period").notNull(), // monthly, quarterly, yearly
-  
-  // Current spend tracking
-  currentSpend: real("current_spend").notNull().default(0),
-  lastCalculatedAt: text("last_calculated_at"),
-  
-  // Alerts
-  alertThresholds: text("alert_thresholds"), // JSON: [{ percent: 80, notified: false }, ...]
-  alertChannels: text("alert_channels"), // JSON: ["email", "slack"]
-  
-  // Status
-  enabled: integer("enabled").notNull().default(1),
-  
-  // Timestamps
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
-/**
- * Cost alerts - triggered budget/anomaly alerts
- */
-export const costAlerts = sqliteTable("cost_alerts", {
-  id: text("id").primaryKey(),
-  
-  // Alert type
-  alertType: text("alert_type").notNull(), // budget_threshold, anomaly, spike, forecast
-  severity: text("severity").notNull(), // warning, critical
-  
-  // Reference
-  budgetId: text("budget_id"), // for budget alerts
-  applicationId: text("application_id"),
-  provider: text("provider"),
-  
-  // Alert details
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  thresholdPercent: real("threshold_percent"),
-  currentAmount: real("current_amount"),
-  budgetAmount: real("budget_amount"),
-  
-  // Status
-  status: text("status").notNull().default("active"), // active, acknowledged, resolved
-  acknowledgedBy: text("acknowledged_by"),
-  acknowledgedAt: text("acknowledged_at"),
-  resolvedAt: text("resolved_at"),
-  
-  // Notifications
-  notifiedVia: text("notified_via"), // JSON array of channels notified
-  
-  // Timestamps
-  triggeredAt: text("triggered_at").notNull(),
-  createdAt: text("created_at").notNull(),
-});
-
-/**
- * Third-party integration costs - API usage costs from external services
- */
-export const integrationCosts = sqliteTable("integration_costs", {
-  id: text("id").primaryKey(),
-  
-  // Integration identification
-  integrationId: text("integration_id").notNull(),
-  integrationType: text("integration_type").notNull(), // stripe, openrouter, elevenlabs, turso, etc.
-  applicationId: text("application_id"),
-  applicationName: text("application_name"),
-  
-  // Period
-  periodStart: text("period_start").notNull(),
-  periodEnd: text("period_end").notNull(),
-  
-  // Usage metrics
-  usageType: text("usage_type").notNull(), // api_calls, tokens, messages, storage, transactions
-  usageQuantity: real("usage_quantity").notNull(),
-  usageUnit: text("usage_unit").notNull(),
-  
-  // Cost
-  amount: real("amount").notNull(),
-  currency: text("currency").notNull().default("USD"),
-  
-  // Additional details
-  breakdown: text("breakdown"), // JSON for detailed breakdown
-  metadata: text("metadata"),
-  
-  // Timestamps
-  collectedAt: text("collected_at").notNull(),
-  createdAt: text("created_at").notNull(),
-}, (table) => ({
-  integrationIdx: index("int_costs_integration_idx").on(table.integrationType),
-  appIdx: index("int_costs_app_idx").on(table.applicationId),
-  periodIdx: index("int_costs_period_idx").on(table.periodStart),
-}));
-
-// ===================================
-// Cost Tracking Type Exports
-// ===================================
+export type Deployment = typeof deployments.$inferSelect;
+export type NewDeployment = typeof deployments.$inferInsert;
 
 export type CostEntry = typeof costEntries.$inferSelect;
 export type NewCostEntry = typeof costEntries.$inferInsert;
