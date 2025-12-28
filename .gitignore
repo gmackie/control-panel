@@ -1,4 +1,5 @@
 # Dependencies
+.turbo/
 node_modules/
 *.pyc
 __pycache__/
@@ -6,7 +7,8 @@ venv/
 env/
 .env
 */.env.local
-*/.env.production
+**/.env.dev*
+*/.env.prod*
 
 # Build outputs
 .next/
