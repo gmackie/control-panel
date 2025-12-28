@@ -57,8 +57,8 @@ describe('Applications Router', () => {
           description: 'A test app',
           repositoryUrl: 'https://github.com/test/app',
           status: 'active',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          updatedAt: '2024-01-02T00:00:00.000Z',
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-02T00:00:00.000Z'),
         },
       ];
       const mockDb = createMockDb(mockApps);
@@ -267,13 +267,55 @@ describe('Notifications Router', () => {
   });
 });
 
+describe('Notification Preferences', () => {
+  describe('getPreferences', () => {
+    it('should return default preferences when none exist', async () => {
+      const mockDb = createMockDb([]);
+      const caller = createTestCaller(mockDb);
+      
+      const result = await caller.notifications.getPreferences();
+      
+      expect(result).toHaveProperty('emailEnabled', true);
+      expect(result).toHaveProperty('slackEnabled', true);
+      expect(result).toHaveProperty('pushEnabled', true);
+      expect(result).toHaveProperty('inAppEnabled', true);
+      expect(result).toHaveProperty('categoryPreferences');
+      expect(result.categoryPreferences).toHaveProperty('alerts', true);
+      expect(result.categoryPreferences).toHaveProperty('deployments', true);
+      expect(result).toHaveProperty('quietHours');
+      expect(result.quietHours).toHaveProperty('enabled', false);
+    });
+
+    it('should return saved preferences when they exist', async () => {
+      const mockPrefs = [{
+        userId: 'test-user',
+        emailEnabled: false,
+        slackEnabled: true,
+        pushEnabled: true,
+        inAppEnabled: true,
+        categoryPreferences: JSON.stringify({ alerts: false, deployments: true }),
+        quietHours: JSON.stringify({ enabled: true, start: '23:00', end: '07:00' }),
+      }];
+      const mockDb = createMockDb(mockPrefs);
+      const caller = createTestCaller(mockDb);
+      
+      const result = await caller.notifications.getPreferences();
+      
+      expect(result.emailEnabled).toBe(false);
+      expect(result.categoryPreferences.alerts).toBe(false);
+      expect(result.quietHours.enabled).toBe(true);
+      expect(result.quietHours.start).toBe('23:00');
+    });
+  });
+});
+
 describe('Activity Router', () => {
   describe('recent', () => {
     it('should return recent activity events', async () => {
       const mockEvents = [
         {
           id: 'event-1',
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: new Date('2024-01-01T00:00:00.000Z'),
           source: 'gitea',
           category: 'deployment',
           eventType: 'push',

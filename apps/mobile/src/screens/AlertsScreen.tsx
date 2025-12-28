@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   View,
   Text,
@@ -6,11 +6,21 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Haptics from "expo-haptics";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../App";
 import { trpc } from "../lib/trpc";
 
-interface AlertItemProps {
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+
+interface SwipeableAlertItemProps {
   id: string;
   name: string;
   message: string;
@@ -22,7 +32,8 @@ interface AlertItemProps {
   onAcknowledge: () => void;
 }
 
-function AlertItem({
+function SwipeableAlertItem({
+  id,
   name,
   message,
   severity,
@@ -31,7 +42,11 @@ function AlertItem({
   startsAt,
   onPress,
   onAcknowledge,
-}: AlertItemProps) {
+}: SwipeableAlertItemProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const itemHeight = useRef(new Animated.Value(1)).current;
+  const hasTriggeredThresholdHaptic = useRef(false);
+
   const getSeverityColor = (sev: string) => {
     switch (sev) {
       case "critical":
@@ -43,9 +58,7 @@ function AlertItem({
     }
   };
 
-  const getStatusIcon = (
-    stat: string
-  ): keyof typeof Ionicons.glyphMap => {
+  const getStatusIcon = (stat: string): keyof typeof Ionicons.glyphMap => {
     switch (stat) {
       case "firing":
         return "flame";
@@ -70,61 +83,142 @@ function AlertItem({
     return `${Math.floor(diffMins / 1440)}d ago`;
   };
 
+  const resetPosition = () => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 40,
+      friction: 8,
+    }).start();
+  };
+
+  const handleSwipeComplete = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.timing(translateX, {
+      toValue: -SCREEN_WIDTH,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.timing(itemHeight, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: false,
+      }).start(() => {
+        onAcknowledge();
+      });
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => status === "firing",
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return status === "firing" && Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderGrant: () => {
+        hasTriggeredThresholdHaptic.current = false;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx < 0) {
+          translateX.setValue(gestureState.dx);
+          if (gestureState.dx < -SWIPE_THRESHOLD && !hasTriggeredThresholdHaptic.current) {
+            hasTriggeredThresholdHaptic.current = true;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          }
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -SWIPE_THRESHOLD) {
+          handleSwipeComplete();
+        } else {
+          resetPosition();
+        }
+      },
+      onPanResponderTerminate: () => {
+        resetPosition();
+      },
+    })
+  ).current;
+
   const color = getSeverityColor(severity);
 
+  const animatedStyle = {
+    transform: [{ translateX }],
+  };
+
+  const containerStyle = {
+    opacity: itemHeight,
+    transform: [
+      {
+        scaleY: itemHeight,
+      },
+    ],
+  };
+
   return (
-    <TouchableOpacity
-      style={[styles.alertItem, { borderLeftColor: color }]}
-      onPress={onPress}
-    >
-      <View style={styles.alertHeader}>
-        <View style={[styles.severityBadge, { backgroundColor: color + "20" }]}>
-          <Ionicons name="alert-circle" size={16} color={color} />
-          <Text style={[styles.severityText, { color }]}>
-            {severity.toUpperCase()}
+    <Animated.View style={[styles.swipeContainer, containerStyle]}>
+      <View style={styles.swipeActionContainer}>
+        <View style={styles.swipeAction}>
+          <Ionicons name="eye" size={24} color="#fff" />
+          <Text style={styles.swipeActionText}>Acknowledge</Text>
+        </View>
+      </View>
+
+      <Animated.View
+        style={[styles.alertItemWrapper, animatedStyle]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          style={[styles.alertItem, { borderLeftColor: color }]}
+          onPress={onPress}
+          activeOpacity={0.9}
+        >
+          <View style={styles.alertHeader}>
+            <View style={[styles.severityBadge, { backgroundColor: color + "20" }]}>
+              <Ionicons name="alert-circle" size={16} color={color} />
+              <Text style={[styles.severityText, { color }]}>
+                {severity.toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.statusBadge}>
+              <Ionicons
+                name={getStatusIcon(status)}
+                size={14}
+                color={status === "firing" ? "#ef4444" : "#22c55e"}
+              />
+              <Text style={styles.statusText}>{status}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.alertName}>{name}</Text>
+          <Text style={styles.alertMessage} numberOfLines={2}>
+            {message}
           </Text>
-        </View>
-        <View style={styles.statusBadge}>
-          <Ionicons
-            name={getStatusIcon(status)}
-            size={14}
-            color={status === "firing" ? "#ef4444" : "#22c55e"}
-          />
-          <Text style={styles.statusText}>{status}</Text>
-        </View>
-      </View>
 
-      <Text style={styles.alertName}>{name}</Text>
-      <Text style={styles.alertMessage} numberOfLines={2}>
-        {message}
-      </Text>
+          <View style={styles.alertFooter}>
+            <View style={styles.sourceContainer}>
+              <Ionicons name="server" size={12} color="#64748b" />
+              <Text style={styles.sourceText}>{source}</Text>
+              <Text style={styles.separator}>•</Text>
+              <Text style={styles.timeText}>{formatTimeAgo(startsAt)}</Text>
+            </View>
 
-      <View style={styles.alertFooter}>
-        <View style={styles.sourceContainer}>
-          <Ionicons name="server" size={12} color="#64748b" />
-          <Text style={styles.sourceText}>{source}</Text>
-          <Text style={styles.separator}>•</Text>
-          <Text style={styles.timeText}>{formatTimeAgo(startsAt)}</Text>
-        </View>
-
-        {status === "firing" && (
-          <TouchableOpacity
-            style={styles.ackButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onAcknowledge();
-            }}
-          >
-            <Ionicons name="eye" size={16} color="#3b82f6" />
-            <Text style={styles.ackButtonText}>Acknowledge</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
+            {status === "firing" && (
+              <View style={styles.swipeHint}>
+                <Ionicons name="arrow-back" size={12} color="#64748b" />
+                <Text style={styles.swipeHintText}>Swipe to ack</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 export function AlertsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<
     "all" | "firing" | "acknowledged" | "critical"
@@ -155,7 +249,6 @@ export function AlertsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Stats Header */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
           <Ionicons name="flame" size={24} color="#ef4444" />
@@ -182,7 +275,6 @@ export function AlertsScreen() {
         </View>
       </View>
 
-      {/* Filter Chips */}
       <View style={styles.filterContainer}>
         {(["all", "firing", "critical", "acknowledged"] as const).map((f) => (
           <TouchableOpacity
@@ -202,12 +294,11 @@ export function AlertsScreen() {
         ))}
       </View>
 
-      {/* Alerts List */}
       <FlatList
         data={alerts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <AlertItem
+          <SwipeableAlertItem
             id={item.id}
             name={item.name}
             message={item.message}
@@ -215,7 +306,7 @@ export function AlertsScreen() {
             status={item.status}
             source={item.source}
             startsAt={item.startsAt}
-            onPress={() => console.log("Open alert:", item.id)}
+            onPress={() => navigation.navigate("AlertDetail", { id: item.id })}
             onAcknowledge={() => handleAcknowledge(item.id)}
           />
         )}
@@ -306,11 +397,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 100,
   },
+  swipeContainer: {
+    marginTop: 12,
+    overflow: "hidden",
+  },
+  swipeActionContainer: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SCREEN_WIDTH,
+    backgroundColor: "#22c55e",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingRight: 24,
+  },
+  swipeAction: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  swipeActionText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  alertItemWrapper: {
+    backgroundColor: "#0f172a",
+  },
   alertItem: {
     backgroundColor: "#1e293b",
     borderRadius: 12,
     padding: 16,
-    marginTop: 12,
     borderLeftWidth: 4,
   },
   alertHeader: {
@@ -375,18 +494,13 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 12,
   },
-  ackButton: {
+  swipeHint: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e3a5f",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
   },
-  ackButtonText: {
-    color: "#3b82f6",
-    fontSize: 12,
-    fontWeight: "500",
+  swipeHintText: {
+    color: "#64748b",
+    fontSize: 11,
     marginLeft: 4,
   },
   emptyState: {

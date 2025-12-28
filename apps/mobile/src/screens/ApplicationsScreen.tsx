@@ -9,7 +9,10 @@ import {
   TextInput,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { trpc } from "../lib/trpc";
+import type { RootStackParamList } from "../../App";
 
 interface ApplicationItemProps {
   name: string;
@@ -75,6 +78,7 @@ function ApplicationItem({
 export function ApplicationsScreen() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const applicationsQuery = trpc.applications.list.useQuery();
 
@@ -92,8 +96,7 @@ export function ApplicationsScreen() {
   );
 
   const handleAppPress = (appId: string) => {
-    // Navigate to app details
-    console.log("Navigate to app:", appId);
+    navigation.navigate("ApplicationDetail", { id: appId });
   };
 
   return (

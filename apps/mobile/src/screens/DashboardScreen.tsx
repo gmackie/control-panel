@@ -6,9 +6,13 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { trpc } from "../lib/trpc";
+import type { RootTabParamList } from "../../App";
 
 interface StatCardProps {
   title: string;
@@ -77,7 +81,10 @@ function AlertItem({ severity, message, time }: AlertItemProps) {
   );
 }
 
+type DashboardNavigationProp = BottomTabNavigationProp<RootTabParamList, "Dashboard">;
+
 export function DashboardScreen() {
+  const navigation = useNavigation<DashboardNavigationProp>();
   const [refreshing, setRefreshing] = React.useState(false);
 
   // Fetch data using tRPC
@@ -241,7 +248,7 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Alerts</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Alerts")}>
             <Text style={styles.viewAll}>View All</Text>
           </TouchableOpacity>
         </View>
@@ -266,19 +273,55 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate("Pipelines")}
+          >
             <Ionicons name="rocket" size={24} color="#3b82f6" />
             <Text style={styles.actionText}>Deploy</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              Alert.alert(
+                "Restart Services",
+                "Select an application to restart from the Applications tab.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Go to Apps", onPress: () => navigation.navigate("Applications") }
+                ]
+              );
+            }}
+          >
             <Ionicons name="refresh" size={24} color="#22c55e" />
             <Text style={styles.actionText}>Restart</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              Alert.alert(
+                "System Metrics",
+                `CPU: ${health?.metrics.avgCpu ?? 0}%\nMemory: ${health?.metrics.avgMemory ?? 0}%\nError Rate: ${health?.metrics.errorRate ?? 0}%\n\nNodes: ${clusterHealth?.readyNodes ?? 0}/${clusterHealth?.totalNodes ?? 0} ready`,
+                [{ text: "OK" }]
+              );
+            }}
+          >
             <Ionicons name="analytics" size={24} color="#8b5cf6" />
             <Text style={styles.actionText}>Metrics</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              Alert.alert(
+                "Logs",
+                "View application logs from the Applications tab.\n\nTap an application to see its details and logs.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Go to Apps", onPress: () => navigation.navigate("Applications") }
+                ]
+              );
+            }}
+          >
             <Ionicons name="terminal" size={24} color="#f59e0b" />
             <Text style={styles.actionText}>Logs</Text>
           </TouchableOpacity>

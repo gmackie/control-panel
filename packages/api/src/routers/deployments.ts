@@ -6,7 +6,45 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
+import { pushSubscriptions, eq } from "@repo/db";
 import { TRPCError } from "@trpc/server";
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
+async function sendDeploymentPush(
+  tokens: string[],
+  deployment: { appName: string; environment: string; status: string; id: string }
+): Promise<{ success: boolean; sent: number }> {
+  if (tokens.length === 0) return { success: false, sent: 0 };
+
+  const statusEmoji: Record<string, string> = {
+    pending: "⏳",
+    running: "🚀",
+    succeeded: "✅",
+    failed: "❌",
+    cancelled: "⏹️",
+  };
+
+  const messages = tokens.map((token) => ({
+    to: token,
+    title: `${statusEmoji[deployment.status] || "📦"} ${deployment.appName}`,
+    body: `Deployment to ${deployment.environment} ${deployment.status}`,
+    data: { deploymentId: deployment.id, type: "deployment", status: deployment.status },
+    sound: deployment.status === "failed" ? "default" : "default",
+    priority: "high",
+  }));
+
+  try {
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messages),
+    });
+    return { success: response.ok, sent: response.ok ? tokens.length : 0 };
+  } catch {
+    return { success: false, sent: 0 };
+  }
+}
 
 // Types for deployment data (exported for type inference)
 export interface Deployment {
@@ -220,6 +258,34 @@ export const deploymentsRouter = router({
       return {
         success: true,
         message: `Cancelled deployment ${input}`,
+      };
+    }),
+
+  triggerDeploymentPush: protectedProcedure
+    .input(z.string())
+    .mutation(async ({ ctx, input }) => {
+      const deployment = mockDeployments.find((d) => d.id === input);
+      if (!deployment) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
+      }
+
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const subscriptions = await ctx.db
+        .select()
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.active, true));
+
+      const tokens = subscriptions.map((s) => s.pushToken);
+      const result = await sendDeploymentPush(tokens, deployment);
+
+      return {
+        success: result.success,
+        sent: result.sent,
+        appName: deployment.appName,
+        status: deployment.status,
       };
     }),
 });

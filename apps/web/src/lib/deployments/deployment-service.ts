@@ -1,5 +1,8 @@
 import { K3sDeployment, GiteaWorkflowRun, Application } from '@/types/deployments';
 import { GiteaService } from '@/lib/gitea/gitea-service';
+import { getDbAsync } from '@/lib/db';
+import { deploymentHistory, DeploymentHistoryRecord, NewDeploymentHistory } from '@repo/db';
+import { desc, eq, and, or, inArray } from 'drizzle-orm';
 
 export interface DeploymentConfig {
   applicationId: string;
@@ -77,12 +80,47 @@ export interface DeploymentHistory {
 }
 
 export class DeploymentService {
-  private deployments: Map<string, CombinedDeployment> = new Map();
-  private history: DeploymentHistory[] = [];
   private giteaService: GiteaService;
 
   constructor() {
     this.giteaService = new GiteaService();
+  }
+
+  private recordToHistory(record: DeploymentHistoryRecord): DeploymentHistory {
+    const metadata = record.metadata ? JSON.parse(record.metadata) : {};
+    return {
+      id: record.id,
+      deployment: {
+        id: record.deploymentId,
+        applicationId: record.applicationId,
+        applicationName: record.applicationName,
+        environment: record.environment as 'development' | 'staging' | 'production',
+        status: record.status as CombinedDeployment['status'],
+        version: record.version || 'unknown',
+        commit: {
+          sha: record.commitSha || 'unknown',
+          message: record.commitMessage || '',
+          author: record.triggeredBy,
+          timestamp: record.startedAt,
+          branch: record.branch || 'main',
+        },
+        pipeline: metadata.pipeline || { id: 'manual', url: '', stages: [] },
+        cluster: metadata.cluster || { name: 'k3s-hetzner', region: 'eu-central', provider: 'k3s' },
+        deployment: {
+          replicas: record.replicas || 1,
+          readyReplicas: record.status === 'running' ? (record.replicas || 1) : 0,
+          image: record.image || '',
+          namespace: record.environment,
+        },
+        startedAt: record.startedAt,
+        completedAt: record.completedAt || undefined,
+        deployedBy: record.triggeredBy,
+      },
+      action: record.action as DeploymentHistory['action'],
+      timestamp: record.createdAt,
+      user: record.triggeredBy,
+      details: record.details || undefined,
+    };
   }
 
   async combineDeploymentData(
@@ -273,7 +311,9 @@ export class DeploymentService {
   }
 
   async triggerDeployment(config: DeploymentConfig): Promise<CombinedDeployment> {
+    const db = await getDbAsync();
     const deploymentId = `dep-${Date.now()}`;
+    const now = new Date();
     
     const deployment: CombinedDeployment = {
       id: deploymentId,
@@ -286,7 +326,7 @@ export class DeploymentService {
         sha: config.commit || 'unknown',
         message: 'Triggered manual deployment',
         author: config.deployedBy,
-        timestamp: new Date(),
+        timestamp: now,
         branch: config.branch,
       },
       pipeline: {
@@ -309,22 +349,35 @@ export class DeploymentService {
         image: `registry.gmac.io/${config.applicationName.toLowerCase()}:${config.commit?.substring(0, 7) || 'latest'}`,
         namespace: config.environment,
       },
-      startedAt: new Date(),
+      startedAt: now,
       deployedBy: config.deployedBy,
     };
 
-    // Store deployment
-    this.deployments.set(deploymentId, deployment);
-
-    // Add to history
-    this.history.unshift({
-      id: `hist-${Date.now()}`,
-      deployment,
-      action: 'deployed',
-      timestamp: new Date(),
-      user: config.deployedBy,
-      details: `Deployed ${config.applicationName} v${deployment.version} to ${config.environment}`,
-    });
+    if (db) {
+      const historyRecord: NewDeploymentHistory = {
+        deploymentId,
+        applicationId: config.applicationId,
+        applicationName: config.applicationName,
+        environment: config.environment,
+        action: 'deployed',
+        version: deployment.version,
+        commitSha: config.commit || null,
+        commitMessage: 'Triggered manual deployment',
+        branch: config.branch,
+        image: deployment.deployment.image,
+        replicas: deployment.deployment.replicas,
+        status: 'pending',
+        triggeredBy: config.deployedBy,
+        details: `Deployed ${config.applicationName} v${deployment.version} to ${config.environment}`,
+        metadata: JSON.stringify({
+          pipeline: deployment.pipeline,
+          cluster: deployment.cluster,
+        }),
+        startedAt: now,
+        createdAt: now,
+      };
+      await db.insert(deploymentHistory).values(historyRecord);
+    }
 
     return deployment;
   }
@@ -334,28 +387,61 @@ export class DeploymentService {
     targetVersion: string, 
     options?: { reason?: string; user?: string }
   ): Promise<void> {
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) {
+    const db = await getDbAsync();
+    if (!db) throw new Error('Database not available');
+
+    const results = await db
+      .select()
+      .from(deploymentHistory)
+      .where(eq(deploymentHistory.deploymentId, deploymentId))
+      .orderBy(desc(deploymentHistory.createdAt))
+      .limit(1);
+
+    if (results.length === 0) {
       throw new Error('Deployment not found');
     }
 
-    // Update deployment status
-    deployment.status = 'rolled_back';
-    deployment.rollbackTo = targetVersion;
-
-    // Add to history
-    this.history.unshift({
-      id: `hist-${Date.now()}`,
-      deployment,
+    const original = results[0];
+    const now = new Date();
+    
+    const rollbackRecord: NewDeploymentHistory = {
+      deploymentId: `rollback-${Date.now()}`,
+      applicationId: original.applicationId,
+      applicationName: original.applicationName,
+      environment: original.environment,
       action: 'rolled_back',
-      timestamp: new Date(),
-      user: options?.user || 'system',
-      details: options?.reason || `Rolled back ${deployment.applicationName} from v${deployment.version} to v${targetVersion}`,
-    });
+      version: targetVersion,
+      commitSha: original.commitSha,
+      commitMessage: original.commitMessage,
+      branch: original.branch,
+      image: original.image,
+      replicas: original.replicas,
+      status: 'rolled_back',
+      triggeredBy: options?.user || 'system',
+      details: options?.reason || `Rolled back ${original.applicationName} from v${original.version} to v${targetVersion}`,
+      metadata: original.metadata,
+      startedAt: now,
+      completedAt: now,
+      createdAt: now,
+    };
+
+    await db.insert(deploymentHistory).values(rollbackRecord);
   }
 
   async getDeployment(deploymentId: string): Promise<CombinedDeployment | null> {
-    return this.deployments.get(deploymentId) || null;
+    const db = await getDbAsync();
+    if (!db) return null;
+
+    const results = await db
+      .select()
+      .from(deploymentHistory)
+      .where(eq(deploymentHistory.deploymentId, deploymentId))
+      .orderBy(desc(deploymentHistory.createdAt))
+      .limit(1);
+
+    if (results.length === 0) return null;
+
+    return this.recordToHistory(results[0]).deployment;
   }
 
   async getDeploymentHistory(options: {
@@ -363,17 +449,29 @@ export class DeploymentService {
     applicationId?: string;
     limit?: number;
   }): Promise<DeploymentHistory[]> {
-    let filtered = [...this.history];
+    const db = await getDbAsync();
+    if (!db) return [];
+
+    const conditions = [];
 
     if (options.environment && options.environment !== 'all') {
-      filtered = filtered.filter(h => h.deployment.environment === options.environment);
+      conditions.push(eq(deploymentHistory.environment, options.environment));
     }
 
     if (options.applicationId) {
-      filtered = filtered.filter(h => h.deployment.applicationId === options.applicationId);
+      conditions.push(eq(deploymentHistory.applicationId, options.applicationId));
     }
 
-    return filtered.slice(0, options.limit || 20);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const results = await db
+      .select()
+      .from(deploymentHistory)
+      .where(whereClause)
+      .orderBy(desc(deploymentHistory.createdAt))
+      .limit(options.limit || 20);
+
+    return results.map(r => this.recordToHistory(r));
   }
 
   async getApplication(applicationId: string): Promise<Application | null> {

@@ -60,29 +60,9 @@ const navigation: NavItem[] = [
     icon: Container
   },
   {
-    title: 'CI/CD',
-    href: '/cicd',
+    title: 'Pipelines',
+    href: '/pipelines',
     icon: GitBranch
-  },
-  {
-    title: 'Registry',
-    href: '/registry',
-    icon: Database
-  },
-  {
-    title: 'Deployments',
-    href: '/deployments',
-    icon: Rocket
-  },
-  {
-    title: 'Services',
-    href: '/services',
-    icon: Network
-  },
-  {
-    title: 'Cluster',
-    href: '/cluster',
-    icon: Server
   },
   {
     title: 'Infrastructure',
@@ -92,12 +72,7 @@ const navigation: NavItem[] = [
   {
     title: 'Monitoring',
     href: '/monitoring',
-    icon: Activity
-  },
-  {
-    title: 'Health',
-    href: '/health',
-    icon: Activity
+    icon: Monitor
   },
   {
     title: 'Alerts',
@@ -105,19 +80,14 @@ const navigation: NavItem[] = [
     icon: AlertTriangle
   },
   {
-    title: 'Costs',
-    href: '/costs',
-    icon: BarChart3
-  },
-  {
     title: 'Integrations',
-    href: '/integrations',
+    href: '/integrations/hub',
     icon: Network
   },
   {
-    title: 'Resources',
-    href: '/resources',
-    icon: Layers
+    title: 'Settings',
+    href: '/settings',
+    icon: Settings
   }
 ]
 

@@ -8,6 +8,9 @@ import {
   RefreshControl,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../App";
 import { trpc } from "../lib/trpc";
 
 interface NotificationItemProps {
@@ -131,6 +134,7 @@ function NotificationItem({
 }
 
 export function NotificationsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<"all" | "unread">("all");
 
@@ -246,7 +250,7 @@ export function NotificationsScreen() {
             status={item.status}
             createdAt={item.createdAt}
             appName={item.appName}
-            onPress={() => console.log("Open notification:", item.id)}
+            onPress={() => navigation.navigate("NotificationDetail", { id: item.id })}
             onMarkAsRead={() => handleMarkAsRead(item.id)}
           />
         )}

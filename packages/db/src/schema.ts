@@ -222,6 +222,28 @@ export const deployments = pgTable("deployments", {
   url: text("url"),
 });
 
+export const deploymentHistory = pgTable("deployment_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deploymentId: uuid("deployment_id").notNull(),
+  applicationId: text("application_id").notNull(),
+  applicationName: text("application_name").notNull(),
+  environment: varchar("environment", { length: 50 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  version: varchar("version", { length: 100 }),
+  commitSha: varchar("commit_sha", { length: 255 }),
+  commitMessage: text("commit_message"),
+  branch: varchar("branch", { length: 255 }),
+  image: text("image"),
+  replicas: integer("replicas"),
+  status: varchar("status", { length: 50 }).notNull(),
+  triggeredBy: text("triggered_by").notNull(),
+  details: text("details"),
+  metadata: text("metadata"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ===================================
 // Databases
 // ===================================
@@ -546,6 +568,9 @@ export type NewService = typeof services.$inferInsert;
 
 export type Deployment = typeof deployments.$inferSelect;
 export type NewDeployment = typeof deployments.$inferInsert;
+
+export type DeploymentHistoryRecord = typeof deploymentHistory.$inferSelect;
+export type NewDeploymentHistory = typeof deploymentHistory.$inferInsert;
 
 export type CostEntry = typeof costEntries.$inferSelect;
 export type NewCostEntry = typeof costEntries.$inferInsert;

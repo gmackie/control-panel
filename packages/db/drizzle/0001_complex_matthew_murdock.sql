@@ -1,0 +1,21 @@
+CREATE TABLE "deployment_history" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"deployment_id" uuid NOT NULL,
+	"application_id" text NOT NULL,
+	"application_name" text NOT NULL,
+	"environment" varchar(50) NOT NULL,
+	"action" varchar(50) NOT NULL,
+	"version" varchar(100),
+	"commit_sha" varchar(255),
+	"commit_message" text,
+	"branch" varchar(255),
+	"image" text,
+	"replicas" integer,
+	"status" varchar(50) NOT NULL,
+	"triggered_by" text NOT NULL,
+	"details" text,
+	"metadata" text,
+	"started_at" timestamp DEFAULT now() NOT NULL,
+	"completed_at" timestamp,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);

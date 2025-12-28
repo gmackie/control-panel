@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/app/providers";
-import { useRouter } from "next/navigation";
-import Navigation from "@/components/Navigation";
+import MainLayout from "@/components/layout/main-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,17 +34,9 @@ interface IntegrationStatus {
 }
 
 export default function IntegrationHubPage() {
-  const { authenticated } = useAuth();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<IntegrationTab>("overview");
   const [healthChecks, setHealthChecks] = useState<Record<string, boolean>>({});
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
-
-  useEffect(() => {
-    if (!authenticated) {
-      router.push("/auth/signin");
-    }
-  }, [authenticated, router]);
 
   const checkHealth = async () => {
     setIsCheckingHealth(true);
@@ -145,22 +135,14 @@ export default function IntegrationHubPage() {
 
   const connectedCount = integrations.filter((i) => i.status === "connected").length;
 
-  if (!authenticated) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gray-950">
-      <Navigation />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Integration Hub</h1>
-          <p className="mt-2 text-gray-400">
-            Single pane of glass for all your third-party integrations
-          </p>
-        </div>
+    <MainLayout>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Integration Hub</h1>
+        <p className="mt-2 text-muted-foreground">
+          Single pane of glass for all your third-party integrations
+        </p>
+      </div>
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
@@ -273,7 +255,6 @@ export default function IntegrationHubPage() {
         {activeTab === "stripe" && <StripeDashboard />}
         {activeTab === "sentry" && <SentryDashboard />}
         {activeTab === "posthog" && <PostHogDashboard />}
-      </div>
-    </div>
+    </MainLayout>
   );
 }

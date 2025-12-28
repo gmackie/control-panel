@@ -6,7 +6,43 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
+import { pushSubscriptions, eq, and } from "@repo/db";
 import { TRPCError } from "@trpc/server";
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
+async function sendAlertPush(
+  tokens: string[],
+  alert: { name: string; severity: string; message: string; id: string }
+): Promise<{ success: boolean; sent: number }> {
+  if (tokens.length === 0) return { success: false, sent: 0 };
+
+  const severityEmoji: Record<string, string> = {
+    info: "ℹ️",
+    warning: "⚠️",
+    critical: "🚨",
+  };
+
+  const messages = tokens.map((token) => ({
+    to: token,
+    title: `${severityEmoji[alert.severity] || "🔔"} ${alert.name}`,
+    body: alert.message,
+    data: { alertId: alert.id, type: "alert", severity: alert.severity },
+    sound: alert.severity === "critical" ? "default" : "default",
+    priority: "high",
+  }));
+
+  try {
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messages),
+    });
+    return { success: response.ok, sent: response.ok ? tokens.length : 0 };
+  } catch {
+    return { success: false, sent: 0 };
+  }
+}
 
 // Types for monitoring (exported for type inference)
 export interface Alert {
@@ -275,4 +311,31 @@ export const monitoringRouter = router({
       },
     };
   }),
+
+  triggerAlertPush: protectedProcedure
+    .input(z.string())
+    .mutation(async ({ ctx, input }) => {
+      const alert = mockAlerts.find((a) => a.id === input);
+      if (!alert) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
+      }
+
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const subscriptions = await ctx.db
+        .select()
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.active, true));
+
+      const tokens = subscriptions.map((s) => s.pushToken);
+      const result = await sendAlertPush(tokens, alert);
+
+      return {
+        success: result.success,
+        sent: result.sent,
+        alertName: alert.name,
+      };
+    }),
 });

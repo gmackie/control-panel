@@ -7,10 +7,16 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { TRPCProvider } from "./src/lib/trpc";
+import { useNotificationNavigation } from "./src/hooks/useNotificationNavigation";
 import { DashboardScreen } from "./src/screens/DashboardScreen";
 import { ApplicationsScreen } from "./src/screens/ApplicationsScreen";
+import { PipelinesScreen } from "./src/screens/PipelinesScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
 import { AlertsScreen } from "./src/screens/AlertsScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { ApplicationDetailScreen } from "./src/screens/ApplicationDetailScreen";
+import { AlertDetailScreen } from "./src/screens/AlertDetailScreen";
+import { NotificationDetailScreen } from "./src/screens/NotificationDetailScreen";
 
 // Dark theme for the app
 const DarkTheme = {
@@ -31,8 +37,10 @@ const DarkTheme = {
 export type RootTabParamList = {
   Dashboard: undefined;
   Applications: undefined;
+  Pipelines: undefined;
   Notifications: undefined;
   Alerts: undefined;
+  Settings: undefined;
 };
 
 export type RootStackParamList = {
@@ -44,6 +52,11 @@ export type RootStackParamList = {
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function NotificationHandler() {
+  useNotificationNavigation();
+  return null;
+}
 
 function MainTabs() {
   return (
@@ -59,11 +72,17 @@ function MainTabs() {
             case "Applications":
               iconName = focused ? "cube" : "cube-outline";
               break;
+            case "Pipelines":
+              iconName = focused ? "git-branch" : "git-branch-outline";
+              break;
             case "Notifications":
               iconName = focused ? "notifications" : "notifications-outline";
               break;
             case "Alerts":
               iconName = focused ? "alert-circle" : "alert-circle-outline";
+              break;
+            case "Settings":
+              iconName = focused ? "settings" : "settings-outline";
               break;
             default:
               iconName = "help-circle-outline";
@@ -110,6 +129,14 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
+        name="Pipelines"
+        component={PipelinesScreen}
+        options={{
+          title: "Pipelines",
+          headerTitle: "Pipelines",
+        }}
+      />
+      <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
         options={{
@@ -125,6 +152,14 @@ function MainTabs() {
           headerTitle: "Active Alerts",
         }}
       />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: "Settings",
+          headerTitle: "Settings",
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -134,6 +169,7 @@ export default function App() {
     <SafeAreaProvider>
       <TRPCProvider>
         <NavigationContainer theme={DarkTheme}>
+          <NotificationHandler />
           <StatusBar style="light" />
           <Stack.Navigator
             screenOptions={{
@@ -141,7 +177,36 @@ export default function App() {
             }}
           >
             <Stack.Screen name="Main" component={MainTabs} />
-            {/* Add detail screens here */}
+            <Stack.Screen
+              name="ApplicationDetail"
+              component={ApplicationDetailScreen}
+              options={{
+                headerShown: true,
+                headerStyle: { backgroundColor: "#1e293b" },
+                headerTintColor: "#fff",
+                headerTitle: "Application",
+              }}
+            />
+            <Stack.Screen
+              name="AlertDetail"
+              component={AlertDetailScreen}
+              options={{
+                headerShown: true,
+                headerStyle: { backgroundColor: "#1e293b" },
+                headerTintColor: "#fff",
+                headerTitle: "Alert",
+              }}
+            />
+            <Stack.Screen
+              name="NotificationDetail"
+              component={NotificationDetailScreen}
+              options={{
+                headerShown: true,
+                headerStyle: { backgroundColor: "#1e293b" },
+                headerTintColor: "#fff",
+                headerTitle: "Notification",
+              }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </TRPCProvider>

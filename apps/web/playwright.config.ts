@@ -1,8 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
+import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
 
-/**
- * @see https://playwright.dev/docs/test-configuration
- */
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
 export default defineConfig({
   testDir: './tests/e2e',
   /* Run tests in files in parallel */
@@ -88,8 +90,8 @@ export default defineConfig({
   testMatch: /.*\.e2e\.spec\.ts/,
 
   /* Global setup and teardown */
-  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
-  globalTeardown: require.resolve('./tests/e2e/global-teardown.ts'),
+  globalSetup: resolve(__dirname, './tests/e2e/global-setup.ts'),
+  globalTeardown: resolve(__dirname, './tests/e2e/global-teardown.ts'),
 
   /* Output directories */
   outputDir: 'test-results/',
