@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createApplication } from '@/lib/applications/manager';
-import { applicationsRepo } from '@/lib/db/repositories';
-import { isPostgresConfigured } from '@/lib/db/postgres';
+import { createApplication, getApplications } from '@/lib/applications/manager';
+import { getDbAsync } from '@/lib/db';
+import { applications, desc } from '@repo/db';
 import { CreateApplicationRequest } from '@/types/applications';
 
 function safeJson<T>(value: T): T {
@@ -19,39 +19,41 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Use PostgreSQL if configured, otherwise fallback to in-memory
-    if (isPostgresConfigured()) {
-      const apps = await applicationsRepo.getAll();
+    const db = await getDbAsync();
+    
+    if (db) {
+      // Use Neon database
+      const apps = await db
+        .select()
+        .from(applications)
+        .orderBy(desc(applications.createdAt));
+      
       // Transform to match the expected Application format
-      const applications = apps.map(app => ({
+      const applicationsList = apps.map(app => ({
         id: app.id,
         name: app.name,
         description: app.description || '',
         slug: app.slug,
         repositoryUrl: app.repositoryUrl,
-        language: app.language,
-        framework: app.framework,
-        type: app.type,
         status: app.status,
-        apiKeys: [],  // Will be loaded separately if needed
-        secrets: [],  // Will be loaded separately if needed
+        apiKeys: [],
+        secrets: [],
         integrations: [],
         settings: {
-          environment: (app.settings as any)?.environment || 'development',
-          features: (app.settings as any)?.features || {},
-          autoDeployEnabled: (app.settings as any)?.autoDeployEnabled || false,
+          environment: 'development',
+          features: {},
+          autoDeployEnabled: false,
         },
-        createdAt: app.createdAt?.toISOString() || new Date().toISOString(),
-        updatedAt: app.updatedAt?.toISOString() || new Date().toISOString(),
-        ownerId: 'gmackie', // Default owner
+        createdAt: app.createdAt.toISOString(),
+        updatedAt: app.updatedAt.toISOString(),
+        ownerId: 'gmackie',
       }));
-      return NextResponse.json(safeJson(applications));
+      return NextResponse.json(safeJson(applicationsList));
     }
     
     // Fallback to in-memory (legacy behavior)
-    const { getApplications } = await import('@/lib/applications/manager');
-    const applications = await getApplications((session.user as any).login || session.user.email!);
-    return NextResponse.json(safeJson(applications));
+    const appList = await getApplications((session.user as { login?: string }).login || session.user.email!);
+    return NextResponse.json(safeJson(appList));
   } catch (error) {
     console.error('Error fetching applications:', error);
     return NextResponse.json(
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     const application = await createApplication(
       body,
-      (session.user as any).login || session.user.email!
+      (session.user as { login?: string }).login || session.user.email!
     );
 
     return NextResponse.json(safeJson(application), { status: 201 });

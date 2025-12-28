@@ -6,8 +6,7 @@
 
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc";
-import { activityEvents } from "@repo/db";
-import { desc, gte, sql } from "drizzle-orm";
+import { activityEvents, desc, gte, sql } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
 export const activityRouter = router({
@@ -33,7 +32,7 @@ export const activityRouter = router({
 
       return results.map((event) => ({
         ...event,
-        timestamp: new Date(event.timestamp),
+        timestamp: event.timestamp, // Already a Date in PostgreSQL
         links: event.links ? JSON.parse(event.links) : undefined,
         metadata: event.metadata ? JSON.parse(event.metadata) : undefined,
       }));
@@ -54,8 +53,8 @@ export const activityRouter = router({
 
       const [totalResult, last24hResult, last7dResult, bySeverity] = await Promise.all([
         ctx.db.select({ count: sql<number>`count(*)` }).from(activityEvents),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(activityEvents).where(gte(activityEvents.timestamp, last24h.toISOString())),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(activityEvents).where(gte(activityEvents.timestamp, last7d.toISOString())),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(activityEvents).where(gte(activityEvents.timestamp, last24h)),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(activityEvents).where(gte(activityEvents.timestamp, last7d)),
         ctx.db.select({ severity: activityEvents.severity, count: sql<number>`count(*)` }).from(activityEvents).groupBy(activityEvents.severity),
       ]);
 

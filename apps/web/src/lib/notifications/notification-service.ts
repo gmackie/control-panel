@@ -11,9 +11,9 @@ import {
   notificationPreferences,
   notificationDeliveryLog,
   NotificationRecord,
-  NotificationRuleRecord,
-  NotificationPreferencesRecord,
-} from "@/lib/schema-notifications";
+  NotificationRule as NotificationRuleRecord,
+  NotificationPreference as NotificationPreferencesRecord,
+} from "@repo/db";
 import { desc, eq, and, or, gte, lte, like, sql, inArray } from "drizzle-orm";
 import {
   Notification,
@@ -44,12 +44,13 @@ function generateId(prefix: string = "ntf"): string {
 
 /**
  * Convert database record to Notification
+ * Note: PostgreSQL returns Date objects directly for timestamp columns
  */
 function recordToNotification(record: NotificationRecord): Notification {
   return {
     id: record.id,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
+    createdAt: record.createdAt, // Already a Date in PostgreSQL
+    updatedAt: record.updatedAt, // Already a Date in PostgreSQL
     source: record.source,
     sourceEventId: record.sourceEventId || undefined,
     activityEventId: record.activityEventId || undefined,
@@ -64,10 +65,10 @@ function recordToNotification(record: NotificationRecord): Notification {
     links: record.links ? JSON.parse(record.links) : undefined,
     status: record.status as NotificationStatus,
     acknowledgedBy: record.acknowledgedBy || undefined,
-    acknowledgedAt: record.acknowledgedAt ? new Date(record.acknowledgedAt) : undefined,
+    acknowledgedAt: record.acknowledgedAt || undefined, // Already a Date or null
     resolvedBy: record.resolvedBy || undefined,
-    resolvedAt: record.resolvedAt ? new Date(record.resolvedAt) : undefined,
-    snoozedUntil: record.snoozedUntil ? new Date(record.snoozedUntil) : undefined,
+    resolvedAt: record.resolvedAt || undefined, // Already a Date or null
+    snoozedUntil: record.snoozedUntil || undefined, // Already a Date or null
     groupKey: record.groupKey || undefined,
     groupCount: record.groupCount || 1,
     deliveredVia: record.deliveredVia ? JSON.parse(record.deliveredVia) : [],
@@ -78,40 +79,42 @@ function recordToNotification(record: NotificationRecord): Notification {
 
 /**
  * Convert database record to NotificationRule
+ * Note: PostgreSQL returns Date and boolean types directly
  */
 function recordToRule(record: NotificationRuleRecord): NotificationRule {
   return {
     id: record.id,
     name: record.name,
     description: record.description || undefined,
-    enabled: record.enabled === 1,
+    enabled: record.enabled, // Already a boolean in PostgreSQL
     priority: record.priority,
     conditions: JSON.parse(record.conditions),
     channels: JSON.parse(record.channels),
     dedupe: record.dedupe ? JSON.parse(record.dedupe) : undefined,
     schedule: record.schedule ? JSON.parse(record.schedule) : undefined,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
+    createdAt: record.createdAt, // Already a Date in PostgreSQL
+    updatedAt: record.updatedAt, // Already a Date in PostgreSQL
     createdBy: record.createdBy || undefined,
   };
 }
 
 /**
  * Convert database record to NotificationPreferences
+ * Note: PostgreSQL returns Date and boolean types directly
  */
 function recordToPreferences(record: NotificationPreferencesRecord): NotificationPreferences {
   return {
     id: record.id,
     userId: record.userId,
-    emailEnabled: record.emailEnabled === 1,
-    slackEnabled: record.slackEnabled === 1,
-    pushEnabled: record.pushEnabled === 1,
-    inAppEnabled: record.inAppEnabled === 1,
+    emailEnabled: record.emailEnabled, // Already a boolean in PostgreSQL
+    slackEnabled: record.slackEnabled, // Already a boolean in PostgreSQL
+    pushEnabled: record.pushEnabled, // Already a boolean in PostgreSQL
+    inAppEnabled: record.inAppEnabled, // Already a boolean in PostgreSQL
     categoryPreferences: record.categoryPreferences ? JSON.parse(record.categoryPreferences) : {},
     quietHours: record.quietHours ? JSON.parse(record.quietHours) : undefined,
     emailDigest: record.emailDigest ? JSON.parse(record.emailDigest) : undefined,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
+    createdAt: record.createdAt, // Already a Date in PostgreSQL
+    updatedAt: record.updatedAt, // Already a Date in PostgreSQL
   };
 }
 
@@ -127,7 +130,7 @@ export class NotificationService {
     const db = await getDbAsync();
     if (!db) throw new Error("Database not available");
 
-    const now = new Date().toISOString();
+    const now = new Date();
     const id = generateId("ntf");
 
     const record = {
@@ -161,7 +164,7 @@ export class NotificationService {
 
     await db.insert(notifications).values(record);
 
-    const notification = recordToNotification(record as NotificationRecord);
+    const notification = recordToNotification(record as unknown as NotificationRecord);
     
     // Publish to subscribers for real-time updates
     this.publish(notification);
@@ -233,10 +236,10 @@ export class NotificationService {
       );
     }
     if (startDate) {
-      conditions.push(gte(notifications.createdAt, startDate.toISOString()));
+      conditions.push(gte(notifications.createdAt, startDate));
     }
     if (endDate) {
-      conditions.push(lte(notifications.createdAt, endDate.toISOString()));
+      conditions.push(lte(notifications.createdAt, endDate));
     }
     if (search) {
       conditions.push(
@@ -354,8 +357,8 @@ export class NotificationService {
       .update(notifications)
       .set({
         status: "snoozed",
-        snoozedUntil: until.toISOString(),
-        updatedAt: new Date().toISOString(),
+        snoozedUntil: until,
+        updatedAt: new Date(),
       })
       .where(eq(notifications.id, id));
 
@@ -373,7 +376,7 @@ export class NotificationService {
     const db = await getDbAsync();
     if (!db) throw new Error("Database not available");
 
-    const now = new Date().toISOString();
+    const now = new Date();
     const updates: Record<string, unknown> = {
       status,
       updatedAt: now,
@@ -392,7 +395,7 @@ export class NotificationService {
       .set(updates)
       .where(inArray(notifications.id, ids));
 
-    return result.rowsAffected || 0;
+    return result.rowCount ?? 0;
   }
 
   /**
@@ -416,11 +419,11 @@ export class NotificationService {
       .update(notifications)
       .set({
         status: "seen",
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(and(...conditions));
 
-    return result.rowsAffected || 0;
+    return result.rowCount ?? 0;
   }
 
   /**
@@ -503,8 +506,8 @@ export class NotificationService {
       .from(notifications)
       .where(
         userCondition
-          ? and(userCondition, gte(notifications.createdAt, last24h.toISOString()))
-          : gte(notifications.createdAt, last24h.toISOString())
+          ? and(userCondition, gte(notifications.createdAt, last24h))
+          : gte(notifications.createdAt, last24h)
       );
     const last24hCount = last24hResult[0]?.count || 0;
 
@@ -514,8 +517,8 @@ export class NotificationService {
       .from(notifications)
       .where(
         userCondition
-          ? and(userCondition, gte(notifications.createdAt, last7d.toISOString()))
-          : gte(notifications.createdAt, last7d.toISOString())
+          ? and(userCondition, gte(notifications.createdAt, last7d))
+          : gte(notifications.createdAt, last7d)
       );
     const last7dCount = last7dResult[0]?.count || 0;
 
@@ -546,13 +549,12 @@ export class NotificationService {
 
     // Add to delivery log
     await db.insert(notificationDeliveryLog).values({
-      id: generateId("dlv"),
       notificationId,
       channel: result.channel,
-      success: result.success ? 1 : 0,
+      success: result.success,
       error: result.error || null,
       messageId: result.messageId || null,
-      createdAt: result.timestamp.toISOString(),
+      createdAt: result.timestamp,
     });
 
     // Update notification's deliveredVia
@@ -565,7 +567,7 @@ export class NotificationService {
           .update(notifications)
           .set({
             deliveredVia: JSON.stringify(deliveredVia),
-            updatedAt: new Date().toISOString(),
+            updatedAt: new Date(),
           })
           .where(eq(notifications.id, notificationId));
       }
@@ -601,7 +603,7 @@ export class NotificationService {
     const results = await db
       .select()
       .from(notificationRules)
-      .where(eq(notificationRules.enabled, 1))
+      .where(eq(notificationRules.enabled, true))
       .orderBy(desc(notificationRules.priority));
 
     return results.map(recordToRule);
@@ -638,16 +640,16 @@ export class NotificationService {
     const db = await getDbAsync();
     if (!db) throw new Error("Database not available");
 
-    const now = new Date().toISOString();
+    const now = new Date();
     const id = generateId("prf");
 
     const defaultPrefs = {
       id,
       userId,
-      emailEnabled: 1,
-      slackEnabled: 1,
-      pushEnabled: 1,
-      inAppEnabled: 1,
+      emailEnabled: true,
+      slackEnabled: true,
+      pushEnabled: true,
+      inAppEnabled: true,
       categoryPreferences: null,
       quietHours: null,
       emailDigest: null,
@@ -657,7 +659,7 @@ export class NotificationService {
 
     await db.insert(notificationPreferences).values(defaultPrefs);
 
-    return recordToPreferences(defaultPrefs as NotificationPreferencesRecord);
+    return recordToPreferences(defaultPrefs as unknown as NotificationPreferencesRecord);
   }
 
   // ===================================
@@ -710,7 +712,7 @@ export class NotificationService {
       .delete(notifications)
       .where(
         and(
-          lte(notifications.createdAt, cutoff.toISOString()),
+          lte(notifications.createdAt, cutoff),
           or(
             eq(notifications.status, "resolved"),
             eq(notifications.status, "acknowledged")
@@ -718,7 +720,7 @@ export class NotificationService {
         )
       );
 
-    return result.rowsAffected || 0;
+    return result.rowCount ?? 0;
   }
 }
 

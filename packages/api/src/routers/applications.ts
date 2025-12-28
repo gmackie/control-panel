@@ -6,8 +6,7 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
-import { applications } from "@repo/db";
-import { desc, eq } from "drizzle-orm";
+import { applications, desc, eq } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
 export const applicationsRouter = router({
@@ -27,8 +26,8 @@ export const applicationsRouter = router({
 
       return results.map((app) => ({
         ...app,
-        createdAt: new Date(app.createdAt),
-        updatedAt: new Date(app.updatedAt),
+        createdAt: app.createdAt, // Already a Date in PostgreSQL
+        updatedAt: app.updatedAt, // Already a Date in PostgreSQL
       }));
     }),
 
@@ -55,8 +54,8 @@ export const applicationsRouter = router({
 
       return {
         ...app,
-        createdAt: new Date(app.createdAt),
-        updatedAt: new Date(app.updatedAt),
+        createdAt: app.createdAt, // Already a Date in PostgreSQL
+        updatedAt: app.updatedAt, // Already a Date in PostgreSQL
       };
     }),
 
@@ -83,8 +82,8 @@ export const applicationsRouter = router({
 
       return {
         ...app,
-        createdAt: new Date(app.createdAt),
-        updatedAt: new Date(app.updatedAt),
+        createdAt: app.createdAt, // Already a Date in PostgreSQL
+        updatedAt: app.updatedAt, // Already a Date in PostgreSQL
       };
     }),
 
@@ -103,11 +102,9 @@ export const applicationsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
       }
 
-      const now = new Date().toISOString();
-      const id = `app_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+      const now = new Date();
 
       await ctx.db.insert(applications).values({
-        id,
         name: input.name,
         slug: input.slug,
         description: input.description || null,
@@ -117,6 +114,6 @@ export const applicationsRouter = router({
         updatedAt: now,
       });
 
-      return { id, ...input, status: "active", createdAt: new Date(now), updatedAt: new Date(now) };
+      return { ...input, status: "active", createdAt: now, updatedAt: now };
     }),
 });

@@ -7,7 +7,7 @@
 
 import { Notification, PushMessage, DeliveryResult, PushSubscription } from "../types";
 import { getDbAsync } from "@/lib/db";
-import { pushSubscriptions } from "@/lib/schema-notifications";
+import { pushSubscriptions } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 
 // Expo Push API endpoint
@@ -44,6 +44,7 @@ function buildPushMessage(notification: Notification): PushMessage {
 
 /**
  * Get active push subscriptions for a user
+ * Note: PostgreSQL returns boolean and Date types directly
  */
 export async function getUserPushSubscriptions(
   userId: string
@@ -57,21 +58,21 @@ export async function getUserPushSubscriptions(
     .where(
       and(
         eq(pushSubscriptions.userId, userId),
-        eq(pushSubscriptions.active, 1)
+        eq(pushSubscriptions.active, true)
       )
     );
 
-  return results.map((r: { id: string; userId: string; deviceId: string; deviceName: string | null; platform: string; pushToken: string; active: number; lastUsedAt: string | null; createdAt: string; updatedAt: string }) => ({
+  return results.map((r) => ({
     id: r.id,
     userId: r.userId,
     deviceId: r.deviceId,
     deviceName: r.deviceName || undefined,
     platform: r.platform as "ios" | "android" | "web",
     pushToken: r.pushToken,
-    active: r.active === 1,
-    lastUsedAt: r.lastUsedAt ? new Date(r.lastUsedAt) : undefined,
-    createdAt: new Date(r.createdAt),
-    updatedAt: new Date(r.updatedAt),
+    active: r.active,
+    lastUsedAt: r.lastUsedAt || undefined,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }));
 }
 
@@ -212,7 +213,7 @@ export async function registerPushSubscription(
   const db = await getDbAsync();
   if (!db) throw new Error("Database not available");
 
-  const now = new Date().toISOString();
+  const now = new Date();
   const id = `push_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
 
   // Check if subscription exists for this device
@@ -235,7 +236,7 @@ export async function registerPushSubscription(
         pushToken,
         platform,
         deviceName: deviceName || null,
-        active: 1,
+        active: true,
         updatedAt: now,
       })
       .where(eq(pushSubscriptions.id, existing[0].id));
@@ -248,8 +249,8 @@ export async function registerPushSubscription(
       platform,
       pushToken,
       active: true,
-      createdAt: new Date(existing[0].createdAt),
-      updatedAt: new Date(now),
+      createdAt: existing[0].createdAt,
+      updatedAt: now,
     };
   }
 
@@ -261,7 +262,7 @@ export async function registerPushSubscription(
     deviceName: deviceName || null,
     platform,
     pushToken,
-    active: 1,
+    active: true,
     lastUsedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -277,8 +278,8 @@ export async function registerPushSubscription(
     platform,
     pushToken,
     active: true,
-    createdAt: new Date(now),
-    updatedAt: new Date(now),
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -295,8 +296,8 @@ export async function unregisterPushSubscription(
   const result = await db
     .update(pushSubscriptions)
     .set({
-      active: 0,
-      updatedAt: new Date().toISOString(),
+      active: false,
+      updatedAt: new Date(),
     })
     .where(
       and(
@@ -305,5 +306,5 @@ export async function unregisterPushSubscription(
       )
     );
 
-  return (result.rowsAffected || 0) > 0;
+  return (result.rowCount ?? 0) > 0;
 }

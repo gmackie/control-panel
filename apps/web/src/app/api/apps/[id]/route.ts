@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unifiedAppService } from "@/lib/applications/unified-service";
+import { getDbAsync } from "@/lib/db";
+import { applications, eq } from "@repo/db";
 
 /**
  * GET /api/apps/[id]
  * 
  * Returns full details for a single application including:
- * - Repository info (branches, commits, PRs)
- * - CI/CD pipeline status and history
- * - K8s deployments and pods
- * - Container images
- * - Integration status
+ * - Basic app info from database
+ * 
+ * TODO: Add Gitea, K8s, and Harbor integration when needed
  */
 export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -17,21 +16,59 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
     // Decode the ID (could be "owner/repo" format)
     const appId = decodeURIComponent(params.id);
     
-    const application = await unifiedAppService.getApplication(appId);
+    const db = await getDbAsync();
     
-    if (!application) {
+    if (!db) {
       return NextResponse.json(
         { 
           success: false,
-          error: "Application not found",
+          error: "Database not available",
         },
-        { status: 404 }
+        { status: 503 }
       );
+    }
+    
+    const [application] = await db
+      .select()
+      .from(applications)
+      .where(eq(applications.id, appId))
+      .limit(1);
+    
+    if (!application) {
+      // Try to find by slug
+      const [appBySlug] = await db
+        .select()
+        .from(applications)
+        .where(eq(applications.slug, appId))
+        .limit(1);
+      
+      if (!appBySlug) {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: "Application not found",
+          },
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...appBySlug,
+          createdAt: appBySlug.createdAt.toISOString(),
+          updatedAt: appBySlug.updatedAt.toISOString(),
+        },
+      });
     }
     
     return NextResponse.json({
       success: true,
-      data: application,
+      data: {
+        ...application,
+        createdAt: application.createdAt.toISOString(),
+        updatedAt: application.updatedAt.toISOString(),
+      },
     });
   } catch (error) {
     console.error("Failed to fetch application:", error);

@@ -4,9 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { 
   provisionApplication, 
   AppConfig as ProvisionerAppConfig,
-  ProvisioningResult 
+  ProvisioningResult,
+  SecretInput
 } from '@/lib/provisioning';
-import { SecretInput } from '@/lib/provisioning/secrets-service';
 
 /**
  * Wizard Configuration Interface

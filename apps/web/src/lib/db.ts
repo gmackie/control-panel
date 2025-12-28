@@ -1,41 +1,38 @@
 /**
- * Database connection module with lazy loading
- * Uses dynamic imports to avoid loading native libsql module at build time
+ * Database connection module
+ * Uses Neon PostgreSQL with serverless driver
  */
 
-import * as schema from "./schema";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
+import * as schema from "@repo/db";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let client: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let dbInstance: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let initPromise: Promise<any> | null = null;
+// Type for database instance
+type Database = ReturnType<typeof drizzle<typeof schema>>;
 
-// Async database initialization with dynamic imports
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const initDbAsync = async (): Promise<any> => {
-  if (dbInstance) return dbInstance;
-  
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+let dbInstance: Database | null = null;
 
-  if (!url || !authToken) {
-    console.warn("Database environment variables not available");
+// Get database URL from environment
+const getDatabaseUrl = (): string | null => {
+  const url = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
+  if (!url) {
+    console.warn("DATABASE_URL or NEON_DATABASE_URL not set");
     return null;
   }
+  return url;
+};
+
+// Initialize database connection
+const initDb = (): Database | null => {
+  if (dbInstance) return dbInstance;
+  
+  const url = getDatabaseUrl();
+  if (!url) return null;
 
   try {
-    // Dynamic imports to avoid loading native module at build time
-    const { createClient } = await import("@libsql/client");
-    const { drizzle } = await import("drizzle-orm/libsql");
-    
-    client = createClient({
-      url,
-      authToken,
-    });
-    
-    dbInstance = drizzle(client, { schema });
+    const sql = neon(url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dbInstance = drizzle(sql as any, { schema });
     return dbInstance;
   } catch (error) {
     console.warn("Failed to create database client:", error);
@@ -43,20 +40,21 @@ const initDbAsync = async (): Promise<any> => {
   }
 };
 
-// Export async database getter (recommended)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const getDbAsync = async (): Promise<any> => {
-  if (!initPromise) {
-    initPromise = initDbAsync();
+// Export async database getter (for consistency with previous API)
+export const getDbAsync = async (): Promise<Database | null> => {
+  return initDb();
+};
+
+// Synchronous getter
+export const getDb = (): Database | null => {
+  return initDb();
+};
+
+// Direct db export - initializes on first access
+export const db = (() => {
+  try {
+    return initDb();
+  } catch {
+    return null;
   }
-  return initPromise;
-};
-
-// Synchronous getter - returns cached instance or null (for backward compat)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const getDb = (): any => {
-  return dbInstance;
-};
-
-// For backward compatibility - always null at import time, use getDbAsync instead
-export const db = null;
+})();

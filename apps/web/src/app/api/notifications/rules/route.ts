@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { notificationService } from "@/lib/notifications/notification-service";
 import { rulesEngine } from "@/lib/notifications/rules-engine";
 import { getDbAsync } from "@/lib/db";
-import { notificationRules } from "@/lib/schema-notifications";
+import { notificationRules } from "@repo/db";
 
 /**
  * GET /api/notifications/rules
@@ -74,14 +74,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const now = new Date().toISOString();
-    const id = `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+    const now = new Date();
 
     const record = {
-      id,
       name: body.name,
       description: body.description || null,
-      enabled: body.enabled !== false ? 1 : 0,
+      enabled: body.enabled !== false,
       priority: body.priority || 0,
       conditions: JSON.stringify(body.conditions),
       channels: JSON.stringify(body.channels),
@@ -92,24 +90,24 @@ export async function POST(request: NextRequest) {
       createdBy: body.createdBy || null,
     };
 
-    await db.insert(notificationRules).values(record);
+    const [inserted] = await db.insert(notificationRules).values(record).returning();
 
     // Reload rules in the engine
     await rulesEngine.loadRules();
 
     return NextResponse.json({
-      id,
-      name: body.name,
-      description: body.description,
-      enabled: body.enabled !== false,
-      priority: body.priority || 0,
+      id: inserted.id,
+      name: inserted.name,
+      description: inserted.description,
+      enabled: inserted.enabled,
+      priority: inserted.priority,
       conditions: body.conditions,
       channels: body.channels,
       dedupe: body.dedupe,
       schedule: body.schedule,
-      createdAt: new Date(now),
-      updatedAt: new Date(now),
-      createdBy: body.createdBy,
+      createdAt: inserted.createdAt,
+      updatedAt: inserted.updatedAt,
+      createdBy: inserted.createdBy,
     });
   } catch (error) {
     console.error("Error creating notification rule:", error);

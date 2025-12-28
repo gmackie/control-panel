@@ -1,0 +1,112 @@
+# Node modules (will be installed during build)
+node_modules/
+**/node_modules/
+
+# Web app (not needed for mobile build)
+apps/web/
+
+# Build caches
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+
+# Test files
+tests
+test-results
+coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# IDE
+.idea
+.vscode
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+
+# Large markdown files
+CLAUDE.md
+*.md
+!apps/mobile/README.md
+
+# Infrastructure (not needed for mobile)
+k8s
+deployment
+deployment-system
+monitoring
+observability
+security
+sre
+support
+runbooks
+enterprise-integration
+multi-cloud
+disaster-recovery
+continuous-improvement
+analytics-bi
+service-orchestration
+performance
+production
+
+# AI/ML and backend Python
+ai-operations
+ai-services
+ml-analytics
+backend
+*.py
+
+# Drizzle
+drizzle
+packages/db/drizzle
+
+# Docker
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Shell scripts
+*.sh
+
+# CI/CD
+.github
+.gitea
+.claude
+
+# Large archive files
+*.tar
+*.tar.gz
+*.zip
+*.tgz
+*.gz
+
+# Tooling - needed for workspace deps (@repo/eslint-config, @repo/typescript-config)
+# Keep tooling/ but exclude build artifacts
+tooling/**/dist/
+tooling/**/*.tsbuildinfo
+
+# Large root assets (use app-specific icons instead)
+app-icon.jpg
+
+# Environment files
+.env*
+!.env.example
+
+# Scripts directory (not needed for mobile)
+scripts/
+
+# Note: pnpm-lock.yaml is needed for EAS to detect pnpm
+
+# Docs
+docs/

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unifiedAppService } from "@/lib/applications/unified-service";
 
 /**
  * GET /api/apps/[id]/pipelines
  * 
  * Returns CI/CD pipeline runs for an application
+ * TODO: Implement with Gitea Actions API when needed
  */
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -13,12 +13,22 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") || "20");
     
-    const pipelines = await unifiedAppService.getPipelineRuns(appId, limit);
+    // Return empty array - Gitea Actions integration not yet implemented
+    const pipelines: Array<{
+      id: string;
+      name: string;
+      status: string;
+      conclusion: string;
+      startedAt: string;
+      completedAt?: string;
+    }> = [];
     
     return NextResponse.json({
       success: true,
       data: pipelines,
       count: pipelines.length,
+      appId,
+      limit,
     });
   } catch (error) {
     console.error("Failed to fetch pipelines:", error);

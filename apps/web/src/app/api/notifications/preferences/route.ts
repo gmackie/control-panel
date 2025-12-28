@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { notificationService } from "@/lib/notifications/notification-service";
 import { getDbAsync } from "@/lib/db";
-import { notificationPreferences } from "@/lib/schema-notifications";
+import { notificationPreferences } from "@repo/db";
 import { eq } from "drizzle-orm";
 
 /**

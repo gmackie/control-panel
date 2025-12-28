@@ -6,7 +6,7 @@
  */
 
 import { getDbAsync } from "@/lib/db";
-import { activityEvents, NewActivityEvent, ActivityEventRecord } from "@/lib/schema-activity";
+import { activityEvents, NewActivityEvent, ActivityEvent as ActivityEventRecord } from "@repo/db";
 import { desc, eq, and, or, gte, lte, like, sql, inArray } from "drizzle-orm";
 import { 
   ActivityEvent, 
@@ -38,7 +38,7 @@ function generateId(): string {
 function recordToEvent(record: ActivityEventRecord): ActivityEvent {
   return {
     id: record.id,
-    timestamp: new Date(record.timestamp),
+    timestamp: record.timestamp, // Already a Date in PostgreSQL
     source: record.source as ActivitySource,
     category: record.category as ActivityCategory,
     eventType: record.eventType,
@@ -64,9 +64,8 @@ function recordToEvent(record: ActivityEventRecord): ActivityEvent {
  * Convert CreateActivityEvent to database record
  */
 function eventToRecord(event: CreateActivityEvent): NewActivityEvent {
-  const now = new Date().toISOString();
+  const now = new Date();
   return {
-    id: generateId(),
     timestamp: now,
     source: event.source,
     category: event.category,
@@ -189,11 +188,11 @@ export class ActivityService {
     }
 
     if (startDate) {
-      conditions.push(gte(activityEvents.timestamp, startDate.toISOString()));
+      conditions.push(gte(activityEvents.timestamp, startDate));
     }
 
     if (endDate) {
-      conditions.push(lte(activityEvents.timestamp, endDate.toISOString()));
+      conditions.push(lte(activityEvents.timestamp, endDate));
     }
 
     if (search) {
@@ -289,14 +288,14 @@ export class ActivityService {
     const last24hResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(activityEvents)
-      .where(gte(activityEvents.timestamp, last24h.toISOString()));
+      .where(gte(activityEvents.timestamp, last24h));
     const last24hCount = last24hResult[0]?.count || 0;
 
     // Last 7d count
     const last7dResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(activityEvents)
-      .where(gte(activityEvents.timestamp, last7d.toISOString()));
+      .where(gte(activityEvents.timestamp, last7d));
     const last7dCount = last7dResult[0]?.count || 0;
 
     // By category
@@ -362,9 +361,9 @@ export class ActivityService {
     
     const result = await db
       .delete(activityEvents)
-      .where(lte(activityEvents.timestamp, cutoff.toISOString()));
+      .where(lte(activityEvents.timestamp, cutoff));
     
-    return result.rowsAffected || 0;
+    return result.rowCount ?? 0;
   }
 
   // ===================================

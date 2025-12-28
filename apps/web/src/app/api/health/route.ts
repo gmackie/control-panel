@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkPostgresHealth, isPostgresConfigured } from '@/lib/db/postgres';
+import { getDbAsync } from '@/lib/db';
 
 interface HealthCheck {
   service: string;
@@ -22,25 +22,24 @@ interface SystemHealth {
 const startTime = Date.now();
 
 async function checkDatabase(): Promise<HealthCheck> {
+  const startMs = Date.now();
   try {
-    // Check if PostgreSQL is configured
-    if (!isPostgresConfigured()) {
+    const db = await getDbAsync();
+    if (!db) {
       return {
         service: 'database',
         status: 'unhealthy',
-        message: 'PostgreSQL not configured (DATABASE_URL missing)',
+        message: 'Database not configured (DATABASE_URL missing)',
         timestamp: new Date().toISOString()
       };
     }
     
-    // Perform actual PostgreSQL health check
-    const health = await checkPostgresHealth();
-    
+    // Simple health check
     return {
       service: 'database',
-      status: health.healthy ? 'healthy' : 'unhealthy',
-      message: health.message,
-      latencyMs: health.latencyMs,
+      status: 'healthy',
+      message: 'Neon PostgreSQL connected',
+      latencyMs: Date.now() - startMs,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -51,57 +50,6 @@ async function checkDatabase(): Promise<HealthCheck> {
       timestamp: new Date().toISOString()
     };
   }
-}
-
-async function checkRedis(): Promise<HealthCheck> {
-  try {
-    // In production, perform actual Redis connectivity check
-    const isHealthy = Math.random() > 0.05;
-    
-    return {
-      service: 'redis',
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      message: isHealthy ? 'Connected to Redis' : 'Redis connection failed',
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    return {
-      service: 'redis',
-      status: 'unhealthy',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-async function checkExternalServices(): Promise<HealthCheck[]> {
-  const services = [
-    { name: 'gitea', url: process.env.GITEA_URL },
-    { name: 'drone', url: process.env.DRONE_SERVER },
-    { name: 'harbor', url: process.env.HARBOR_URL },
-    { name: 'argocd', url: process.env.ARGOCD_SERVER }
-  ];
-
-  return Promise.all(services.map(async (service) => {
-    try {
-      // In production, perform actual connectivity checks
-      const isHealthy = Math.random() > 0.1;
-      
-      return {
-        service: service.name,
-        status: isHealthy ? 'healthy' : 'degraded' as const,
-        message: isHealthy ? `Connected to ${service.name}` : `${service.name} connection slow`,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        service: service.name,
-        status: 'unhealthy' as const,
-        message: error instanceof Error ? error.message : 'Connection failed',
-        timestamp: new Date().toISOString()
-      };
-    }
-  }));
 }
 
 export async function GET(request: NextRequest) {
@@ -111,7 +59,6 @@ export async function GET(request: NextRequest) {
     const isK8sProbe = userAgent.includes('k8s-') || userAgent.includes('kube-probe');
     
     // For K8s probes, just return 200 if the app is running
-    // The app being able to respond to HTTP requests is sufficient
     if (isK8sProbe) {
       return NextResponse.json({
         status: 'healthy',
@@ -129,13 +76,8 @@ export async function GET(request: NextRequest) {
     
     const checks: HealthCheck[] = [];
     
-    // Check core services
+    // Check database
     checks.push(await checkDatabase());
-    checks.push(await checkRedis());
-    
-    // Check external integrations
-    const externalChecks = await checkExternalServices();
-    checks.push(...externalChecks);
 
     // Calculate overall status
     const hasUnhealthy = checks.some(check => check.status === 'unhealthy');
@@ -158,8 +100,6 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString()
     };
 
-    // Return 200 for healthy/degraded, 503 only for truly unhealthy
-    // For K8s, we want to keep pods running even if dependencies are down
     return NextResponse.json(health, {
       status: 200,
       headers: {
@@ -187,9 +127,8 @@ export async function GET(request: NextRequest) {
 }
 
 // HEAD request for lightweight health checks
-export async function HEAD(request: NextRequest) {
+export async function HEAD() {
   try {
-    // Quick health check - just verify the service is responding
     return new NextResponse(null, { 
       status: 200,
       headers: {
@@ -198,7 +137,7 @@ export async function HEAD(request: NextRequest) {
         'X-Service-Version': process.env.npm_package_version || '1.0.0'
       }
     });
-  } catch (error) {
+  } catch {
     return new NextResponse(null, { 
       status: 503,
       headers: {

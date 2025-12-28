@@ -6,8 +6,7 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
-import { notifications, pushSubscriptions } from "@repo/db";
-import { desc, eq, and, gte, inArray, sql } from "drizzle-orm";
+import { notifications, pushSubscriptions, desc, eq, and, gte, inArray, sql } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
 export const notificationsRouter = router({
@@ -55,8 +54,8 @@ export const notificationsRouter = router({
       return {
         notifications: results.map((n) => ({
           ...n,
-          createdAt: new Date(n.createdAt),
-          updatedAt: new Date(n.updatedAt),
+          createdAt: n.createdAt, // Already a Date in PostgreSQL
+          updatedAt: n.updatedAt, // Already a Date in PostgreSQL
         })),
         total,
         hasMore: offset + results.length < total,
@@ -86,8 +85,8 @@ export const notificationsRouter = router({
 
       return {
         ...notification,
-        createdAt: new Date(notification.createdAt),
-        updatedAt: new Date(notification.updatedAt),
+        createdAt: notification.createdAt, // Already a Date in PostgreSQL
+        updatedAt: notification.updatedAt, // Already a Date in PostgreSQL
       };
     }),
 
@@ -124,8 +123,8 @@ export const notificationsRouter = router({
       const [totalResult, unreadResult, last24hResult, last7dResult] = await Promise.all([
         ctx.db.select({ count: sql<number>`count(*)` }).from(notifications),
         ctx.db.select({ count: sql<number>`count(*)` }).from(notifications).where(eq(notifications.status, "new")),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(notifications).where(gte(notifications.createdAt, last24h.toISOString())),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(notifications).where(gte(notifications.createdAt, last7d.toISOString())),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(notifications).where(gte(notifications.createdAt, last24h)),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(notifications).where(gte(notifications.createdAt, last7d)),
       ]);
 
       return {
@@ -150,7 +149,7 @@ export const notificationsRouter = router({
         .update(notifications)
         .set({
           status: "seen",
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(notifications.id, input));
 
@@ -170,13 +169,13 @@ export const notificationsRouter = router({
         .update(notifications)
         .set({
           status: "seen",
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(notifications.status, "new"));
 
       return { 
         success: true, 
-        count: result.rowsAffected || 0 
+        count: result.rowCount ?? 0 
       };
     }),
 
@@ -195,8 +194,7 @@ export const notificationsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
       }
 
-      const now = new Date().toISOString();
-      const id = `push_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+      const now = new Date();
       
       // Check if device already registered
       const existing = await ctx.db
@@ -212,7 +210,7 @@ export const notificationsRouter = router({
           .set({
             pushToken: input.pushToken,
             deviceName: input.deviceName,
-            active: 1,
+            active: true,
             lastUsedAt: now,
             updatedAt: now,
           })
@@ -221,20 +219,19 @@ export const notificationsRouter = router({
         return { success: true, id: existing[0]!.id, updated: true };
       }
 
-      // Create new subscription
+      // Create new subscription - let DB generate the id
       await ctx.db.insert(pushSubscriptions).values({
-        id,
         userId: "default", // In a real app, get from auth context
         deviceId: input.deviceId,
         deviceName: input.deviceName,
         platform: input.platform,
         pushToken: input.pushToken,
-        active: 1,
+        active: true,
         createdAt: now,
         updatedAt: now,
       });
 
-      return { success: true, id, updated: false };
+      return { success: true, updated: false };
     }),
 
   /**
@@ -250,8 +247,8 @@ export const notificationsRouter = router({
       await ctx.db
         .update(pushSubscriptions)
         .set({
-          active: 0,
-          updatedAt: new Date().toISOString(),
+          active: false,
+          updatedAt: new Date(),
         })
         .where(eq(pushSubscriptions.deviceId, input));
 

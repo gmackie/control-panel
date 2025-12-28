@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unifiedAppService } from "@/lib/applications/unified-service";
 import { getServerSession } from "next-auth";
 
 /**
@@ -7,6 +6,8 @@ import { getServerSession } from "next-auth";
  * 
  * Sync all applications from Gitea to PostgreSQL
  * This discovers apps from Gitea and creates/updates records in the database
+ * 
+ * TODO: Implement Gitea sync when needed
  * 
  * Authentication:
  * - Session auth (via NextAuth)
@@ -28,13 +29,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await unifiedAppService.syncAllApplications();
-    
+    // Stub - Gitea sync not yet implemented
     return NextResponse.json({
-      success: true,
-      data: result,
-      message: `Synced ${result.synced} applications, ${result.failed} failed`,
-    });
+      success: false,
+      data: { synced: 0, failed: 0, errors: [] },
+      message: "Gitea sync not yet implemented",
+    }, { status: 501 });
   } catch (error) {
     console.error("Failed to sync applications:", error);
     return NextResponse.json(
