@@ -29,9 +29,12 @@ FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
 WORKDIR /app
 
-# Copy dependencies (pnpm hoists most to root, workspace packages may not have local node_modules)
+# Copy dependencies (pnpm hoists most to root, but workspace packages have local symlinked node_modules)
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy source code
 COPY . .
