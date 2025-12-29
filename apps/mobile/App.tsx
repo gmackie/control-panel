@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { TRPCProvider } from "./src/lib/trpc";
 import { useNotificationNavigation } from "./src/hooks/useNotificationNavigation";
 import { DashboardScreen } from "./src/screens/DashboardScreen";
@@ -166,12 +167,13 @@ function MainTabs() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <TRPCProvider>
-        <NavigationContainer theme={DarkTheme}>
-          <NotificationHandler />
-          <StatusBar style="light" />
-          <Stack.Navigator
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <TRPCProvider>
+          <NavigationContainer theme={DarkTheme}>
+            <NotificationHandler />
+            <StatusBar style="light" />
+            <Stack.Navigator
             screenOptions={{
               headerShown: false,
             }}
@@ -211,5 +213,6 @@ export default function App() {
         </NavigationContainer>
       </TRPCProvider>
     </SafeAreaProvider>
+  </ErrorBoundary>
   );
 }

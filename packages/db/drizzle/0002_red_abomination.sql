@@ -1,0 +1,19 @@
+CREATE INDEX "activity_events_app_id_idx" ON "activity_events" USING btree ("app_id");--> statement-breakpoint
+CREATE INDEX "activity_events_timestamp_idx" ON "activity_events" USING btree ("timestamp");--> statement-breakpoint
+CREATE INDEX "activity_events_source_idx" ON "activity_events" USING btree ("source");--> statement-breakpoint
+CREATE INDEX "alerts_name_idx" ON "alerts" USING btree ("name");--> statement-breakpoint
+CREATE INDEX "alerts_status_idx" ON "alerts" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "alerts_starts_at_idx" ON "alerts" USING btree ("starts_at");--> statement-breakpoint
+CREATE INDEX "databases_app_id_idx" ON "databases" USING btree ("app_id");--> statement-breakpoint
+CREATE INDEX "deployment_history_application_id_idx" ON "deployment_history" USING btree ("application_id");--> statement-breakpoint
+CREATE INDEX "deployment_history_environment_idx" ON "deployment_history" USING btree ("environment");--> statement-breakpoint
+CREATE INDEX "deployment_history_started_at_idx" ON "deployment_history" USING btree ("started_at");--> statement-breakpoint
+CREATE INDEX "notification_delivery_log_notification_id_idx" ON "notification_delivery_log" USING btree ("notification_id");--> statement-breakpoint
+CREATE INDEX "notifications_app_id_idx" ON "notifications" USING btree ("app_id");--> statement-breakpoint
+CREATE INDEX "notifications_user_id_idx" ON "notifications" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "notifications_status_idx" ON "notifications" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "notifications_created_at_idx" ON "notifications" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "push_subscriptions_user_id_idx" ON "push_subscriptions" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "push_subscriptions_push_token_idx" ON "push_subscriptions" USING btree ("push_token");--> statement-breakpoint
+CREATE INDEX "usage_analytics_app_id_idx" ON "usage_analytics" USING btree ("app_id");--> statement-breakpoint
+CREATE INDEX "usage_analytics_timestamp_idx" ON "usage_analytics" USING btree ("timestamp");

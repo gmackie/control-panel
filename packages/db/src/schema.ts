@@ -42,10 +42,14 @@ export const activityEvents = pgTable("activity_events", {
   actorName: text("actor_name"),
   actorEmail: text("actor_email"),
   actorAvatar: text("actor_avatar"),
-  links: text("links"), // JSON
-  metadata: text("metadata"), // JSON
+  links: text("links"),
+  metadata: text("metadata"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  appIdIdx: index("activity_events_app_id_idx").on(table.appId),
+  timestampIdx: index("activity_events_timestamp_idx").on(table.timestamp),
+  sourceIdx: index("activity_events_source_idx").on(table.source),
+}));
 
 // ===================================
 // Notifications
@@ -65,8 +69,8 @@ export const notifications = pgTable("notifications", {
   appId: uuid("app_id"),
   appName: text("app_name"),
   environment: varchar("environment", { length: 50 }),
-  actions: text("actions"), // JSON
-  links: text("links"), // JSON
+  actions: text("actions"),
+  links: text("links"),
   status: varchar("status", { length: 50 }).notNull().default("new"),
   acknowledgedBy: text("acknowledged_by"),
   acknowledgedAt: timestamp("acknowledged_at"),
@@ -75,10 +79,15 @@ export const notifications = pgTable("notifications", {
   snoozedUntil: timestamp("snoozed_until"),
   groupKey: text("group_key"),
   groupCount: integer("group_count").default(1),
-  deliveredVia: text("delivered_via"), // JSON
+  deliveredVia: text("delivered_via"),
   userId: text("user_id"),
-  metadata: text("metadata"), // JSON
-});
+  metadata: text("metadata"),
+}, (table) => ({
+  appIdIdx: index("notifications_app_id_idx").on(table.appId),
+  userIdIdx: index("notifications_user_id_idx").on(table.userId),
+  statusIdx: index("notifications_status_idx").on(table.status),
+  createdAtIdx: index("notifications_created_at_idx").on(table.createdAt),
+}));
 
 export const notificationRules = pgTable("notification_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -120,7 +129,10 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   lastUsedAt: timestamp("last_used_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  userIdIdx: index("push_subscriptions_user_id_idx").on(table.userId),
+  pushTokenIdx: index("push_subscriptions_push_token_idx").on(table.pushToken),
+}));
 
 export const notificationDeliveryLog = pgTable("notification_delivery_log", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -130,7 +142,9 @@ export const notificationDeliveryLog = pgTable("notification_delivery_log", {
   error: text("error"),
   messageId: text("message_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  notificationIdIdx: index("notification_delivery_log_notification_id_idx").on(table.notificationId),
+}));
 
 // ===================================
 // Users (for internal tracking)
@@ -159,8 +173,12 @@ export const alerts = pgTable("alerts", {
   endsAt: timestamp("ends_at"),
   summary: text("summary").notNull(),
   description: text("description"),
-  labels: text("labels"), // JSON
-});
+  labels: text("labels"),
+}, (table) => ({
+  nameIdx: index("alerts_name_idx").on(table.name),
+  statusIdx: index("alerts_status_idx").on(table.status),
+  startsAtIdx: index("alerts_starts_at_idx").on(table.startsAt),
+}));
 
 // ===================================
 // Services
@@ -242,7 +260,11 @@ export const deploymentHistory = pgTable("deployment_history", {
   startedAt: timestamp("started_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  applicationIdIdx: index("deployment_history_application_id_idx").on(table.applicationId),
+  environmentIdx: index("deployment_history_environment_idx").on(table.environment),
+  startedAtIdx: index("deployment_history_started_at_idx").on(table.startedAt),
+}));
 
 // ===================================
 // Databases
@@ -258,7 +280,9 @@ export const databases = pgTable("databases", {
   status: varchar("status", { length: 50 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  appIdIdx: index("databases_app_id_idx").on(table.appId),
+}));
 
 export const databaseOperations = pgTable("database_operations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -328,9 +352,12 @@ export const usageAnalytics = pgTable("usage_analytics", {
   errorRate: real("error_rate").notNull(),
   p95ResponseTime: real("p95_response_time").notNull(),
   p99ResponseTime: real("p99_response_time").notNull(),
-  topEndpoints: text("top_endpoints").notNull(), // JSON
+  topEndpoints: text("top_endpoints").notNull(),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
-});
+}, (table) => ({
+  appIdIdx: index("usage_analytics_app_id_idx").on(table.appId),
+  timestampIdx: index("usage_analytics_timestamp_idx").on(table.timestamp),
+}));
 
 // ===================================
 // Cost Tracking

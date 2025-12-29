@@ -5,6 +5,8 @@ import {
   createNotification,
   sendSlackNotification,
 } from '@/lib/webhooks/webhook-service'
+import { webhookLimiter } from '@/lib/rate-limiter'
+import { RateLimitError } from '@/lib/api-errors'
 
 interface HarborWebhookPayload {
   type: string
@@ -27,6 +29,18 @@ interface HarborWebhookPayload {
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    await webhookLimiter.checkLimit(request)
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: error.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(error.retryAfter || 60) } }
+      )
+    }
+    throw error
+  }
+
   try {
     const authHeader = request.headers.get('Authorization')
     const expectedToken = `Bearer ${process.env.HARBOR_WEBHOOK_TOKEN || ''}`

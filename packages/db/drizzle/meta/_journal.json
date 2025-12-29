@@ -15,6 +15,13 @@
       "when": 1766916987320,
       "tag": "0001_complex_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766979618469,
+      "tag": "0002_red_abomination",
+      "breakpoints": true
     }
   ]
 }
