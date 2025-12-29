@@ -9,6 +9,9 @@ import crypto from "crypto";
 import { activityService } from "@/lib/activity/activity-service";
 import { normalizeClerkUser, normalizeClerkSession } from "@/lib/activity/event-normalizers";
 import { ClerkUserPayload, ClerkSessionPayload } from "@/lib/activity/types";
+import { storeWebhookEvent } from "@/lib/webhooks/webhook-service";
+import { webhookLimiter } from "@/lib/rate-limiter";
+import { RateLimitError } from "@/lib/api-errors";
 
 const CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
@@ -49,6 +52,18 @@ function verifyClerkSignature(
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    await webhookLimiter.checkLimit(request);
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", retryAfter: error.retryAfter },
+        { status: 429, headers: { "Retry-After": String(error.retryAfter || 60) } }
+      );
+    }
+    throw error;
+  }
+
   try {
     // Get the headers
     const svixId = request.headers.get("svix-id");
@@ -91,6 +106,16 @@ export async function POST(request: NextRequest) {
 
     // Create the activity event
     await activityService.create(activityEvent);
+
+    await storeWebhookEvent({
+      source: "clerk",
+      eventType: payload.type,
+      title: `Clerk: ${payload.type}`,
+      description: `Clerk webhook event: ${payload.type}`,
+      severity: "info",
+      metadata: { svixId, svixTimestamp },
+      timestamp: new Date(),
+    });
 
     return NextResponse.json({ received: true, processed: true });
   } catch (error) {

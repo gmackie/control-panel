@@ -123,7 +123,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     fetchNotifications(true);
     fetchStats();
-  }, [selectedSeverities, selectedCategories, selectedStatuses, searchQuery]);
+  }, [fetchNotifications, fetchStats, selectedSeverities, selectedCategories, selectedStatuses, searchQuery]);
 
   const handleAcknowledge = async (id: string) => {
     try {

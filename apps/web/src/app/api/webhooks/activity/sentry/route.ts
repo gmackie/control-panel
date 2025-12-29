@@ -9,6 +9,9 @@ import crypto from "crypto";
 import { activityService } from "@/lib/activity/activity-service";
 import { normalizeSentryIssue } from "@/lib/activity/event-normalizers";
 import { SentryIssuePayload } from "@/lib/activity/types";
+import { storeWebhookEvent } from "@/lib/webhooks/webhook-service";
+import { webhookLimiter } from "@/lib/rate-limiter";
+import { RateLimitError } from "@/lib/api-errors";
 
 const SENTRY_WEBHOOK_SECRET = process.env.SENTRY_WEBHOOK_SECRET;
 
@@ -19,6 +22,18 @@ function verifySentrySignature(payload: string, signature: string, secret: strin
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    await webhookLimiter.checkLimit(request);
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", retryAfter: error.retryAfter },
+        { status: 429, headers: { "Retry-After": String(error.retryAfter || 60) } }
+      );
+    }
+    throw error;
+  }
+
   try {
     const body = await request.text();
     let payload: SentryIssuePayload;
@@ -47,6 +62,16 @@ export async function POST(request: NextRequest) {
     // Normalize and create activity event
     const activityEvent = normalizeSentryIssue(payload);
     await activityService.create(activityEvent);
+
+    await storeWebhookEvent({
+      source: "sentry",
+      eventType: payload.action,
+      title: `Sentry: ${payload.action}`,
+      description: payload.data?.issue?.title || "Sentry issue event",
+      severity: payload.action === "created" ? "warning" : "info",
+      metadata: { issueId: payload.data?.issue?.id },
+      timestamp: new Date(),
+    });
 
     return NextResponse.json({ received: true, processed: true });
   } catch (error) {

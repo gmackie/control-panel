@@ -87,18 +87,17 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     staleTime: 30000,
   });
 
-  const applications = appsData || [];
-  const services = servicesData || [];
-
-  // Navigation commands
-  const navigationCommands: CommandItem[] = [
-    {
-      id: "nav-dashboard",
-      title: "Dashboard",
-      description: "Go to main dashboard",
-      icon: <BarChart3 className="h-4 w-4" />,
-      category: "navigation",
-      action: () => router.push("/"),
+  const allCommands = useMemo(() => {
+    const applications = appsData || [];
+    const services = servicesData || [];
+    const navigationCommands: CommandItem[] = [
+      {
+        id: "nav-dashboard",
+        title: "Dashboard",
+        description: "Go to main dashboard",
+        icon: <BarChart3 className="h-4 w-4" />,
+        category: "navigation",
+        action: () => router.push("/"),
       keywords: ["home", "overview", "main"],
       shortcut: "G D",
     },
@@ -224,8 +223,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     },
   ];
 
-  // Quick action commands
-  const actionCommands: CommandItem[] = [
+    const actionCommands: CommandItem[] = [
     {
       id: "action-create-app",
       title: "Create Application",
@@ -273,8 +271,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     },
   ];
 
-  // Application commands (dynamic)
-  const applicationCommands: CommandItem[] = applications.map((app: any) => ({
+    const applicationCommands: CommandItem[] = applications.map((app: any) => ({
     id: `app-${app.id || app.slug}`,
     title: app.name,
     description: app.description || `View ${app.name} application`,
@@ -284,24 +281,23 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     keywords: [app.slug, app.language, app.framework].filter(Boolean),
   }));
 
-  // Service commands (dynamic)
-  const serviceCommands: CommandItem[] = services.map((service: any) => ({
+    const serviceCommands: CommandItem[] = services.map((service: any) => ({
     id: `service-${service.id || service.name}`,
     title: service.name,
     description: `${service.type || "Service"} - ${service.status || "unknown"}`,
     icon: <Box className="h-4 w-4" />,
     category: "services" as const,
     action: () => router.push(`/services/${service.id}`),
-    keywords: [service.type, service.status].filter(Boolean),
-  }));
+      keywords: [service.type, service.status].filter(Boolean),
+    }));
 
-  // Combine all commands
-  const allCommands = useMemo(() => [
-    ...navigationCommands,
-    ...actionCommands,
-    ...applicationCommands,
-    ...serviceCommands,
-  ], [applications, services]);
+    return [
+      ...navigationCommands,
+      ...actionCommands,
+      ...applicationCommands,
+      ...serviceCommands,
+    ];
+  }, [appsData, servicesData, router]);
 
   // Filter commands based on search
   const filteredCommands = useMemo(() => {

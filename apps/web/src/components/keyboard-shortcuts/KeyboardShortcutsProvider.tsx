@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useCommandPalette } from "../command-palette/CommandPaletteProvider";
 
@@ -40,9 +40,7 @@ export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProvide
   const [pendingPrefix, setPendingPrefix] = useState<string | null>(null);
   const [prefixTimeout, setPrefixTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Define all shortcuts
-  const shortcuts: Shortcut[] = [
-    // Navigation shortcuts (g prefix = "go to")
+  const shortcuts: Shortcut[] = useMemo(() => [
     { key: 'g h', label: 'Home', description: 'Go to dashboard home', action: () => router.push('/'), category: 'navigation' },
     { key: 'g a', label: 'Applications', description: 'Go to applications', action: () => router.push('/applications'), category: 'navigation' },
     { key: 'g s', label: 'Services', description: 'Go to services', action: () => router.push('/services'), category: 'navigation' },
@@ -54,20 +52,16 @@ export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProvide
     { key: 'g $', label: 'Costs', description: 'Go to cost management', action: () => router.push('/costs'), category: 'navigation' },
     { key: 'g p', label: 'Pipeline', description: 'Go to CI/CD pipeline', action: () => router.push('/pipeline'), category: 'navigation' },
     { key: 'g t', label: 'Timeline', description: 'Go to deployment timeline', action: () => router.push('/deployments/timeline'), category: 'navigation' },
-    
-    // Quick actions
     { key: 'n a', label: 'New App', description: 'Create new application', action: () => router.push('/applications?action=create'), category: 'actions' },
     { key: 'n d', label: 'New Deploy', description: 'Start new deployment', action: () => router.push('/deployments/advanced?action=new'), category: 'actions' },
     { key: 'n s', label: 'New Secret', description: 'Create new secret', action: () => router.push('/secrets?action=create'), category: 'actions' },
     { key: 'c p', label: 'Command Palette', description: 'Open command palette', action: () => openCommandPalette(true), category: 'actions' },
-    
-    // View toggles
     { key: '1', label: 'Overview Tab', description: 'Switch to overview tab', action: () => {}, category: 'views' },
     { key: '2', label: 'Infrastructure Tab', description: 'Switch to infrastructure tab', action: () => {}, category: 'views' },
     { key: '3', label: 'Monitoring Tab', description: 'Switch to monitoring tab', action: () => {}, category: 'views' },
     { key: '4', label: 'Cluster Tab', description: 'Switch to cluster tab', action: () => {}, category: 'views' },
     { key: '5', label: 'Integrations Tab', description: 'Switch to integrations tab', action: () => {}, category: 'views' },
-  ];
+  ], [router, openCommandPalette]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Ignore if in input/textarea
@@ -139,7 +133,7 @@ export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProvide
       e.preventDefault();
       singleShortcut.action();
     }
-  }, [pendingPrefix, prefixTimeout, router, shortcuts]);
+  }, [pendingPrefix, prefixTimeout, shortcuts]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);

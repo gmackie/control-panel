@@ -131,11 +131,10 @@ export function ActivityFeed({
     }
   }, [inView, hasMore, isLoading, isLoadingMore, fetchEvents]);
 
-  // Initial fetch and reset when filters change
   useEffect(() => {
     fetchEvents(true);
     fetchStats();
-  }, [selectedSources, selectedCategories, selectedSeverities]);
+  }, [fetchEvents, fetchStats, selectedSources, selectedCategories, selectedSeverities]);
 
   // Setup SSE connection for real-time updates
   useEffect(() => {

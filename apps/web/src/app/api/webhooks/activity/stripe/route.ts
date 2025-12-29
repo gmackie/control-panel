@@ -9,6 +9,9 @@ import crypto from "crypto";
 import { activityService } from "@/lib/activity/activity-service";
 import { normalizeStripePayment } from "@/lib/activity/event-normalizers";
 import { StripePaymentPayload } from "@/lib/activity/types";
+import { storeWebhookEvent } from "@/lib/webhooks/webhook-service";
+import { webhookLimiter } from "@/lib/rate-limiter";
+import { RateLimitError } from "@/lib/api-errors";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -89,6 +92,18 @@ function verifyStripeSignature(
 
 export async function POST(request: NextRequest) {
   try {
+    await webhookLimiter.checkLimit(request);
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", retryAfter: error.retryAfter },
+        { status: 429, headers: { "Retry-After": String(error.retryAfter || 60) } }
+      );
+    }
+    throw error;
+  }
+
+  try {
     const body = await request.text();
     let event: StripeEvent;
 
@@ -124,6 +139,16 @@ export async function POST(request: NextRequest) {
     // Normalize and create activity event
     const activityEvent = normalizeStripePayment(payload);
     await activityService.create(activityEvent);
+
+    await storeWebhookEvent({
+      source: "stripe",
+      eventType: event.type,
+      title: `Stripe: ${event.type}`,
+      description: `Payment event: ${event.type}`,
+      severity: event.type.includes("failed") ? "warning" : "info",
+      metadata: { eventId: event.id, amount: event.data.object.amount },
+      timestamp: new Date(),
+    });
 
     return NextResponse.json({ received: true, processed: true });
   } catch (error) {

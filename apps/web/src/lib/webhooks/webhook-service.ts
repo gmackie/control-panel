@@ -1,6 +1,6 @@
 import { getDb, activityEvents, notifications, alerts, deploymentHistory, eq } from "@repo/db";
 
-type WebhookSource = "argocd" | "harbor" | "prometheus" | "gitea" | "clerk" | "stripe";
+type WebhookSource = "argocd" | "harbor" | "prometheus" | "gitea" | "clerk" | "stripe" | "sentry";
 type Severity = "info" | "warning" | "critical";
 
 interface WebhookEventData {

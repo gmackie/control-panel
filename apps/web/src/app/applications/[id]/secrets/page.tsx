@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +63,7 @@ export default function SecretsPage({ params }: PageProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const fetchSecrets = async () => {
+  const fetchSecrets = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/apps/${appId}/secrets`);
@@ -79,11 +79,11 @@ export default function SecretsPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appId]);
 
   useEffect(() => {
     fetchSecrets();
-  }, [appId]);
+  }, [fetchSecrets]);
 
   const handleAddSecret = async (e: React.FormEvent) => {
     e.preventDefault();
