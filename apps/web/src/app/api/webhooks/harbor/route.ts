@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  storeWebhookEvent,
+  storeAlert,
+  createNotification,
+  sendSlackNotification,
+} from '@/lib/webhooks/webhook-service'
 
 interface HarborWebhookPayload {
   type: string
@@ -16,7 +22,7 @@ interface HarborWebhookPayload {
       repo_full_name: string
       repo_type: string
     }
-    custom_attributes?: Record<string, any>
+    custom_attributes?: Record<string, unknown>
   }
 }
 
@@ -25,7 +31,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization')
     const expectedToken = `Bearer ${process.env.HARBOR_WEBHOOK_TOKEN || ''}`
     
-    // Verify authorization
     if (authHeader !== expectedToken) {
       console.error('Invalid Harbor webhook authorization')
       return NextResponse.json(
@@ -38,26 +43,28 @@ export async function POST(request: NextRequest) {
     
     console.log(`Processing Harbor webhook: ${payload.type}`)
     
-    // Process different event types
+    const repo = payload.event_data.repository?.repo_full_name || 'unknown'
+    const tag = payload.event_data.resources?.[0]?.tag || 'unknown'
+    
     switch (payload.type) {
       case 'PUSH_ARTIFACT':
-        await handlePushArtifact(payload)
+        await handlePushArtifact(payload, repo, tag)
         break
       
       case 'PULL_ARTIFACT':
-        await handlePullArtifact(payload)
+        await handlePullArtifact(repo, tag)
         break
       
       case 'DELETE_ARTIFACT':
-        await handleDeleteArtifact(payload)
+        await handleDeleteArtifact(payload, repo, tag)
         break
       
       case 'SCANNING_COMPLETED':
-        await handleScanCompleted(payload)
+        await handleScanCompleted(repo, tag)
         break
       
       case 'SCANNING_FAILED':
-        await handleScanFailed(payload)
+        await handleScanFailed(payload, repo, tag)
         break
       
       case 'QUOTA_EXCEED':
@@ -68,13 +75,19 @@ export async function POST(request: NextRequest) {
         console.log(`Unhandled Harbor event type: ${payload.type}`)
     }
     
-    // Store webhook event
     await storeWebhookEvent({
       source: 'harbor',
-      event: payload.type,
-      operator: payload.operator,
-      payload,
-      timestamp: new Date(payload.occur_at * 1000)
+      eventType: payload.type,
+      appName: repo,
+      title: `Harbor ${payload.type}: ${repo}:${tag}`,
+      description: `Operator: ${payload.operator}`,
+      severity: getSeverityForEvent(payload.type),
+      metadata: {
+        operator: payload.operator,
+        repository: payload.event_data.repository,
+        resources: payload.event_data.resources,
+      },
+      timestamp: new Date(payload.occur_at * 1000),
     })
     
     return NextResponse.json({
@@ -90,69 +103,123 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handlePushArtifact(payload: HarborWebhookPayload) {
-  const repo = payload.event_data.repository?.repo_full_name
-  const tag = payload.event_data.resources?.[0]?.tag
-  
+function getSeverityForEvent(eventType: string): 'info' | 'warning' | 'critical' {
+  switch (eventType) {
+    case 'SCANNING_FAILED':
+    case 'QUOTA_EXCEED':
+      return 'critical'
+    case 'DELETE_ARTIFACT':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
+async function handlePushArtifact(payload: HarborWebhookPayload, repo: string, tag: string) {
   console.log(`New artifact pushed: ${repo}:${tag}`)
   
-  // Trigger deployment if it's a production tag
+  await createNotification({
+    source: 'harbor',
+    category: 'registry',
+    severity: 'info',
+    title: `New Image Pushed: ${repo}:${tag}`,
+    message: `A new container image was pushed by ${payload.operator}`,
+    appName: repo,
+    links: payload.event_data.resources?.[0]?.resource_url 
+      ? [{ url: payload.event_data.resources[0].resource_url, label: 'View in Harbor' }]
+      : undefined,
+  })
+  
   if (tag === 'latest' || tag?.startsWith('v')) {
     console.log('Triggering deployment for new artifact...')
     // TODO: Trigger ArgoCD sync or deployment pipeline
   }
 }
 
-async function handlePullArtifact(payload: HarborWebhookPayload) {
-  const repo = payload.event_data.repository?.repo_full_name
-  const tag = payload.event_data.resources?.[0]?.tag
-  
+async function handlePullArtifact(repo: string, tag: string) {
   console.log(`Artifact pulled: ${repo}:${tag}`)
-  
-  // Track usage metrics
-  // TODO: Update pull metrics
 }
 
-async function handleDeleteArtifact(payload: HarborWebhookPayload) {
-  const repo = payload.event_data.repository?.repo_full_name
-  const tag = payload.event_data.resources?.[0]?.tag
-  
+async function handleDeleteArtifact(payload: HarborWebhookPayload, repo: string, tag: string) {
   console.log(`Artifact deleted: ${repo}:${tag}`)
   
-  // Clean up related deployments if needed
-  // TODO: Check if any deployments use this artifact
+  await createNotification({
+    source: 'harbor',
+    category: 'registry',
+    severity: 'warning',
+    title: `Image Deleted: ${repo}:${tag}`,
+    message: `Container image was deleted by ${payload.operator}`,
+    appName: repo,
+  })
 }
 
-async function handleScanCompleted(payload: HarborWebhookPayload) {
-  const repo = payload.event_data.repository?.repo_full_name
-  const tag = payload.event_data.resources?.[0]?.tag
-  
+async function handleScanCompleted(repo: string, tag: string) {
   console.log(`Security scan completed: ${repo}:${tag}`)
   
-  // Check scan results and take action if vulnerabilities found
-  // TODO: Fetch scan results and alert if critical vulnerabilities
+  await createNotification({
+    source: 'harbor',
+    category: 'security',
+    severity: 'info',
+    title: `Security Scan Complete: ${repo}:${tag}`,
+    message: 'Image security scan has completed successfully',
+    appName: repo,
+  })
 }
 
-async function handleScanFailed(payload: HarborWebhookPayload) {
-  const repo = payload.event_data.repository?.repo_full_name
-  const tag = payload.event_data.resources?.[0]?.tag
-  
+async function handleScanFailed(payload: HarborWebhookPayload, repo: string, tag: string) {
   console.error(`Security scan failed: ${repo}:${tag}`)
   
-  // Alert about scan failure
-  // TODO: Send alert about scan failure
+  await storeAlert({
+    name: `harbor-scan-failed-${repo}`,
+    severity: 'critical',
+    status: 'firing',
+    startsAt: new Date(payload.occur_at * 1000),
+    summary: `Security scan failed for ${repo}:${tag}`,
+    description: 'Harbor security scan was unable to complete. Manual investigation required.',
+    labels: { repository: repo, tag, source: 'harbor' },
+  })
+  
+  await createNotification({
+    source: 'harbor',
+    category: 'security',
+    severity: 'critical',
+    title: `Security Scan Failed: ${repo}:${tag}`,
+    message: 'Image security scan failed. Manual investigation required.',
+    appName: repo,
+  })
+  
+  await sendSlackNotification({
+    title: `🚨 Security Scan Failed: ${repo}:${tag}`,
+    message: 'Harbor security scan was unable to complete. Manual investigation required.',
+    severity: 'critical',
+  })
 }
 
 async function handleQuotaExceed(payload: HarborWebhookPayload) {
   console.error('Harbor storage quota exceeded!')
   
-  // Alert about quota issue
-  // TODO: Send critical alert about quota
-}
-
-async function storeWebhookEvent(event: any) {
-  // TODO: Store in database for audit and monitoring
-  console.log('Storing webhook event:', event.source, event.event)
+  await storeAlert({
+    name: 'harbor-quota-exceeded',
+    severity: 'critical',
+    status: 'firing',
+    startsAt: new Date(payload.occur_at * 1000),
+    summary: 'Harbor storage quota exceeded',
+    description: 'Container registry storage quota has been exceeded. Cleanup required.',
+  })
+  
+  await createNotification({
+    source: 'harbor',
+    category: 'infrastructure',
+    severity: 'critical',
+    title: 'Harbor Storage Quota Exceeded',
+    message: 'Container registry storage quota has been exceeded. Immediate cleanup required.',
+  })
+  
+  await sendSlackNotification({
+    title: '🚨 Harbor Storage Quota Exceeded',
+    message: 'Container registry storage quota has been exceeded. Immediate cleanup required.',
+    severity: 'critical',
+  })
 }
 
 export async function GET() {

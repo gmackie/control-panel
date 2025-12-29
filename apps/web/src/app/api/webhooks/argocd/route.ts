@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { 
+  storeWebhookEvent, 
+  storeDeploymentEvent, 
+  createNotification,
+  sendSlackNotification 
+} from '@/lib/webhooks/webhook-service'
 
 interface ArgoCDWebhookPayload {
   app: {
@@ -45,7 +51,6 @@ export async function POST(request: NextRequest) {
     
     console.log(`Processing ArgoCD webhook: ${payload.eventType} for app ${payload.app.metadata.name}`)
     
-    // Process different event types
     switch (payload.eventType) {
       case 'app.created':
         await handleAppCreated(payload)
@@ -79,17 +84,21 @@ export async function POST(request: NextRequest) {
         console.log(`Unhandled ArgoCD event type: ${payload.eventType}`)
     }
     
-    // Store webhook event
     await storeWebhookEvent({
       source: 'argocd',
-      event: payload.eventType,
+      eventType: payload.eventType,
       appName: payload.app.metadata.name,
-      payload,
-      timestamp: new Date(payload.eventTime)
+      environment: payload.app.metadata.namespace,
+      title: `ArgoCD: ${payload.eventType}`,
+      description: `Application ${payload.app.metadata.name} - ${payload.eventType}`,
+      severity: getSeverityForEvent(payload.eventType),
+      metadata: {
+        syncStatus: payload.app.status.sync.status,
+        healthStatus: payload.app.status.health.status,
+        revision: payload.app.status.sync.revision,
+      },
+      timestamp: new Date(payload.eventTime),
     })
-    
-    // Update application deployment status
-    await updateDeploymentStatus(payload)
     
     return NextResponse.json({
       success: true,
@@ -105,14 +114,34 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function getSeverityForEvent(eventType: string): 'info' | 'warning' | 'critical' {
+  switch (eventType) {
+    case 'app.sync.failed':
+    case 'app.health.degraded':
+      return 'critical'
+    case 'app.deleted':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
 async function handleAppCreated(payload: ArgoCDWebhookPayload) {
   const appName = payload.app.metadata.name
   const repoURL = payload.app.spec.source.repoURL
   
   console.log(`ArgoCD app created: ${appName} from ${repoURL}`)
   
-  // Register new application in control panel
-  // TODO: Create application entry in database
+  await storeDeploymentEvent({
+    applicationId: appName,
+    applicationName: appName,
+    environment: payload.app.metadata.namespace,
+    action: 'deploy',
+    branch: payload.app.spec.source.targetRevision,
+    status: 'pending',
+    triggeredBy: 'argocd',
+    details: `New application created from ${repoURL}`,
+  })
 }
 
 async function handleAppUpdated(payload: ArgoCDWebhookPayload) {
@@ -122,8 +151,17 @@ async function handleAppUpdated(payload: ArgoCDWebhookPayload) {
   
   console.log(`ArgoCD app updated: ${appName} (sync: ${syncStatus}, health: ${healthStatus})`)
   
-  // Update application status
-  // TODO: Update application status in database
+  await storeDeploymentEvent({
+    applicationId: appName,
+    applicationName: appName,
+    environment: payload.app.metadata.namespace,
+    action: 'sync',
+    version: payload.app.status.sync.revision,
+    status: syncStatus === 'Synced' && healthStatus === 'Healthy' ? 'succeeded' : 'running',
+    triggeredBy: 'argocd',
+    details: `Sync: ${syncStatus}, Health: ${healthStatus}`,
+    metadata: { syncStatus, healthStatus },
+  })
 }
 
 async function handleAppDeleted(payload: ArgoCDWebhookPayload) {
@@ -131,23 +169,37 @@ async function handleAppDeleted(payload: ArgoCDWebhookPayload) {
   
   console.log(`ArgoCD app deleted: ${appName}`)
   
-  // Mark application as deleted
-  // TODO: Update application status to deleted
+  await createNotification({
+    source: 'argocd',
+    category: 'deployment',
+    severity: 'warning',
+    title: `Application Deleted: ${appName}`,
+    message: `ArgoCD application ${appName} has been deleted`,
+    appName,
+    environment: payload.app.metadata.namespace,
+  })
 }
 
 async function handleAppDegraded(payload: ArgoCDWebhookPayload) {
   const appName = payload.app.metadata.name
-  const message = payload.app.status.health.message
+  const message = payload.app.status.health.message || 'Application health is degraded'
   
   console.error(`ArgoCD app degraded: ${appName} - ${message}`)
   
-  // Send alert about degraded application
-  // TODO: Trigger alert for degraded application
-  await sendAlert({
-    severity: 'warning',
+  await createNotification({
+    source: 'argocd',
+    category: 'alert',
+    severity: 'critical',
     title: `Application Degraded: ${appName}`,
-    message: message || 'Application health is degraded',
-    source: 'argocd'
+    message,
+    appName,
+    environment: payload.app.metadata.namespace,
+  })
+  
+  await sendSlackNotification({
+    title: `⚠️ Application Degraded: ${appName}`,
+    message,
+    severity: 'warning',
   })
 }
 
@@ -156,8 +208,18 @@ async function handleSyncRunning(payload: ArgoCDWebhookPayload) {
   
   console.log(`ArgoCD sync running for: ${appName}`)
   
-  // Update deployment status to in-progress
-  // TODO: Update deployment status
+  await storeDeploymentEvent({
+    applicationId: appName,
+    applicationName: appName,
+    environment: payload.app.metadata.namespace,
+    action: 'sync',
+    status: 'running',
+    triggeredBy: 'argocd',
+    details: 'Sync in progress',
+    startedAt: payload.app.status.operationState?.startedAt 
+      ? new Date(payload.app.status.operationState.startedAt) 
+      : new Date(),
+  })
 }
 
 async function handleSyncSucceeded(payload: ArgoCDWebhookPayload) {
@@ -166,46 +228,64 @@ async function handleSyncSucceeded(payload: ArgoCDWebhookPayload) {
   
   console.log(`ArgoCD sync succeeded for: ${appName} (revision: ${revision})`)
   
-  // Update deployment status to success
-  // TODO: Update deployment status and record revision
+  await storeDeploymentEvent({
+    applicationId: appName,
+    applicationName: appName,
+    environment: payload.app.metadata.namespace,
+    action: 'sync',
+    version: revision,
+    commitSha: revision,
+    status: 'succeeded',
+    triggeredBy: 'argocd',
+    details: 'Sync completed successfully',
+    completedAt: payload.app.status.operationState?.finishedAt 
+      ? new Date(payload.app.status.operationState.finishedAt) 
+      : new Date(),
+  })
+  
+  await createNotification({
+    source: 'argocd',
+    category: 'deployment',
+    severity: 'info',
+    title: `Deployment Succeeded: ${appName}`,
+    message: `Application ${appName} synced to revision ${revision?.slice(0, 7) || 'latest'}`,
+    appName,
+    environment: payload.app.metadata.namespace,
+  })
 }
 
 async function handleSyncFailed(payload: ArgoCDWebhookPayload) {
   const appName = payload.app.metadata.name
-  const message = payload.app.status.operationState?.message
+  const message = payload.app.status.operationState?.message || 'ArgoCD sync failed'
   
   console.error(`ArgoCD sync failed for: ${appName} - ${message}`)
   
-  // Send alert about sync failure
-  await sendAlert({
+  await storeDeploymentEvent({
+    applicationId: appName,
+    applicationName: appName,
+    environment: payload.app.metadata.namespace,
+    action: 'sync',
+    status: 'failed',
+    triggeredBy: 'argocd',
+    details: message,
+    completedAt: new Date(),
+  })
+  
+  await createNotification({
+    source: 'argocd',
+    category: 'alert',
     severity: 'critical',
     title: `Deployment Failed: ${appName}`,
-    message: message || 'ArgoCD sync failed',
-    source: 'argocd'
+    message,
+    appName,
+    environment: payload.app.metadata.namespace,
   })
-}
-
-async function updateDeploymentStatus(payload: ArgoCDWebhookPayload) {
-  // TODO: Update deployment status in database
-  const status = {
-    appName: payload.app.metadata.name,
-    syncStatus: payload.app.status.sync.status,
-    healthStatus: payload.app.status.health.status,
-    revision: payload.app.status.sync.revision,
-    timestamp: new Date(payload.eventTime)
-  }
   
-  console.log('Updating deployment status:', status)
-}
-
-async function sendAlert(alert: any) {
-  // TODO: Send alert through notification system
-  console.log('Sending alert:', alert)
-}
-
-async function storeWebhookEvent(event: any) {
-  // TODO: Store in database for audit and monitoring
-  console.log('Storing webhook event:', event.source, event.event)
+  await sendSlackNotification({
+    title: `🚨 Deployment Failed: ${appName}`,
+    message,
+    severity: 'critical',
+  })
 }
 
 export async function GET() {

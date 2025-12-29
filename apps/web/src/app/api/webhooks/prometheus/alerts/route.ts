@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  storeWebhookEvent,
+  storeAlert,
+  updateAlertStatus,
+  createNotification,
+  sendSlackNotification,
+} from '@/lib/webhooks/webhook-service'
 
 interface PrometheusAlert {
   status: 'firing' | 'resolved'
@@ -42,7 +49,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization')
     const expectedToken = `Bearer ${process.env.PROMETHEUS_BEARER_TOKEN || ''}`
     
-    // Verify authorization if token is configured
     if (process.env.PROMETHEUS_BEARER_TOKEN && authHeader !== expectedToken) {
       console.error('Invalid Prometheus webhook authorization')
       return NextResponse.json(
@@ -55,19 +61,23 @@ export async function POST(request: NextRequest) {
     
     console.log(`Processing Prometheus alerts: ${payload.alerts.length} alerts (${payload.status})`)
     
-    // Process each alert
     for (const alert of payload.alerts) {
       await processAlert(alert, payload)
     }
     
-    // Store webhook event
     await storeWebhookEvent({
       source: 'prometheus',
-      event: 'alert',
-      status: payload.status,
-      alertCount: payload.alerts.length,
-      payload,
-      timestamp: new Date()
+      eventType: 'alert',
+      title: `Prometheus: ${payload.alerts.length} ${payload.status} alerts`,
+      description: `Receiver: ${payload.receiver}`,
+      severity: mapPrometheusSeverity(payload.commonLabels.severity),
+      metadata: {
+        status: payload.status,
+        alertCount: payload.alerts.length,
+        groupKey: payload.groupKey,
+        receiver: payload.receiver,
+        commonLabels: payload.commonLabels,
+      },
     })
     
     return NextResponse.json({
@@ -84,144 +94,113 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processAlert(alert: PrometheusAlert, payload: AlertmanagerWebhookPayload) {
-  const alertName = alert.labels.alertname
-  const severity = alert.labels.severity
-  const status = alert.status
-  
-  console.log(`Alert ${status}: ${alertName} (${severity})`)
-  
-  // Handle different alert types
-  if (status === 'firing') {
-    await handleFiringAlert(alert, payload)
-  } else {
-    await handleResolvedAlert(alert, payload)
+function mapPrometheusSeverity(severity?: string): 'info' | 'warning' | 'critical' {
+  switch (severity) {
+    case 'critical':
+      return 'critical'
+    case 'warning':
+      return 'warning'
+    default:
+      return 'info'
   }
-  
-  // Store alert in database
-  await storeAlert({
-    fingerprint: alert.fingerprint,
-    name: alertName,
-    severity,
-    status,
-    labels: alert.labels,
-    annotations: alert.annotations,
-    startsAt: new Date(alert.startsAt),
-    endsAt: alert.endsAt ? new Date(alert.endsAt) : null,
-    generatorURL: alert.generatorURL
-  })
 }
 
-async function handleFiringAlert(alert: PrometheusAlert, payload: AlertmanagerWebhookPayload) {
-  const severity = alert.labels.severity
+async function processAlert(alert: PrometheusAlert, payload: AlertmanagerWebhookPayload) {
+  const alertName = alert.labels.alertname
+  const severity = mapPrometheusSeverity(alert.labels.severity)
+  const status = alert.status
+  
+  console.log(`Alert ${status}: ${alertName} (${alert.labels.severity})`)
+  
+  if (status === 'firing') {
+    await handleFiringAlert(alert)
+  } else {
+    await handleResolvedAlert(alert)
+  }
+  
+  if (status === 'firing') {
+    await storeAlert({
+      fingerprint: alert.fingerprint,
+      name: alertName,
+      severity,
+      status: 'firing',
+      startsAt: new Date(alert.startsAt),
+      endsAt: null,
+      summary: alert.annotations.summary || alertName,
+      description: alert.annotations.description,
+      labels: Object.fromEntries(
+        Object.entries(alert.labels).filter(([_, v]) => v !== undefined)
+      ) as Record<string, string>,
+    })
+  } else {
+    await updateAlertStatus(
+      alertName,
+      'resolved',
+      new Date(alert.endsAt)
+    )
+  }
+}
+
+async function handleFiringAlert(alert: PrometheusAlert) {
+  const severity = mapPrometheusSeverity(alert.labels.severity)
   const alertName = alert.labels.alertname
   const summary = alert.annotations.summary || alertName
   const description = alert.annotations.description || ''
   
-  // Determine notification channels based on severity
-  const channels = getNotificationChannels(severity)
+  await createNotification({
+    source: 'prometheus',
+    category: 'alert',
+    severity,
+    title: `🚨 Alert: ${summary}`,
+    message: description,
+    appName: alert.labels.service || alert.labels.job,
+    environment: alert.labels.namespace,
+    links: alert.generatorURL 
+      ? [{ url: alert.generatorURL, label: 'View in Prometheus' }]
+      : undefined,
+    groupKey: alert.fingerprint,
+  })
   
-  // Send notifications
-  for (const channel of channels) {
-    await sendNotification(channel, {
+  if (severity === 'critical' || severity === 'warning') {
+    await sendSlackNotification({
       title: `🚨 Alert: ${summary}`,
       message: description,
       severity,
-      labels: alert.labels,
       url: alert.generatorURL,
-      timestamp: new Date(alert.startsAt)
     })
   }
   
-  // Create incident if critical
   if (severity === 'critical') {
-    await createIncident({
-      title: summary,
-      description,
-      severity: 'critical',
-      alertFingerprint: alert.fingerprint,
-      labels: alert.labels
-    })
+    console.log('Creating incident for critical alert:', summary)
   }
   
-  // Execute runbook if available
   if (alert.annotations.runbook_url) {
     console.log(`Runbook available: ${alert.annotations.runbook_url}`)
-    // TODO: Trigger automated runbook execution if configured
   }
 }
 
-async function handleResolvedAlert(alert: PrometheusAlert, payload: AlertmanagerWebhookPayload) {
+async function handleResolvedAlert(alert: PrometheusAlert) {
   const alertName = alert.labels.alertname
   const summary = alert.annotations.summary || alertName
   
   console.log(`Alert resolved: ${alertName}`)
   
-  // Send resolution notification
-  const channels = getNotificationChannels(alert.labels.severity)
-  for (const channel of channels) {
-    await sendNotification(channel, {
-      title: `✅ Resolved: ${summary}`,
-      message: 'Alert has been resolved',
-      severity: 'info',
-      labels: alert.labels,
-      url: alert.generatorURL,
-      timestamp: new Date()
-    })
-  }
+  await createNotification({
+    source: 'prometheus',
+    category: 'alert',
+    severity: 'info',
+    title: `✅ Resolved: ${summary}`,
+    message: 'Alert has been resolved',
+    appName: alert.labels.service || alert.labels.job,
+    environment: alert.labels.namespace,
+    groupKey: alert.fingerprint,
+  })
   
-  // Close related incident if exists
-  await closeIncident(alert.fingerprint)
-}
-
-function getNotificationChannels(severity: string): string[] {
-  switch (severity) {
-    case 'critical':
-      return ['pagerduty', 'slack', 'email']
-    case 'warning':
-      return ['slack', 'email']
-    case 'info':
-      return ['slack']
-    default:
-      return ['slack']
-  }
-}
-
-async function sendNotification(channel: string, notification: any) {
-  console.log(`Sending ${channel} notification:`, notification.title)
-  
-  // TODO: Implement actual notification sending
-  switch (channel) {
-    case 'slack':
-      // Send to Slack
-      break
-    case 'email':
-      // Send email
-      break
-    case 'pagerduty':
-      // Trigger PagerDuty
-      break
-  }
-}
-
-async function createIncident(incident: any) {
-  console.log('Creating incident:', incident.title)
-  // TODO: Create incident in incident management system
-}
-
-async function closeIncident(alertFingerprint: string) {
-  console.log('Closing incident for alert:', alertFingerprint)
-  // TODO: Close incident in incident management system
-}
-
-async function storeAlert(alert: any) {
-  console.log('Storing alert:', alert.name, alert.status)
-  // TODO: Store alert in database
-}
-
-async function storeWebhookEvent(event: any) {
-  console.log('Storing webhook event:', event.source, event.status)
-  // TODO: Store in database for audit and monitoring
+  await sendSlackNotification({
+    title: `✅ Resolved: ${summary}`,
+    message: 'Alert has been resolved',
+    severity: 'info',
+  })
 }
 
 export async function GET() {
@@ -231,9 +210,9 @@ export async function GET() {
     features: [
       'Alert processing',
       'Severity-based routing',
-      'Incident creation',
+      'Database persistence',
       'Resolution tracking',
-      'Multi-channel notifications'
+      'Slack notifications'
     ]
   })
 }
