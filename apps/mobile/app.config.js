@@ -6,7 +6,7 @@ const IS_DEV = process.env.APP_VARIANT === 'development';
 
 const PROJECT_ID = 'bf500af1-1e4d-444f-ad90-1ce7146359ce';
 
-export default {
+const config = {
   expo: {
     name: IS_DEV ? 'ControlPanel-Dev' : 'GMAC Control Panel',
     slug: 'gmac-control-panel',
@@ -78,3 +78,5 @@ export default {
     },
   },
 };
+
+export default config;

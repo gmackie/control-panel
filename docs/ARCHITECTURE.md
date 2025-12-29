@@ -199,16 +199,16 @@ interface Service {
 ## Technology Stack
 
 ### Frontend
-- **Framework**: Next.js 14 with TypeScript
+- **Framework**: Next.js 15 with TypeScript
 - **UI Library**: React with Tailwind CSS
-- **State Management**: React Query + Zustand
+- **State Management**: tRPC + React Query
 - **Charts**: Recharts + Chart.js
 - **Icons**: Lucide React
 
 ### Backend
 - **Runtime**: Node.js with TypeScript
-- **API Framework**: Next.js API Routes
-- **Database**: PostgreSQL with Prisma ORM
+- **API Framework**: tRPC v11 + Next.js API Routes
+- **Database**: PostgreSQL (Neon) with Drizzle ORM
 - **Cache**: Redis for session and data caching
 - **Message Queue**: Bull for background jobs
 

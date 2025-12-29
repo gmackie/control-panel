@@ -35,7 +35,6 @@ export function usePushNotifications() {
   const [isLoading, setIsLoading] = useState(true);
 
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   // tRPC mutation to register push token
   const registerMutation = trpc.notifications.registerPushToken?.useMutation?.();
@@ -56,17 +55,9 @@ export function usePushNotifications() {
         setIsLoading(false);
       });
 
-    // Listen for incoming notifications
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification) => {
         setNotification(notification);
-      });
-
-    // Listen for notification responses (when user taps notification)
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        handleNotificationResponse(data);
       });
 
     return () => {
@@ -74,9 +65,6 @@ export function usePushNotifications() {
         Notifications.removeNotificationSubscription(
           notificationListener.current
         );
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,22 +85,6 @@ export function usePushNotifications() {
     } catch (err) {
       console.error("Failed to register push token with backend:", err);
     }
-  };
-
-  const handleNotificationResponse = (data: Record<string, unknown>) => {
-    // Handle notification tap - navigate to relevant screen
-    const type = data.type as string;
-    const id = data.id as string;
-
-    // You can add navigation logic here based on notification type
-    console.log("Notification tapped:", { type, id });
-
-    // Example navigation handling:
-    // if (type === 'alert') {
-    //   navigation.navigate('AlertDetail', { id });
-    // } else if (type === 'deployment') {
-    //   navigation.navigate('DeploymentDetail', { id });
-    // }
   };
 
   return {
