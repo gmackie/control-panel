@@ -1,11 +1,4 @@
-/**
- * Gitea Webhook Handler for Activity Feed
- * 
- * Receives webhooks from Gitea and creates activity events
- */
-
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { activityService } from "@/lib/activity/activity-service";
 import { 
   normalizeGiteaPush, 
@@ -17,33 +10,33 @@ import {
   GiteaPullRequestPayload, 
   GiteaWorkflowPayload 
 } from "@/lib/activity/types";
-
-const GITEA_WEBHOOK_SECRET = process.env.GITEA_WEBHOOK_SECRET;
-
-function verifyGiteaSignature(payload: string, signature: string, secret: string): boolean {
-  const hmac = crypto.createHmac("sha256", secret);
-  const digest = "sha256=" + hmac.update(payload).digest("hex");
-  try {
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
-  } catch {
-    return false;
-  }
-}
+import { verifyGiteaWebhook } from "@/lib/webhooks/signature-verification";
+import { webhookLimiter } from "@/lib/rate-limiter";
+import { RateLimitError } from "@/lib/api-errors";
 
 export async function POST(request: NextRequest) {
   try {
+    await webhookLimiter.checkLimit(request);
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", retryAfter: error.retryAfter },
+        { status: 429, headers: { "Retry-After": String(error.retryAfter || 60) } }
+      );
+    }
+    throw error;
+  }
+
+  try {
     const body = await request.text();
+    const giteaSecret = process.env.GITEA_WEBHOOK_SECRET;
 
-    if (GITEA_WEBHOOK_SECRET) {
-      // Verify the webhook signature
+    if (giteaSecret) {
       const signature = request.headers.get("x-gitea-signature");
-      if (!signature) {
-        return NextResponse.json({ error: "Missing signature" }, { status: 401 });
-      }
-
-      if (!verifyGiteaSignature(body, signature, GITEA_WEBHOOK_SECRET)) {
-        console.error("Gitea webhook verification failed");
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      const verification = verifyGiteaWebhook(body, signature, giteaSecret);
+      if (!verification.valid) {
+        console.error("Gitea webhook verification failed:", verification.error);
+        return NextResponse.json({ error: verification.error }, { status: 401 });
       }
     }
 

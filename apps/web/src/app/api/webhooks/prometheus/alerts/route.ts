@@ -6,6 +6,7 @@ import {
   createNotification,
   sendSlackNotification,
 } from '@/lib/webhooks/webhook-service'
+import { verifyBearerToken } from '@/lib/webhooks/signature-verification'
 import { webhookLimiter } from '@/lib/rate-limiter'
 import { RateLimitError } from '@/lib/api-errors'
 
@@ -59,18 +60,20 @@ export async function POST(request: NextRequest) {
     throw error
   }
 
-  try {
+  const prometheusToken = process.env.PROMETHEUS_BEARER_TOKEN
+  if (prometheusToken) {
     const authHeader = request.headers.get('Authorization')
-    const expectedToken = `Bearer ${process.env.PROMETHEUS_BEARER_TOKEN || ''}`
-    
-    if (process.env.PROMETHEUS_BEARER_TOKEN && authHeader !== expectedToken) {
-      console.error('Invalid Prometheus webhook authorization')
+    const verification = verifyBearerToken(authHeader, prometheusToken)
+    if (!verification.valid) {
+      console.error('Prometheus webhook auth failed:', verification.error)
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
-    
+  }
+
+  try {
     const payload: AlertmanagerWebhookPayload = await request.json()
     
     console.log(`Processing Prometheus alerts: ${payload.alerts.length} alerts (${payload.status})`)

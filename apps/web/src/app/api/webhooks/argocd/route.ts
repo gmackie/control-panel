@@ -5,6 +5,7 @@ import {
   createNotification,
   sendSlackNotification 
 } from '@/lib/webhooks/webhook-service'
+import { verifyBearerToken } from '@/lib/webhooks/signature-verification'
 import { webhookLimiter } from '@/lib/rate-limiter'
 import { RateLimitError } from '@/lib/api-errors'
 
@@ -58,6 +59,19 @@ export async function POST(request: NextRequest) {
       )
     }
     throw error
+  }
+
+  const argocdToken = process.env.ARGOCD_WEBHOOK_TOKEN
+  if (argocdToken) {
+    const authHeader = request.headers.get('Authorization')
+    const verification = verifyBearerToken(authHeader, argocdToken)
+    if (!verification.valid) {
+      console.error('ArgoCD webhook auth failed:', verification.error)
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
   }
 
   try {
