@@ -12,6 +12,9 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { trpc } from "../lib/trpc";
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { useBiometricAuth } from "../hooks/useBiometricAuth";
+import { useSettingsStore } from "../stores/settings";
+import { useOfflineStore } from "../stores/offline";
 
 interface SettingSectionProps {
   title: string;
@@ -90,9 +93,27 @@ function SettingRow({
 
 export function SettingsScreen() {
   const { expoPushToken, isLoading: pushLoading } = usePushNotifications();
+  const { isAvailable: biometricAvailable, biometricType } = useBiometricAuth();
+  const biometricEnabled = useSettingsStore((s) => s.biometricEnabled);
+  const setBiometricEnabled = useSettingsStore((s) => s.setBiometricEnabled);
+  const hapticEnabled = useSettingsStore((s) => s.hapticFeedbackEnabled);
+  const setHapticEnabled = useSettingsStore((s) => s.setHapticFeedbackEnabled);
+  const clearOfflineCache = useOfflineStore((s) => s.clearCache);
+  const offlineQueueLength = useOfflineStore((s) => s.actionQueue.length);
 
   const preferencesQuery = trpc.notifications.getPreferences?.useQuery?.();
   const updatePreferencesMutation = trpc.notifications.updatePreferences?.useMutation?.();
+
+  const biometricLabel =
+    biometricType === "facial"
+      ? Platform.OS === "ios"
+        ? "Face ID"
+        : "Face Recognition"
+      : biometricType === "fingerprint"
+        ? Platform.OS === "ios"
+          ? "Touch ID"
+          : "Fingerprint"
+        : "Biometric";
 
   const [pushEnabled, setPushEnabled] = React.useState(true);
   const [alertsEnabled, setAlertsEnabled] = React.useState(true);
@@ -218,16 +239,21 @@ export function SettingsScreen() {
   };
 
   const handleClearCache = () => {
+    const queueMessage =
+      offlineQueueLength > 0
+        ? `\n\nWarning: You have ${offlineQueueLength} pending offline action(s) that will be lost.`
+        : "";
+
     Alert.alert(
       "Clear Cache",
-      "This will clear all cached data. You may need to reload the app.",
+      `This will clear all cached data and offline queue.${queueMessage}`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Clear",
           style: "destructive",
           onPress: () => {
-            console.log("Clear cache");
+            clearOfflineCache();
             Alert.alert("Cache Cleared", "All cached data has been cleared.");
           },
         },
@@ -311,12 +337,39 @@ export function SettingsScreen() {
         )}
       </SettingSection>
 
+      <SettingSection title="Security">
+        <SettingRow
+          icon="finger-print"
+          iconColor="#8b5cf6"
+          label={`Require ${biometricLabel}`}
+          description={
+            biometricAvailable
+              ? "Use biometric authentication for dangerous actions"
+              : "Biometric authentication not available on this device"
+          }
+          value={biometricEnabled && biometricAvailable}
+          onValueChange={biometricAvailable ? setBiometricEnabled : undefined}
+        />
+      </SettingSection>
+
       <SettingSection title="App">
+        <SettingRow
+          icon="radio-button-on"
+          iconColor="#3b82f6"
+          label="Haptic Feedback"
+          description="Vibrate on button presses and actions"
+          value={hapticEnabled}
+          onValueChange={setHapticEnabled}
+        />
         <SettingRow
           icon="trash"
           iconColor="#64748b"
           label="Clear Cache"
-          description="Clear locally cached data"
+          description={
+            offlineQueueLength > 0
+              ? `Clear cached data (${offlineQueueLength} pending actions)`
+              : "Clear locally cached data"
+          }
           onPress={handleClearCache}
           showChevron
         />

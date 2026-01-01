@@ -12,6 +12,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { trpc } from "../lib/trpc";
+import { ScopeBar } from "../components/ScopeBar";
+import { useScopeStore, useCurrentScope } from "../stores/scope";
 import type { RootStackParamList } from "../../App";
 
 interface ApplicationItemProps {
@@ -80,6 +82,9 @@ export function ApplicationsScreen() {
   const [refreshing, setRefreshing] = React.useState(false);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
+  const { isGlobal, siteId } = useCurrentScope();
+  const { lastUpdated, setSiteScope } = useScopeStore();
+
   const applicationsQuery = trpc.applications.list.useQuery();
 
   const onRefresh = React.useCallback(async () => {
@@ -89,19 +94,26 @@ export function ApplicationsScreen() {
   }, [applicationsQuery]);
 
   const applications = applicationsQuery.data ?? [];
-  const filteredApps = applications.filter(
-    (app) =>
+  const filteredApps = applications.filter((app) => {
+    const matchesSearch =
       app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      app.slug.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!isGlobal && siteId) {
+      return matchesSearch && app.id === siteId;
+    }
+    return matchesSearch;
+  });
 
   const handleAppPress = (appId: string) => {
+    setSiteScope(appId);
     navigation.navigate("ApplicationDetail", { id: appId });
   };
 
   return (
     <View style={styles.container}>
-      {/* Search Bar */}
+      <ScopeBar lastUpdated={lastUpdated} />
+
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#64748b" />
         <TextInput

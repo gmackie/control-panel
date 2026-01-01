@@ -5,19 +5,27 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { SiteSwitcher } from "./src/components/ScopeBar";
+import { QuickActionsFAB } from "./src/components/QuickActionsFAB";
+import { OfflineBanner } from "./src/components/OfflineBanner";
 import { TRPCProvider } from "./src/lib/trpc";
+import { initNetworkListener } from "./src/stores/offline";
 import { useNotificationNavigation } from "./src/hooks/useNotificationNavigation";
 import { DashboardScreen } from "./src/screens/DashboardScreen";
 import { ApplicationsScreen } from "./src/screens/ApplicationsScreen";
-import { PipelinesScreen } from "./src/screens/PipelinesScreen";
-import { NotificationsScreen } from "./src/screens/NotificationsScreen";
+import { ActivityFeedScreen } from "./src/screens/ActivityFeedScreen";
 import { AlertsScreen } from "./src/screens/AlertsScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ApplicationDetailScreen } from "./src/screens/ApplicationDetailScreen";
 import { AlertDetailScreen } from "./src/screens/AlertDetailScreen";
 import { NotificationDetailScreen } from "./src/screens/NotificationDetailScreen";
+import { IssuesScreen } from "./src/screens/IssuesScreen";
+import { IssueDetailScreen } from "./src/screens/IssueDetailScreen";
+import { AISessionsListScreen } from "./src/screens/AISessionsListScreen";
+import { AISessionDetailScreen } from "./src/screens/AISessionDetailScreen";
 
 // Dark theme for the app
 const DarkTheme = {
@@ -34,13 +42,11 @@ const DarkTheme = {
   },
 };
 
-// Type definitions for navigation
 export type RootTabParamList = {
   Dashboard: undefined;
   Applications: undefined;
-  Pipelines: undefined;
-  Notifications: undefined;
-  Alerts: undefined;
+  Issues: undefined;
+  Activity: undefined;
   Settings: undefined;
 };
 
@@ -49,6 +55,10 @@ export type RootStackParamList = {
   ApplicationDetail: { id: string };
   NotificationDetail: { id: string };
   AlertDetail: { id: string };
+  Alerts: undefined;
+  IssueDetail: { issueId: string };
+  AISessionsList: undefined;
+  AISessionDetail: { sessionId: string };
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -73,14 +83,11 @@ function MainTabs() {
             case "Applications":
               iconName = focused ? "cube" : "cube-outline";
               break;
-            case "Pipelines":
-              iconName = focused ? "git-branch" : "git-branch-outline";
+            case "Issues":
+              iconName = focused ? "bug" : "bug-outline";
               break;
-            case "Notifications":
-              iconName = focused ? "notifications" : "notifications-outline";
-              break;
-            case "Alerts":
-              iconName = focused ? "alert-circle" : "alert-circle-outline";
+            case "Activity":
+              iconName = focused ? "time" : "time-outline";
               break;
             case "Settings":
               iconName = focused ? "settings" : "settings-outline";
@@ -130,27 +137,19 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Pipelines"
-        component={PipelinesScreen}
+        name="Issues"
+        component={IssuesScreen}
         options={{
-          title: "Pipelines",
-          headerTitle: "Pipelines",
+          title: "Issues",
+          headerTitle: "Issues & AI Fixes",
         }}
       />
       <Tab.Screen
-        name="Notifications"
-        component={NotificationsScreen}
+        name="Activity"
+        component={ActivityFeedScreen}
         options={{
-          title: "Inbox",
-          headerTitle: "Notifications",
-        }}
-      />
-      <Tab.Screen
-        name="Alerts"
-        component={AlertsScreen}
-        options={{
-          title: "Alerts",
-          headerTitle: "Active Alerts",
+          title: "Activity",
+          headerTitle: "Activity Feed",
         }}
       />
       <Tab.Screen
@@ -166,53 +165,103 @@ function MainTabs() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    const unsubscribe = initNetworkListener();
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <ErrorBoundary>
-      <SafeAreaProvider>
-        <TRPCProvider>
-          <NavigationContainer theme={DarkTheme}>
-            <NotificationHandler />
-            <StatusBar style="light" />
-            <Stack.Navigator
-            screenOptions={{
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen
-              name="ApplicationDetail"
-              component={ApplicationDetailScreen}
-              options={{
-                headerShown: true,
-                headerStyle: { backgroundColor: "#1e293b" },
-                headerTintColor: "#fff",
-                headerTitle: "Application",
-              }}
-            />
-            <Stack.Screen
-              name="AlertDetail"
-              component={AlertDetailScreen}
-              options={{
-                headerShown: true,
-                headerStyle: { backgroundColor: "#1e293b" },
-                headerTintColor: "#fff",
-                headerTitle: "Alert",
-              }}
-            />
-            <Stack.Screen
-              name="NotificationDetail"
-              component={NotificationDetailScreen}
-              options={{
-                headerShown: true,
-                headerStyle: { backgroundColor: "#1e293b" },
-                headerTintColor: "#fff",
-                headerTitle: "Notification",
-              }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </TRPCProvider>
-    </SafeAreaProvider>
-  </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <TRPCProvider>
+            <NavigationContainer theme={DarkTheme}>
+              <NotificationHandler />
+              <OfflineBanner />
+              <StatusBar style="light" />
+              <Stack.Navigator
+                screenOptions={{
+                  headerShown: false,
+                }}
+              >
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen
+                  name="ApplicationDetail"
+                  component={ApplicationDetailScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Application",
+                  }}
+                />
+                <Stack.Screen
+                  name="AlertDetail"
+                  component={AlertDetailScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Alert",
+                  }}
+                />
+                <Stack.Screen
+                  name="NotificationDetail"
+                  component={NotificationDetailScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Notification",
+                  }}
+                />
+                <Stack.Screen
+                  name="IssueDetail"
+                  component={IssueDetailScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Issue Details",
+                  }}
+                />
+                <Stack.Screen
+                  name="AISessionsList"
+                  component={AISessionsListScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "AI Sessions",
+                  }}
+                />
+                <Stack.Screen
+                  name="AISessionDetail"
+                  component={AISessionDetailScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "AI Fix Session",
+                  }}
+                />
+                <Stack.Screen
+                  name="Alerts"
+                  component={AlertsScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Alerts",
+                  }}
+                />
+              </Stack.Navigator>
+              <SiteSwitcher />
+              <QuickActionsFAB />
+            </NavigationContainer>
+          </TRPCProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  SectionList,
   TouchableOpacity,
   RefreshControl,
   Animated,
@@ -16,6 +17,8 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
 import { trpc } from "../lib/trpc";
+import { ScopeBar } from "../components/ScopeBar";
+import { useCurrentScope, useScopeStore } from "../stores/scope";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -217,12 +220,32 @@ function SwipeableAlertItem({
   );
 }
 
+interface AlertSection {
+  title: string;
+  siteId?: string;
+  criticalCount: number;
+  warningCount: number;
+  data: Array<{
+    id: string;
+    name: string;
+    message: string;
+    severity: "critical" | "warning" | "info";
+    status: "firing" | "resolved" | "acknowledged";
+    source: string;
+    startsAt: string;
+  }>;
+}
+
 export function AlertsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<
     "all" | "firing" | "acknowledged" | "critical"
   >("all");
+  const [groupBySite, setGroupBySite] = React.useState(true);
+
+  const { isGlobal, siteId } = useCurrentScope();
+  const { lastUpdated } = useScopeStore();
 
   const alertsQuery = trpc.monitoring.alerts.useQuery({
     status: filter === "firing" || filter === "acknowledged" ? filter : undefined,
@@ -247,8 +270,64 @@ export function AlertsScreen() {
   const alerts = alertsQuery.data ?? [];
   const stats = statsQuery.data;
 
+  const groupedAlerts = React.useMemo((): AlertSection[] => {
+    if (!groupBySite || !isGlobal) {
+      return [
+        {
+          title: "All Alerts",
+          criticalCount: alerts.filter((a) => a.severity === "critical").length,
+          warningCount: alerts.filter((a) => a.severity === "warning").length,
+          data: alerts,
+        },
+      ];
+    }
+
+    const groups: Record<string, AlertSection> = {};
+    alerts.forEach((alert) => {
+      const source = alert.source || "Unknown";
+      if (!groups[source]) {
+        groups[source] = {
+          title: source,
+          siteId: source,
+          criticalCount: 0,
+          warningCount: 0,
+          data: [],
+        };
+      }
+      groups[source].data.push(alert);
+      if (alert.severity === "critical") groups[source].criticalCount++;
+      if (alert.severity === "warning") groups[source].warningCount++;
+    });
+
+    return Object.values(groups).sort(
+      (a, b) => b.criticalCount - a.criticalCount || b.data.length - a.data.length
+    );
+  }, [alerts, groupBySite, isGlobal]);
+
+  const renderSectionHeader = ({ section }: { section: AlertSection }) => (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+        <View style={styles.sectionBadges}>
+          {section.criticalCount > 0 && (
+            <View style={styles.criticalBadge}>
+              <Text style={styles.badgeText}>{section.criticalCount}C</Text>
+            </View>
+          )}
+          {section.warningCount > 0 && (
+            <View style={styles.warningBadge}>
+              <Text style={styles.warningBadgeText}>{section.warningCount}W</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
+      <ScopeBar lastUpdated={lastUpdated} />
+
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
           <Ionicons name="flame" size={24} color="#ef4444" />
@@ -275,27 +354,41 @@ export function AlertsScreen() {
         </View>
       </View>
 
-      <View style={styles.filterContainer}>
-        {(["all", "firing", "critical", "acknowledged"] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.activeFilterChip]}
-            onPress={() => setFilter(f)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                filter === f && styles.activeFilterChipText,
-              ]}
+      <View style={styles.filterRow}>
+        <View style={styles.filterContainer}>
+          {(["all", "firing", "critical", "acknowledged"] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.filterChip, filter === f && styles.activeFilterChip]}
+              onPress={() => setFilter(f)}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === f && styles.activeFilterChipText,
+                ]}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {isGlobal && (
+          <TouchableOpacity
+            style={[styles.groupToggle, groupBySite && styles.groupToggleActive]}
+            onPress={() => setGroupBySite(!groupBySite)}
+          >
+            <Ionicons
+              name="layers"
+              size={16}
+              color={groupBySite ? "#fff" : "#64748b"}
+            />
           </TouchableOpacity>
-        ))}
+        )}
       </View>
 
-      <FlatList
-        data={alerts}
+      <SectionList
+        sections={groupedAlerts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <SwipeableAlertItem
@@ -310,6 +403,7 @@ export function AlertsScreen() {
             onAcknowledge={() => handleAcknowledge(item.id)}
           />
         )}
+        renderSectionHeader={groupBySite && isGlobal ? renderSectionHeader : () => null}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -318,6 +412,7 @@ export function AlertsScreen() {
           />
         }
         contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="shield-checkmark" size={48} color="#22c55e" />
@@ -366,11 +461,70 @@ const styles = StyleSheet.create({
     height: 48,
     backgroundColor: "#334155",
   },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+  },
   filterContainer: {
     flexDirection: "row",
-    paddingHorizontal: 16,
+    flex: 1,
+  },
+  groupToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#1e293b",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  groupToggleActive: {
+    backgroundColor: "#3b82f6",
+  },
+  sectionHeader: {
     marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionBadges: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  criticalBadge: {
+    backgroundColor: "#7f1d1d",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  warningBadge: {
+    backgroundColor: "#78350f",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeText: {
+    color: "#fecaca",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  warningBadgeText: {
+    color: "#fde68a",
+    fontSize: 10,
+    fontWeight: "600",
   },
   filterChip: {
     paddingHorizontal: 14,

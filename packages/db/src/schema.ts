@@ -613,3 +613,136 @@ export type NewCostAlert = typeof costAlerts.$inferInsert;
 
 export type IntegrationCost = typeof integrationCosts.$inferSelect;
 export type NewIntegrationCost = typeof integrationCosts.$inferInsert;
+
+// ===================================
+// AI Dev Sessions (Bob Integration)
+// ===================================
+
+/**
+ * AI Development Sessions - tracks AI-assisted bug fixing sessions
+ * Links Sentry/PostHog issues to Bob AI agent worktrees
+ */
+export const aiDevSessions = pgTable("ai_dev_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Issue source information
+  issueSource: varchar("issue_source", { length: 50 }).notNull(), // sentry, posthog, manual
+  issueId: text("issue_id").notNull(), // external issue ID
+  issueTitle: text("issue_title").notNull(),
+  issueUrl: text("issue_url"),
+  issueSeverity: varchar("issue_severity", { length: 50 }), // fatal, error, warning
+  
+  // Application context
+  applicationId: uuid("application_id"),
+  applicationName: text("application_name"),
+  repositoryUrl: text("repository_url").notNull(),
+  branch: varchar("branch", { length: 255 }).notNull().default("main"),
+  
+  // Bob worktree information
+  worktreeId: text("worktree_id"), // Bob's worktree ID
+  worktreePath: text("worktree_path"),
+  
+  // AI agent configuration
+  agentType: varchar("agent_type", { length: 50 }).notNull().default("claude"), // claude, kiro, codex, opencode, cursor
+  agentInstanceId: text("agent_instance_id"), // Bob's instance ID
+  
+  // Session state
+  status: varchar("status", { length: 50 }).notNull().default("pending"), 
+  // pending, cloning, analyzing, fixing, testing, review, approved, merged, failed, cancelled
+  
+  // Analysis results
+  analysisResult: text("analysis_result"), // JSON: AI's analysis of the issue
+  proposedFix: text("proposed_fix"), // JSON: Proposed changes
+  filesChanged: text("files_changed"), // JSON: Array of file paths
+  
+  // PR information (after fix is applied)
+  prNumber: integer("pr_number"),
+  prUrl: text("pr_url"),
+  prTitle: text("pr_title"),
+  prStatus: varchar("pr_status", { length: 50 }), // open, merged, closed
+  
+  // Approval workflow
+  requiresApproval: boolean("requires_approval").notNull().default(true),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  
+  // Metrics
+  tokensUsed: integer("tokens_used"),
+  costEstimate: real("cost_estimate"),
+  
+  // Error handling
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").notNull().default(0),
+  
+  // User who initiated
+  createdBy: text("created_by"),
+  
+  // Timestamps
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  issueSourceIdx: index("ai_dev_sessions_issue_source_idx").on(table.issueSource),
+  issueIdIdx: index("ai_dev_sessions_issue_id_idx").on(table.issueId),
+  applicationIdx: index("ai_dev_sessions_application_idx").on(table.applicationId),
+  statusIdx: index("ai_dev_sessions_status_idx").on(table.status),
+  createdAtIdx: index("ai_dev_sessions_created_at_idx").on(table.createdAt),
+}));
+
+/**
+ * AI Dev Session Logs - detailed activity log for each session
+ */
+export const aiDevSessionLogs = pgTable("ai_dev_session_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id").notNull().references(() => aiDevSessions.id, { onDelete: "cascade" }),
+  
+  // Log entry details
+  level: varchar("level", { length: 20 }).notNull(), // info, warn, error, debug
+  phase: varchar("phase", { length: 50 }).notNull(), // cloning, analyzing, fixing, testing, pr_creation, etc.
+  message: text("message").notNull(),
+  details: text("details"), // JSON: Additional context
+  
+  // Progress tracking
+  progress: integer("progress"), // 0-100 percent
+  
+  // Timestamps
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+}, (table) => ({
+  sessionIdIdx: index("ai_dev_session_logs_session_id_idx").on(table.sessionId),
+  timestampIdx: index("ai_dev_session_logs_timestamp_idx").on(table.timestamp),
+}));
+
+/**
+ * AI Dev Session Comments - user comments and AI responses during review
+ */
+export const aiDevSessionComments = pgTable("ai_dev_session_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id").notNull().references(() => aiDevSessions.id, { onDelete: "cascade" }),
+  
+  // Comment details
+  authorType: varchar("author_type", { length: 20 }).notNull(), // user, ai
+  authorId: text("author_id"),
+  authorName: text("author_name"),
+  
+  content: text("content").notNull(),
+  
+  // If referencing specific code
+  filePath: text("file_path"),
+  lineNumber: integer("line_number"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  sessionIdIdx: index("ai_dev_session_comments_session_id_idx").on(table.sessionId),
+}));
+
+export type AiDevSession = typeof aiDevSessions.$inferSelect;
+export type NewAiDevSession = typeof aiDevSessions.$inferInsert;
+
+export type AiDevSessionLog = typeof aiDevSessionLogs.$inferSelect;
+export type NewAiDevSessionLog = typeof aiDevSessionLogs.$inferInsert;
+
+export type AiDevSessionComment = typeof aiDevSessionComments.$inferSelect;
+export type NewAiDevSessionComment = typeof aiDevSessionComments.$inferInsert;

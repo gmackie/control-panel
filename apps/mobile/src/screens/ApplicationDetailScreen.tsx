@@ -13,6 +13,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { trpc } from "../lib/trpc";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
+import { useBiometricAuth } from "../hooks/useBiometricAuth";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ApplicationDetail">;
 
@@ -143,6 +144,7 @@ export function ApplicationDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const [refreshing, setRefreshing] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"overview" | "deployments">("overview");
+  const { confirmDangerousAction } = useBiometricAuth();
 
   const appQuery = trpc.applications.byId.useQuery(id);
   const deploymentsQuery = trpc.deployments.list.useQuery({ appId: id, limit: 10 });
@@ -161,51 +163,38 @@ export function ApplicationDetailScreen({ route, navigation }: Props) {
     setRefreshing(false);
   }, [appQuery, deploymentsQuery]);
 
-  const handleDeploy = (environment: "staging" | "production") => {
-    Alert.alert(
-      `Deploy to ${environment}`,
-      `Are you sure you want to deploy ${appQuery.data?.name} to ${environment}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Deploy",
-          onPress: async () => {
-            try {
-              await triggerDeployMutation.mutateAsync({
-                appId: id,
-                environment,
-              });
-              Alert.alert("Success", `Deployment to ${environment} started`);
-              deploymentsQuery.refetch();
-            } catch (err) {
-              Alert.alert("Error", "Failed to trigger deployment");
-            }
-          },
-        },
-      ]
+  const handleDeploy = async (environment: "staging" | "production") => {
+    const actionName = environment === "production" ? "Deploy to Production" : "Deploy to Staging";
+
+    await confirmDangerousAction(
+      actionName,
+      async () => {
+        try {
+          await triggerDeployMutation.mutateAsync({
+            appId: id,
+            environment,
+          });
+          Alert.alert("Success", `Deployment to ${environment} started`);
+          deploymentsQuery.refetch();
+        } catch (err) {
+          Alert.alert("Error", "Failed to trigger deployment");
+        }
+      }
     );
   };
 
-  const handleRollback = (deploymentId: string) => {
-    Alert.alert(
-      "Rollback Deployment",
-      "Are you sure you want to rollback to this version?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Rollback",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await rollbackMutation.mutateAsync({ deploymentId });
-              Alert.alert("Success", "Rollback started");
-              deploymentsQuery.refetch();
-            } catch (err) {
-              Alert.alert("Error", "Failed to rollback");
-            }
-          },
-        },
-      ]
+  const handleRollback = async (deploymentId: string) => {
+    await confirmDangerousAction(
+      "Rollback",
+      async () => {
+        try {
+          await rollbackMutation.mutateAsync({ deploymentId });
+          Alert.alert("Success", "Rollback started");
+          deploymentsQuery.refetch();
+        } catch (err) {
+          Alert.alert("Error", "Failed to rollback");
+        }
+      }
     );
   };
 
