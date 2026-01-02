@@ -14,6 +14,7 @@ import { infrastructureRouter } from "./infrastructure";
 import { monitoringRouter } from "./monitoring";
 import { resourcesRouter } from "./resources";
 import { aiDevRouter } from "./ai-dev";
+import { notionRouter } from "./notion";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -25,6 +26,7 @@ export const appRouter = router({
   monitoring: monitoringRouter,
   resources: resourcesRouter,
   aiDev: aiDevRouter,
+  notion: notionRouter,
 });
 
 export type AppRouter = typeof appRouter;

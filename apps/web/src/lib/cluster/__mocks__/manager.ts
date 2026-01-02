@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// Jest mock for cluster manager
+import { vi } from 'vitest'
 
-export const getClusterStatus = jest.fn().mockResolvedValue({
+export const getClusterStatus = vi.fn().mockResolvedValue({
   nodes: [
     {
       id: 'node-1',
@@ -41,7 +40,7 @@ export const getClusterStatus = jest.fn().mockResolvedValue({
   ]
 });
 
-export const getClusterMetrics = jest.fn().mockResolvedValue({
+export const getClusterMetrics = vi.fn().mockResolvedValue({
   cpu: {
     current: 37.5,
     average: 35,
@@ -62,7 +61,7 @@ export const getClusterMetrics = jest.fn().mockResolvedValue({
   }
 });
 
-export const getCostEstimate = jest.fn().mockResolvedValue({
+export const getCostEstimate = vi.fn().mockResolvedValue({
   current: 89.50,
   projected: 95.00,
   breakdown: {
@@ -72,26 +71,26 @@ export const getCostEstimate = jest.fn().mockResolvedValue({
   }
 });
 
-export const deployApplication = jest.fn().mockResolvedValue({
+export const deployApplication = vi.fn().mockResolvedValue({
   success: true,
   message: 'Application deployed successfully'
 });
 
-export const deleteApplication = jest.fn().mockResolvedValue({
+export const deleteApplication = vi.fn().mockResolvedValue({
   success: true,
   message: 'Application deleted successfully'
 });
 
-export const scaleDeployment = jest.fn().mockResolvedValue({
+export const scaleDeployment = vi.fn().mockResolvedValue({
   success: true,
   message: 'Deployment scaled successfully'
 });
 
-export const createNamespace = jest.fn().mockResolvedValue({
+export const createNamespace = vi.fn().mockResolvedValue({
   success: true,
   namespace: 'new-namespace'
 });
 
-export const deleteNamespace = jest.fn().mockResolvedValue({
+export const deleteNamespace = vi.fn().mockResolvedValue({
   success: true
 });

@@ -1,12 +1,14 @@
-const handleWebhook = jest.fn().mockResolvedValue({
+import { vi } from 'vitest'
+
+export const handleWebhook = vi.fn().mockResolvedValue({
   success: true,
   processed: true,
   message: 'Webhook processed successfully'
 });
 
-const validateWebhookSignature = jest.fn().mockReturnValue(true);
+export const validateWebhookSignature = vi.fn().mockReturnValue(true);
 
-const getWebhookLogs = jest.fn().mockResolvedValue([
+export const getWebhookLogs = vi.fn().mockResolvedValue([
   {
     id: 'log-1',
     webhookId: 'webhook-1',
@@ -25,14 +27,7 @@ const getWebhookLogs = jest.fn().mockResolvedValue([
   }
 ]);
 
-const retryWebhook = jest.fn().mockResolvedValue({
+export const retryWebhook = vi.fn().mockResolvedValue({
   success: true,
   retried: true
 });
-
-module.exports = {
-  handleWebhook,
-  validateWebhookSignature,
-  getWebhookLogs,
-  retryWebhook
-};

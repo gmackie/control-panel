@@ -1,5 +1,7 @@
+import { vi } from 'vitest'
+
 export const GitHubOAuth = {
-  getSession: jest.fn().mockResolvedValue({
+  getSession: vi.fn().mockResolvedValue({
     user: {
       id: 'user-1',
       name: 'Test User',
@@ -10,7 +12,7 @@ export const GitHubOAuth = {
     expires: new Date(Date.now() + 86400000).toISOString()
   }),
   
-  verifySession: jest.fn().mockResolvedValue({
+  verifySession: vi.fn().mockResolvedValue({
     valid: true,
     user: {
       id: 'user-1',
@@ -19,7 +21,7 @@ export const GitHubOAuth = {
     }
   }),
   
-  signOut: jest.fn().mockResolvedValue({
+  signOut: vi.fn().mockResolvedValue({
     success: true,
     message: 'Signed out successfully'
   })

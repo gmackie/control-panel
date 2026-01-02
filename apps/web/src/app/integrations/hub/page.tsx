@@ -15,14 +15,16 @@ import {
   XCircle,
   RefreshCw,
   Settings,
+  FileText,
 } from "lucide-react";
 import { NeonDashboard } from "@/components/integrations/dashboards/NeonDashboard";
 import { ClerkDashboard } from "@/components/integrations/dashboards/ClerkDashboard";
 import { StripeDashboard } from "@/components/integrations/dashboards/StripeDashboard";
 import { SentryDashboard } from "@/components/integrations/dashboards/SentryDashboard";
 import { PostHogDashboard } from "@/components/integrations/dashboards/PostHogDashboard";
+import { NotionDashboard } from "@/components/integrations/dashboards/NotionDashboard";
 
-type IntegrationTab = "overview" | "neon" | "clerk" | "stripe" | "sentry" | "posthog";
+type IntegrationTab = "overview" | "neon" | "clerk" | "stripe" | "sentry" | "posthog" | "notion";
 
 interface IntegrationStatus {
   id: string;
@@ -42,7 +44,7 @@ export default function IntegrationHubPage() {
     setIsCheckingHealth(true);
     const checks: Record<string, boolean> = {};
 
-    const services = ["neon", "clerk", "stripe", "sentry", "posthog"];
+    const services = ["neon", "clerk", "stripe", "sentry", "posthog", "notion"];
 
     await Promise.all(
       services.map(async (service) => {
@@ -104,6 +106,14 @@ export default function IntegrationHubPage() {
       status: healthChecks.posthog ? "connected" : healthChecks.posthog === false ? "error" : "not_configured",
       description: "Product Analytics",
       envVar: "POSTHOG_API_KEY",
+    },
+    {
+      id: "notion",
+      name: "Notion",
+      icon: <FileText className="h-5 w-5" />,
+      status: healthChecks.notion ? "connected" : healthChecks.notion === false ? "error" : "not_configured",
+      description: "Task Management",
+      envVar: "NOTION_API_TOKEN",
     },
   ];
 
@@ -255,6 +265,7 @@ export default function IntegrationHubPage() {
         {activeTab === "stripe" && <StripeDashboard />}
         {activeTab === "sentry" && <SentryDashboard />}
         {activeTab === "posthog" && <PostHogDashboard />}
+        {activeTab === "notion" && <NotionDashboard />}
     </MainLayout>
   );
 }

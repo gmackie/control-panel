@@ -1,4 +1,6 @@
-export const getAlerts = jest.fn().mockResolvedValue([
+import { vi } from 'vitest'
+
+export const getAlerts = vi.fn().mockResolvedValue([
   {
     id: 'alert-1',
     name: 'High CPU Usage',
@@ -17,7 +19,7 @@ export const getAlerts = jest.fn().mockResolvedValue([
   }
 ]);
 
-export const getAlertRules = jest.fn().mockResolvedValue([
+export const getAlertRules = vi.fn().mockResolvedValue([
   {
     id: 'rule-1',
     name: 'CPU Alert Rule',
@@ -34,21 +36,21 @@ export const getAlertRules = jest.fn().mockResolvedValue([
   }
 ]);
 
-export const createAlertRule = jest.fn().mockImplementation(async (rule) => ({
+export const createAlertRule = vi.fn().mockImplementation(async (rule: Record<string, unknown>) => ({
   id: 'rule-new',
   ...rule,
   createdAt: new Date().toISOString()
 }));
 
-export const updateAlertRule = jest.fn().mockImplementation(async (id, updates) => ({
+export const updateAlertRule = vi.fn().mockImplementation(async (id: string, updates: Record<string, unknown>) => ({
   id,
   ...updates,
   updatedAt: new Date().toISOString()
 }));
 
-export const deleteAlertRule = jest.fn().mockResolvedValue(true);
+export const deleteAlertRule = vi.fn().mockResolvedValue(true);
 
-export const acknowledgeAlert = jest.fn().mockResolvedValue({
+export const acknowledgeAlert = vi.fn().mockResolvedValue({
   success: true,
   alert: {
     id: 'alert-1',
@@ -56,7 +58,7 @@ export const acknowledgeAlert = jest.fn().mockResolvedValue({
   }
 });
 
-export const resolveAlert = jest.fn().mockResolvedValue({
+export const resolveAlert = vi.fn().mockResolvedValue({
   success: true,
   alert: {
     id: 'alert-1',

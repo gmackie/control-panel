@@ -13,7 +13,9 @@
         "react": ">=18",
         "react-dom": ">=18"
       },
-      "ignoreMissing": ["react-dom"]
+      "ignoreMissing": [
+        "react-dom"
+      ]
     }
   },
   "scripts": {
@@ -32,5 +34,8 @@
   },
   "devDependencies": {
     "turbo": "^2.3.3"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.6.0"
   }
 }

@@ -1,4 +1,6 @@
-export const getMetrics = jest.fn().mockResolvedValue({
+import { vi } from 'vitest'
+
+export const getMetrics = vi.fn().mockResolvedValue({
   system: {
     cpu: {
       usage: 45,
@@ -44,7 +46,7 @@ export const getMetrics = jest.fn().mockResolvedValue({
   timestamp: new Date().toISOString()
 });
 
-export const getHealthStatus = jest.fn().mockResolvedValue({
+export const getHealthStatus = vi.fn().mockResolvedValue({
   overall: 'healthy',
   components: {
     database: 'healthy',
@@ -55,7 +57,7 @@ export const getHealthStatus = jest.fn().mockResolvedValue({
   lastCheck: new Date().toISOString()
 });
 
-export const getInfrastructureMetrics = jest.fn().mockResolvedValue({
+export const getInfrastructureMetrics = vi.fn().mockResolvedValue({
   nodes: 3,
   pods: 45,
   containers: 67,

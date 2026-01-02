@@ -746,3 +746,136 @@ export type NewAiDevSessionLog = typeof aiDevSessionLogs.$inferInsert;
 
 export type AiDevSessionComment = typeof aiDevSessionComments.$inferSelect;
 export type NewAiDevSessionComment = typeof aiDevSessionComments.$inferInsert;
+
+// ===================================
+// Notion Integration
+// ===================================
+
+/**
+ * Notion configuration per application
+ * Links a Notion database to an application for task syncing
+ */
+export const notionConfigs = pgTable("notion_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Application link
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  
+  // Notion database info
+  notionDatabaseId: text("notion_database_id").notNull(),
+  notionDatabaseName: text("notion_database_name").notNull(),
+  notionDatabaseUrl: text("notion_database_url"),
+  
+  // Sync configuration
+  syncEnabled: boolean("sync_enabled").notNull().default(true),
+  syncFrequencyMinutes: integer("sync_frequency_minutes").notNull().default(15),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }), // success, failed, partial
+  lastSyncError: text("last_sync_error"),
+  
+  // Property mappings (how Notion properties map to our task model)
+  // JSON: { "statusProperty": "Status", "priorityProperty": "Priority", ... }
+  propertyMappings: text("property_mappings"),
+  
+  // Webhook configuration
+  webhookEnabled: boolean("webhook_enabled").notNull().default(false),
+  webhookSecret: text("webhook_secret"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdIdx: index("notion_configs_application_id_idx").on(table.applicationId),
+  notionDatabaseIdIdx: index("notion_configs_notion_database_id_idx").on(table.notionDatabaseId),
+}));
+
+/**
+ * Notion task links - correlates Notion tasks with AI sessions and git branches
+ * This is the main table for tracking Notion tasks and their development lifecycle
+ */
+export const notionTaskLinks = pgTable("notion_task_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Notion page identification
+  notionPageId: text("notion_page_id").notNull(),
+  notionDatabaseId: text("notion_database_id").notNull(),
+  
+  // Application context
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  
+  // Task data (cached from Notion)
+  title: text("title").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("not_started"), // not_started, in_progress, done, blocked, cancelled
+  priority: varchar("priority", { length: 50 }), // low, medium, high, urgent
+  dueDate: timestamp("due_date"),
+  assignee: text("assignee"),
+  tags: text("tags"), // JSON array
+  notionUrl: text("notion_url").notNull(),
+  
+  // AI session correlation (links to Bob AI sessions)
+  aiSessionId: uuid("ai_session_id").references(() => aiDevSessions.id, { onDelete: "set null" }),
+  
+  // Git/PR correlation
+  gitBranch: varchar("git_branch", { length: 255 }),
+  prNumber: integer("pr_number"),
+  prUrl: text("pr_url"),
+  prStatus: varchar("pr_status", { length: 50 }), // open, merged, closed
+  
+  // Sync metadata
+  lastSyncAt: timestamp("last_sync_at").notNull().defaultNow(),
+  notionCreatedAt: timestamp("notion_created_at"),
+  notionUpdatedAt: timestamp("notion_updated_at"),
+  
+  // Raw Notion properties for reference
+  rawProperties: text("raw_properties"), // JSON
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  notionPageIdIdx: index("notion_task_links_page_id_idx").on(table.notionPageId),
+  notionDatabaseIdIdx: index("notion_task_links_database_id_idx").on(table.notionDatabaseId),
+  applicationIdIdx: index("notion_task_links_application_id_idx").on(table.applicationId),
+  aiSessionIdIdx: index("notion_task_links_ai_session_id_idx").on(table.aiSessionId),
+  statusIdx: index("notion_task_links_status_idx").on(table.status),
+}));
+
+/**
+ * Notion sync logs - tracks sync history for debugging and monitoring
+ */
+export const notionSyncLogs = pgTable("notion_sync_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Config reference
+  configId: uuid("config_id").notNull().references(() => notionConfigs.id, { onDelete: "cascade" }),
+  
+  // Sync details
+  syncType: varchar("sync_type", { length: 50 }).notNull(), // full, incremental, webhook
+  status: varchar("status", { length: 50 }).notNull(), // started, success, failed, partial
+  
+  // Metrics
+  tasksCreated: integer("tasks_created").notNull().default(0),
+  tasksUpdated: integer("tasks_updated").notNull().default(0),
+  tasksDeleted: integer("tasks_deleted").notNull().default(0),
+  
+  // Error details
+  errorMessage: text("error_message"),
+  errorDetails: text("error_details"), // JSON
+  
+  // Timing
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+}, (table) => ({
+  configIdIdx: index("notion_sync_logs_config_id_idx").on(table.configId),
+  startedAtIdx: index("notion_sync_logs_started_at_idx").on(table.startedAt),
+}));
+
+export type NotionConfig = typeof notionConfigs.$inferSelect;
+export type NewNotionConfig = typeof notionConfigs.$inferInsert;
+
+export type NotionTaskLink = typeof notionTaskLinks.$inferSelect;
+export type NewNotionTaskLink = typeof notionTaskLinks.$inferInsert;
+
+export type NotionSyncLog = typeof notionSyncLogs.$inferSelect;
+export type NewNotionSyncLog = typeof notionSyncLogs.$inferInsert;

@@ -1,4 +1,6 @@
-const getApplications = jest.fn().mockResolvedValue([
+import { vi } from 'vitest'
+
+export const getApplications = vi.fn().mockResolvedValue([
   {
     id: 'app-001',
     name: 'Control Panel',
@@ -33,12 +35,12 @@ const getApplications = jest.fn().mockResolvedValue([
   }
 ]);
 
-const createApplication = jest.fn().mockImplementation(async (data) => ({
+export const createApplication = vi.fn().mockImplementation(async (data: Record<string, unknown>) => ({
   id: 'app-new',
   name: data.name,
   description: data.description,
-  slug: data.slug || data.name?.toLowerCase().replace(/\s+/g, '-'),
-  gitRepo: data.gitRepo || `https://github.com/gmac/${data.name?.toLowerCase().replace(/\s+/g, '-')}`,
+  slug: data.slug || (data.name as string)?.toLowerCase().replace(/\s+/g, '-'),
+  gitRepo: data.gitRepo || `https://github.com/gmac/${(data.name as string)?.toLowerCase().replace(/\s+/g, '-')}`,
   status: 'pending',
   environment: 'development',
   apiKeys: [],
@@ -50,7 +52,7 @@ const createApplication = jest.fn().mockImplementation(async (data) => ({
   updatedAt: new Date().toISOString()
 }));
 
-const getApplication = jest.fn().mockImplementation(async (id) => {
+export const getApplication = vi.fn().mockImplementation(async (id: string) => {
   if (id === 'app-001') {
     return {
       id: 'app-001',
@@ -72,7 +74,7 @@ const getApplication = jest.fn().mockImplementation(async (id) => {
   return null;
 });
 
-const updateApplication = jest.fn().mockImplementation(async (id, updates) => {
+export const updateApplication = vi.fn().mockImplementation(async (id: string, updates: Record<string, unknown>) => {
   if (id === 'app-001') {
     return {
       id: 'app-001',
@@ -92,9 +94,9 @@ const updateApplication = jest.fn().mockImplementation(async (id, updates) => {
   return null;
 });
 
-const deleteApplication = jest.fn().mockResolvedValue(true);
+export const deleteApplication = vi.fn().mockResolvedValue(true);
 
-const createApiKey = jest.fn().mockImplementation(async () => ({
+export const createApiKey = vi.fn().mockImplementation(async () => ({
   id: 'key-001',
   applicationId: 'app-001',
   name: 'Test API Key',
@@ -106,7 +108,7 @@ const createApiKey = jest.fn().mockImplementation(async () => ({
   expiresAt: null
 }));
 
-const createSecret = jest.fn().mockImplementation(async (appId, data) => ({
+export const createSecret = vi.fn().mockImplementation(async (appId: string, data: { name: string }) => ({
   id: 'secret-001',
   applicationId: appId,
   name: data.name,
@@ -115,13 +117,3 @@ const createSecret = jest.fn().mockImplementation(async (appId, data) => ({
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
 }));
-
-module.exports = {
-  getApplications,
-  createApplication,
-  getApplication,
-  updateApplication,
-  deleteApplication,
-  createApiKey,
-  createSecret
-};
