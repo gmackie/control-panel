@@ -14,15 +14,16 @@ import { OfflineBanner } from "./src/components/OfflineBanner";
 import { TRPCProvider } from "./src/lib/trpc";
 import { initNetworkListener } from "./src/stores/offline";
 import { useNotificationNavigation } from "./src/hooks/useNotificationNavigation";
-import { DashboardScreen } from "./src/screens/DashboardScreen";
-import { ApplicationsScreen } from "./src/screens/ApplicationsScreen";
-import { ActivityFeedScreen } from "./src/screens/ActivityFeedScreen";
+import { OverviewScreen } from "./src/screens/OverviewScreen";
 import { AlertsScreen } from "./src/screens/AlertsScreen";
+import { ApplicationsScreen } from "./src/screens/ApplicationsScreen";
+import { MoreScreen } from "./src/screens/MoreScreen";
+// Stack screens accessed from More menu
+import { ActivityFeedScreen } from "./src/screens/ActivityFeedScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ApplicationDetailScreen } from "./src/screens/ApplicationDetailScreen";
 import { AlertDetailScreen } from "./src/screens/AlertDetailScreen";
 import { NotificationDetailScreen } from "./src/screens/NotificationDetailScreen";
-import { IssuesScreen } from "./src/screens/IssuesScreen";
 import { IssueDetailScreen } from "./src/screens/IssueDetailScreen";
 import { AISessionsListScreen } from "./src/screens/AISessionsListScreen";
 import { AISessionDetailScreen } from "./src/screens/AISessionDetailScreen";
@@ -43,11 +44,10 @@ const DarkTheme = {
 };
 
 export type RootTabParamList = {
-  Dashboard: undefined;
-  Applications: undefined;
-  Issues: undefined;
-  Activity: undefined;
-  Settings: undefined;
+  Overview: undefined;
+  Attention: undefined;
+  Apps: undefined;
+  More: undefined;
 };
 
 export type RootStackParamList = {
@@ -59,6 +59,9 @@ export type RootStackParamList = {
   IssueDetail: { issueId: string };
   AISessionsList: undefined;
   AISessionDetail: { sessionId: string };
+  PipelinesStack: undefined;
+  NotificationsStack: undefined;
+  SettingsStack: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -77,20 +80,17 @@ function MainTabs() {
           let iconName: React.ComponentProps<typeof Ionicons>["name"];
 
           switch (route.name) {
-            case "Dashboard":
-              iconName = focused ? "grid" : "grid-outline";
+            case "Overview":
+              iconName = focused ? "home" : "home-outline";
               break;
-            case "Applications":
+            case "Attention":
+              iconName = focused ? "alert-circle" : "alert-circle-outline";
+              break;
+            case "Apps":
               iconName = focused ? "cube" : "cube-outline";
               break;
-            case "Issues":
-              iconName = focused ? "bug" : "bug-outline";
-              break;
-            case "Activity":
-              iconName = focused ? "time" : "time-outline";
-              break;
-            case "Settings":
-              iconName = focused ? "settings" : "settings-outline";
+            case "More":
+              iconName = focused ? "menu" : "menu-outline";
               break;
             default:
               iconName = "help-circle-outline";
@@ -121,15 +121,23 @@ function MainTabs() {
       })}
     >
       <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
+        name="Overview"
+        component={OverviewScreen}
         options={{
-          title: "Dashboard",
-          headerTitle: "Control Panel",
+          title: "Overview",
+          headerTitle: "Sites",
         }}
       />
       <Tab.Screen
-        name="Applications"
+        name="Attention"
+        component={AlertsScreen}
+        options={{
+          title: "Attention",
+          headerTitle: "Needs Attention",
+        }}
+      />
+      <Tab.Screen
+        name="Apps"
         component={ApplicationsScreen}
         options={{
           title: "Apps",
@@ -137,27 +145,11 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Issues"
-        component={IssuesScreen}
+        name="More"
+        component={MoreScreen}
         options={{
-          title: "Issues",
-          headerTitle: "Issues & AI Fixes",
-        }}
-      />
-      <Tab.Screen
-        name="Activity"
-        component={ActivityFeedScreen}
-        options={{
-          title: "Activity",
-          headerTitle: "Activity Feed",
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: "Settings",
-          headerTitle: "Settings",
+          title: "More",
+          headerTitle: "More",
         }}
       />
     </Tab.Navigator>
@@ -253,6 +245,36 @@ export default function App() {
                     headerStyle: { backgroundColor: "#1e293b" },
                     headerTintColor: "#fff",
                     headerTitle: "Alerts",
+                  }}
+                />
+                <Stack.Screen
+                  name="PipelinesStack"
+                  component={ActivityFeedScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Pipelines",
+                  }}
+                />
+                <Stack.Screen
+                  name="NotificationsStack"
+                  component={ActivityFeedScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Notifications",
+                  }}
+                />
+                <Stack.Screen
+                  name="SettingsStack"
+                  component={SettingsScreen}
+                  options={{
+                    headerShown: true,
+                    headerStyle: { backgroundColor: "#1e293b" },
+                    headerTintColor: "#fff",
+                    headerTitle: "Settings",
                   }}
                 />
               </Stack.Navigator>

@@ -163,7 +163,7 @@ function SiteHealthCard({ site, onPress }: SiteHealthCardProps) {
 }
 
 type DashboardNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<RootTabParamList, "Dashboard">,
+  BottomTabNavigationProp<RootTabParamList, "Overview">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
@@ -350,7 +350,7 @@ export function DashboardScreen() {
           value={deploymentStats?.succeeded ?? 0}
           icon="rocket"
           color="#22c55e"
-            onPress={() => navigation.navigate("Activity")}
+          onPress={() => navigation.navigate("PipelinesStack")}
         />
         <StatCard
           title="Alerts"
@@ -389,12 +389,12 @@ export function DashboardScreen() {
         </View>
       )}
 
-      {isGlobal && sites.length > 0 && (
+        {isGlobal && sites.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sites Health</Text>
             <TouchableOpacity
-              onPress={() => navigation.navigate("Applications")}
+              onPress={() => navigation.navigate("Apps")}
             >
               <Text style={styles.viewAll}>View All</Text>
             </TouchableOpacity>
@@ -416,7 +416,7 @@ export function DashboardScreen() {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={styles.actionButton}
-          onPress={() => navigation.navigate("Activity")}
+            onPress={() => navigation.navigate("PipelinesStack")}
           >
             <Ionicons name="rocket" size={24} color="#3b82f6" />
             <Text style={styles.actionText}>Deploy</Text>
@@ -426,12 +426,12 @@ export function DashboardScreen() {
             onPress={() => {
               Alert.alert(
                 "Restart Services",
-                "Select an application to restart from the Applications tab.",
+                "Select an application to restart from the Apps tab.",
                 [
                   { text: "Cancel", style: "cancel" },
                   {
                     text: "Go to Apps",
-                    onPress: () => navigation.navigate("Applications"),
+                    onPress: () => navigation.navigate("Apps"),
                   },
                 ]
               );
@@ -458,12 +458,12 @@ export function DashboardScreen() {
             onPress={() => {
               Alert.alert(
                 "Logs",
-                "View application logs from the Applications tab.\n\nTap an application to see its details and logs.",
+                "View application logs from the Apps tab.\n\nTap an application to see its details and logs.",
                 [
                   { text: "Cancel", style: "cancel" },
                   {
                     text: "Go to Apps",
-                    onPress: () => navigation.navigate("Applications"),
+                    onPress: () => navigation.navigate("Apps"),
                   },
                 ]
               );
