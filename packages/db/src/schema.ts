@@ -879,3 +879,263 @@ export type NewNotionTaskLink = typeof notionTaskLinks.$inferInsert;
 
 export type NotionSyncLog = typeof notionSyncLogs.$inferSelect;
 export type NewNotionSyncLog = typeof notionSyncLogs.$inferInsert;
+
+// ===================================
+// Unified Task Management
+// ===================================
+
+/**
+ * Task sync configurations - per-application provider setup
+ * Configurable during application setup
+ */
+export const taskSyncConfigs = pgTable("task_sync_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Application link
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  
+  // Provider configuration
+  provider: varchar("provider", { length: 50 }).notNull(), // github, gitea, linear, notion
+  enabled: boolean("enabled").notNull().default(false),
+  
+  // Provider-specific config
+  // GitHub/Gitea: { owner, repo }
+  // Linear: { teamId, projectId? }
+  // Notion: { databaseId }
+  config: text("config"), // JSON
+  
+  // Sync settings
+  syncDirection: varchar("sync_direction", { length: 20 }).notNull().default("bidirectional"), // bidirectional, push_only, pull_only
+  autoSync: boolean("auto_sync").notNull().default(true),
+  syncIntervalMinutes: integer("sync_interval_minutes").notNull().default(15),
+  
+  // Sync status
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }), // success, failed, partial
+  lastSyncError: text("last_sync_error"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdIdx: index("task_sync_configs_application_id_idx").on(table.applicationId),
+  providerIdx: index("task_sync_configs_provider_idx").on(table.provider),
+  uniqueAppProvider: index("task_sync_configs_unique_app_provider").on(table.applicationId, table.provider),
+}));
+
+/**
+ * Unified tasks - source of truth for all tasks/issues
+ * Syncs bidirectionally with GitHub Issues, Gitea Issues, Linear Issues, Notion Tasks
+ */
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Application context
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  
+  // Task content
+  title: text("title").notNull(),
+  description: text("description"), // Markdown
+  
+  // Status and workflow
+  status: varchar("status", { length: 50 }).notNull().default("backlog"), 
+  // backlog, todo, in_progress, in_review, done, cancelled
+  priority: varchar("priority", { length: 20 }), // urgent, high, medium, low
+  
+  // Assignment and organization
+  assignee: text("assignee"), // User identifier
+  labels: text("labels"), // JSON array of label strings
+  
+  // Planning
+  dueDate: timestamp("due_date"),
+  estimate: varchar("estimate", { length: 20 }), // Story points or time estimate
+  
+  // Release linkage
+  releaseId: uuid("release_id"), // Links task to a release
+  
+  // External provider links (for sync tracking)
+  // JSON: { id, number, url, provider }
+  githubLink: text("github_link"), // { owner, repo, number, url, nodeId }
+  giteaLink: text("gitea_link"), // { owner, repo, number, url }
+  linearLink: text("linear_link"), // { id, identifier, url }
+  notionLink: text("notion_link"), // { pageId, url }
+  
+  // Sync metadata
+  syncStatus: varchar("sync_status", { length: 50 }).notNull().default("local_only"),
+  // local_only, synced, pending_push, conflict, externally_deleted
+  lastSyncAt: timestamp("last_sync_at"),
+  syncError: text("sync_error"),
+  
+  // Source tracking (where was this task originally created)
+  sourceProvider: varchar("source_provider", { length: 50 }), // control_panel, github, gitea, linear, notion
+  sourceId: text("source_id"), // External ID if created externally
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  closedAt: timestamp("closed_at"),
+}, (table) => ({
+  applicationIdIdx: index("tasks_application_id_idx").on(table.applicationId),
+  statusIdx: index("tasks_status_idx").on(table.status),
+  releaseIdIdx: index("tasks_release_id_idx").on(table.releaseId),
+  assigneeIdx: index("tasks_assignee_idx").on(table.assignee),
+  createdAtIdx: index("tasks_created_at_idx").on(table.createdAt),
+}));
+
+/**
+ * Task comments - unified comments synced across providers
+ */
+export const taskComments = pgTable("task_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  
+  // Comment content
+  body: text("body").notNull(), // Markdown
+  
+  // Author
+  authorId: text("author_id"),
+  authorName: text("author_name"),
+  authorAvatar: text("author_avatar"),
+  
+  // External sync
+  githubCommentId: text("github_comment_id"),
+  giteaCommentId: text("gitea_comment_id"),
+  linearCommentId: text("linear_comment_id"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdIdx: index("task_comments_task_id_idx").on(table.taskId),
+}));
+
+/**
+ * Task activity log - tracks all changes for audit/sync
+ */
+export const taskActivityLog = pgTable("task_activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  
+  // Activity details
+  action: varchar("action", { length: 50 }).notNull(), // created, updated, status_changed, assigned, commented, linked, synced
+  field: varchar("field", { length: 50 }), // Which field changed
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  
+  // Actor
+  actorId: text("actor_id"),
+  actorName: text("actor_name"),
+  actorType: varchar("actor_type", { length: 20 }), // user, system, sync
+  
+  // Source of change
+  source: varchar("source", { length: 50 }).notNull(), // control_panel, github, gitea, linear, notion
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdIdx: index("task_activity_log_task_id_idx").on(table.taskId),
+  createdAtIdx: index("task_activity_log_created_at_idx").on(table.createdAt),
+}));
+
+// ===================================
+// Release Management
+// ===================================
+
+/**
+ * Releases - version/release tracking with semantic versioning
+ * Can publish to GitHub Releases and Gitea Releases
+ */
+export const releases = pgTable("releases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Application context
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  
+  // Version info (semantic versioning)
+  version: varchar("version", { length: 50 }).notNull(), // e.g., "1.2.3"
+  name: text("name"), // Optional release name (e.g., "Phoenix")
+  
+  // Release content
+  description: text("description"), // Short description
+  changelog: text("changelog"), // Full changelog in Markdown
+  
+  // Release status
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  // draft, ready, published, deployed
+  
+  // Git info
+  targetBranch: varchar("target_branch", { length: 255 }).default("main"),
+  commitSha: varchar("commit_sha", { length: 255 }),
+  tagName: varchar("tag_name", { length: 100 }), // e.g., "v1.2.3"
+  
+  // Publishing status per provider
+  // JSON: { published: boolean, releaseId, url, publishedAt }
+  githubRelease: text("github_release"),
+  giteaRelease: text("gitea_release"),
+  
+  // Deployment tracking
+  deployedEnvironments: text("deployed_environments"), // JSON array: ["staging", "production"]
+  
+  // Metadata
+  isPrerelease: boolean("is_prerelease").notNull().default(false),
+  
+  // Author
+  createdBy: text("created_by"),
+  publishedBy: text("published_by"),
+  
+  // Timestamps
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdIdx: index("releases_application_id_idx").on(table.applicationId),
+  versionIdx: index("releases_version_idx").on(table.version),
+  statusIdx: index("releases_status_idx").on(table.status),
+  createdAtIdx: index("releases_created_at_idx").on(table.createdAt),
+  uniqueAppVersion: index("releases_unique_app_version").on(table.applicationId, table.version),
+}));
+
+/**
+ * Release assets - files attached to releases
+ */
+export const releaseAssets = pgTable("release_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  releaseId: uuid("release_id").notNull().references(() => releases.id, { onDelete: "cascade" }),
+  
+  // Asset info
+  name: text("name").notNull(),
+  contentType: varchar("content_type", { length: 100 }),
+  size: integer("size"), // bytes
+  
+  // URLs
+  downloadUrl: text("download_url"),
+  githubAssetId: text("github_asset_id"),
+  giteaAssetId: text("gitea_asset_id"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  releaseIdIdx: index("release_assets_release_id_idx").on(table.releaseId),
+}));
+
+// ===================================
+// Task & Release Type Exports
+// ===================================
+
+export type TaskSyncConfig = typeof taskSyncConfigs.$inferSelect;
+export type NewTaskSyncConfig = typeof taskSyncConfigs.$inferInsert;
+
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;
+
+export type TaskComment = typeof taskComments.$inferSelect;
+export type NewTaskComment = typeof taskComments.$inferInsert;
+
+export type TaskActivityLogEntry = typeof taskActivityLog.$inferSelect;
+export type NewTaskActivityLogEntry = typeof taskActivityLog.$inferInsert;
+
+export type Release = typeof releases.$inferSelect;
+export type NewRelease = typeof releases.$inferInsert;
+
+export type ReleaseAsset = typeof releaseAssets.$inferSelect;
+export type NewReleaseAsset = typeof releaseAssets.$inferInsert;

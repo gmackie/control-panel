@@ -36,6 +36,13 @@
       "when": 1767334959731,
       "tag": "0004_hard_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767466621067,
+      "tag": "0005_typical_fenris",
+      "breakpoints": true
     }
   ]
 }
