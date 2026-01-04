@@ -1,0 +1,125 @@
+name: AWS CDK Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/aws/**'
+      - '.github/workflows/aws-cdk-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: 'CDK Stack to deploy (leave empty for all)'
+        required: false
+        default: ''
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '20'
+
+jobs:
+  deploy:
+    name: Deploy CDK Stack
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gmac-cdk-deployment-${{ github.event.inputs.environment || 'production' }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActionsCDKDeploy
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk
+
+      - name: Install dependencies
+        working-directory: infra/aws
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+
+      - name: CDK Bootstrap (if needed)
+        working-directory: infra/aws
+        run: |
+          cdk bootstrap aws://${{ secrets.AWS_ACCOUNT_ID }}/${{ env.AWS_REGION }} || true
+
+      - name: CDK Diff
+        working-directory: infra/aws
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            cdk diff ${{ github.event.inputs.stack }} || true
+          else
+            cdk diff || true
+          fi
+
+      - name: CDK Deploy
+        working-directory: infra/aws
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            cdk deploy ${{ github.event.inputs.stack }} --require-approval never
+          else
+            cdk deploy --all --require-approval never
+          fi
+
+  deploy-cloudformation:
+    name: Deploy CloudFormation IAM Roles
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.modified, 'infra/aws/iam-roles.yaml')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gmac-cdk-deployment-${{ github.event.inputs.environment || 'production' }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActionsCFDeploy
+
+      - name: Deploy IAM Roles Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/aws/iam-roles.yaml \
+            --stack-name gmac-iam-roles-${{ github.event.inputs.environment || 'production' }} \
+            --parameter-overrides \
+              GitHubOrg=${{ github.repository_owner }} \
+              GitHubRepo=${{ github.event.repository.name }} \
+              Environment=${{ github.event.inputs.environment || 'production' }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Output Role ARNs
+        run: |
+          echo "### IAM Roles Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          aws cloudformation describe-stacks \
+            --stack-name gmac-iam-roles-${{ github.event.inputs.environment || 'production' }} \
+            --query 'Stacks[0].Outputs' \
+            --output table >> $GITHUB_STEP_SUMMARY
