@@ -15,6 +15,9 @@ import { monitoringRouter } from "./monitoring";
 import { resourcesRouter } from "./resources";
 import { aiDevRouter } from "./ai-dev";
 import { notionRouter } from "./notion";
+import { tasksRouter } from "./tasks";
+import { releasesRouter } from "./releases";
+import { syncRouter } from "./sync";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -27,6 +30,9 @@ export const appRouter = router({
   resources: resourcesRouter,
   aiDev: aiDevRouter,
   notion: notionRouter,
+  tasks: tasksRouter,
+  releases: releasesRouter,
+  sync: syncRouter,
 });
 
 export type AppRouter = typeof appRouter;

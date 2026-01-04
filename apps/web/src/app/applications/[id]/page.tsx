@@ -28,6 +28,8 @@ import {
   Key,
   Package,
   ArrowLeft,
+  CheckSquare,
+  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
@@ -48,6 +50,8 @@ import {
 import { SecretsList } from "@/components/applications/SecretsList";
 import { IntegrationsList } from "@/components/applications/IntegrationsList";
 import { ApplicationSettings } from "@/components/applications/ApplicationSettings";
+import { TaskBoard } from "@/components/tasks";
+import { ReleaseList } from "@/components/releases";
 
 import { UnifiedApplication, ApplicationStatus } from "@/types/unified-app";
 
@@ -216,6 +220,8 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
 
   const tabs = [
     { id: "overview", label: "Overview", icon: Code },
+    { id: "tasks", label: "Tasks", icon: CheckSquare },
+    { id: "releases", label: "Releases", icon: Tag },
     { id: "activity", label: "Activity", icon: Activity },
     { id: "commits", label: "Commits", icon: GitCommit },
     { id: "pipelines", label: "Pipelines", icon: PlayCircle },
@@ -566,6 +572,16 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
               )}
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Tasks Tab */}
+        <TabsContent value="tasks">
+          <TaskBoard applicationId={params.id} />
+        </TabsContent>
+
+        {/* Releases Tab */}
+        <TabsContent value="releases">
+          <ReleaseList applicationId={params.id} />
         </TabsContent>
 
         {/* Activity Tab */}
