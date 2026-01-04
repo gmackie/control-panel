@@ -208,6 +208,104 @@ export interface GiteaPullRequest {
   closed_at: string | null;
 }
 
+export interface GiteaLabel {
+  id: number;
+  name: string;
+  color: string;
+  description: string;
+  url: string;
+}
+
+export interface GiteaMilestone {
+  id: number;
+  title: string;
+  description: string;
+  state: 'open' | 'closed';
+  open_issues: number;
+  closed_issues: number;
+  due_on: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GiteaIssue {
+  id: number;
+  url: string;
+  html_url: string;
+  number: number;
+  user: {
+    id: number;
+    login: string;
+    full_name: string;
+    email: string;
+    avatar_url: string;
+  };
+  title: string;
+  body: string;
+  state: 'open' | 'closed';
+  labels: GiteaLabel[];
+  milestone: GiteaMilestone | null;
+  assignee: any | null;
+  assignees: any[];
+  comments: number;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  due_date: string | null;
+  is_locked: boolean;
+}
+
+export interface GiteaIssueInput {
+  title: string;
+  body?: string;
+  assignees?: string[];
+  labels?: number[];
+  milestone?: number;
+  due_date?: string;
+}
+
+export interface GiteaRelease {
+  id: number;
+  tag_name: string;
+  target_commitish: string;
+  name: string;
+  body: string;
+  url: string;
+  html_url: string;
+  tarball_url: string;
+  zipball_url: string;
+  draft: boolean;
+  prerelease: boolean;
+  created_at: string;
+  published_at: string;
+  author: {
+    id: number;
+    login: string;
+    full_name: string;
+    avatar_url: string;
+  };
+  assets: GiteaReleaseAsset[];
+}
+
+export interface GiteaReleaseAsset {
+  id: number;
+  name: string;
+  size: number;
+  download_count: number;
+  created_at: string;
+  uuid: string;
+  browser_download_url: string;
+}
+
+export interface GiteaReleaseInput {
+  tag_name: string;
+  name?: string;
+  body?: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  target_commitish?: string;
+}
+
 export interface GiteaClientConfig {
   baseUrl: string;
   token?: string;
@@ -478,7 +576,6 @@ export class GiteaClient {
     return this.request<GiteaPullRequest>(`/repos/${owner}/${repo}/pulls/${index}`);
   }
 
-  // User/Organization methods
   async getCurrentUser(): Promise<any> {
     return this.request('/user');
   }
@@ -487,7 +584,6 @@ export class GiteaClient {
     return this.request('/user/orgs');
   }
 
-  // Health check
   async healthCheck(): Promise<boolean> {
     try {
       await fetch(`${this.baseUrl}/api/v1/version`);
@@ -495,5 +591,121 @@ export class GiteaClient {
     } catch {
       return false;
     }
+  }
+
+  async listIssues(
+    owner: string,
+    repo: string,
+    options?: {
+      state?: 'open' | 'closed' | 'all';
+      labels?: string;
+      milestones?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<GiteaIssue[]> {
+    const params = new URLSearchParams();
+    if (options?.state) params.append('state', options.state);
+    if (options?.labels) params.append('labels', options.labels);
+    if (options?.milestones) params.append('milestones', options.milestones);
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', (options.limit || 30).toString());
+
+    return this.request<GiteaIssue[]>(`/repos/${owner}/${repo}/issues?${params}`);
+  }
+
+  async getIssue(owner: string, repo: string, index: number): Promise<GiteaIssue | null> {
+    try {
+      return await this.request<GiteaIssue>(`/repos/${owner}/${repo}/issues/${index}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async createIssue(owner: string, repo: string, input: GiteaIssueInput): Promise<GiteaIssue> {
+    return this.request<GiteaIssue>(`/repos/${owner}/${repo}/issues`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateIssue(
+    owner: string,
+    repo: string,
+    index: number,
+    input: Partial<GiteaIssueInput> & { state?: 'open' | 'closed' }
+  ): Promise<GiteaIssue> {
+    return this.request<GiteaIssue>(`/repos/${owner}/${repo}/issues/${index}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async closeIssue(owner: string, repo: string, index: number): Promise<GiteaIssue> {
+    return this.updateIssue(owner, repo, index, { state: 'closed' });
+  }
+
+  async listLabels(owner: string, repo: string): Promise<GiteaLabel[]> {
+    return this.request<GiteaLabel[]>(`/repos/${owner}/${repo}/labels`);
+  }
+
+  async createLabel(
+    owner: string,
+    repo: string,
+    input: { name: string; color: string; description?: string }
+  ): Promise<GiteaLabel> {
+    return this.request<GiteaLabel>(`/repos/${owner}/${repo}/labels`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listReleases(owner: string, repo: string, options?: { page?: number; limit?: number }): Promise<GiteaRelease[]> {
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', (options.limit || 30).toString());
+
+    return this.request<GiteaRelease[]>(`/repos/${owner}/${repo}/releases?${params}`);
+  }
+
+  async getRelease(owner: string, repo: string, id: number): Promise<GiteaRelease | null> {
+    try {
+      return await this.request<GiteaRelease>(`/repos/${owner}/${repo}/releases/${id}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async getReleaseByTag(owner: string, repo: string, tag: string): Promise<GiteaRelease | null> {
+    try {
+      return await this.request<GiteaRelease>(`/repos/${owner}/${repo}/releases/tags/${tag}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async getLatestRelease(owner: string, repo: string): Promise<GiteaRelease | null> {
+    const releases = await this.listReleases(owner, repo, { limit: 1 });
+    return releases.length > 0 ? releases[0] : null;
+  }
+
+  async createRelease(owner: string, repo: string, input: GiteaReleaseInput): Promise<GiteaRelease> {
+    return this.request<GiteaRelease>(`/repos/${owner}/${repo}/releases`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateRelease(owner: string, repo: string, id: number, input: Partial<GiteaReleaseInput>): Promise<GiteaRelease> {
+    return this.request<GiteaRelease>(`/repos/${owner}/${repo}/releases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteRelease(owner: string, repo: string, id: number): Promise<void> {
+    await this.request(`/repos/${owner}/${repo}/releases/${id}`, {
+      method: 'DELETE',
+    });
   }
 }

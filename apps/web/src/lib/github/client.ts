@@ -63,8 +63,85 @@ export interface CrossPublishedRepo {
     stars: number;
     forks: number;
   };
-  inSync: boolean; // True if last push times are close
+  inSync: boolean;
   syncStatus: 'synced' | 'gitea-ahead' | 'github-ahead' | 'unknown';
+}
+
+export interface GitHubLabel {
+  id: number;
+  name: string;
+  color: string;
+  description: string | null;
+}
+
+export interface GitHubMilestone {
+  id: number;
+  number: number;
+  title: string;
+  description: string | null;
+  state: 'open' | 'closed';
+  due_on: string | null;
+}
+
+export interface GitHubIssue {
+  id: number;
+  node_id: string;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  state_reason: 'completed' | 'not_planned' | 'reopened' | null;
+  html_url: string;
+  user: GitHubUser;
+  assignee: GitHubUser | null;
+  assignees: GitHubUser[];
+  labels: GitHubLabel[];
+  milestone: GitHubMilestone | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
+export interface GitHubIssueInput {
+  title: string;
+  body?: string;
+  assignees?: string[];
+  labels?: string[];
+  milestone?: number;
+}
+
+export interface GitHubRelease {
+  id: number;
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  draft: boolean;
+  prerelease: boolean;
+  html_url: string;
+  tarball_url: string;
+  zipball_url: string;
+  created_at: string;
+  published_at: string | null;
+  author: GitHubUser;
+  assets: GitHubReleaseAsset[];
+}
+
+export interface GitHubReleaseAsset {
+  id: number;
+  name: string;
+  content_type: string;
+  size: number;
+  download_count: number;
+  browser_download_url: string;
+}
+
+export interface GitHubReleaseInput {
+  tag_name: string;
+  name?: string;
+  body?: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  target_commitish?: string;
 }
 
 export class GitHubClient {
@@ -238,9 +315,6 @@ export class GitHubClient {
     }
   }
 
-  /**
-   * Get rate limit status
-   */
   async getRateLimit(): Promise<{
     limit: number;
     remaining: number;
@@ -264,5 +338,132 @@ export class GitHubClient {
     } catch {
       return { limit: 0, remaining: 0, reset: new Date() };
     }
+  }
+
+  async listIssues(
+    owner: string,
+    repo: string,
+    options?: {
+      state?: 'open' | 'closed' | 'all';
+      labels?: string;
+      assignee?: string;
+      sort?: 'created' | 'updated' | 'comments';
+      direction?: 'asc' | 'desc';
+      per_page?: number;
+      page?: number;
+    }
+  ): Promise<GitHubIssue[]> {
+    const params = new URLSearchParams();
+    if (options?.state) params.append('state', options.state);
+    if (options?.labels) params.append('labels', options.labels);
+    if (options?.assignee) params.append('assignee', options.assignee);
+    if (options?.sort) params.append('sort', options.sort);
+    if (options?.direction) params.append('direction', options.direction);
+    params.append('per_page', String(options?.per_page || 30));
+    if (options?.page) params.append('page', String(options.page));
+
+    return this.request<GitHubIssue[]>(`/repos/${owner}/${repo}/issues?${params}`);
+  }
+
+  async getIssue(owner: string, repo: string, issueNumber: number): Promise<GitHubIssue | null> {
+    try {
+      return await this.request<GitHubIssue>(`/repos/${owner}/${repo}/issues/${issueNumber}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async createIssue(owner: string, repo: string, input: GitHubIssueInput): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(`/repos/${owner}/${repo}/issues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    input: Partial<GitHubIssueInput> & { state?: 'open' | 'closed'; state_reason?: 'completed' | 'not_planned' | 'reopened' }
+  ): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(`/repos/${owner}/${repo}/issues/${issueNumber}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async closeIssue(owner: string, repo: string, issueNumber: number, reason?: 'completed' | 'not_planned'): Promise<GitHubIssue> {
+    return this.updateIssue(owner, repo, issueNumber, { 
+      state: 'closed',
+      state_reason: reason || 'completed'
+    });
+  }
+
+  async listLabels(owner: string, repo: string): Promise<GitHubLabel[]> {
+    return this.request<GitHubLabel[]>(`/repos/${owner}/${repo}/labels?per_page=100`);
+  }
+
+  async createLabel(owner: string, repo: string, input: { name: string; color: string; description?: string }): Promise<GitHubLabel> {
+    return this.request<GitHubLabel>(`/repos/${owner}/${repo}/labels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listReleases(owner: string, repo: string, options?: { per_page?: number; page?: number }): Promise<GitHubRelease[]> {
+    const params = new URLSearchParams();
+    params.append('per_page', String(options?.per_page || 30));
+    if (options?.page) params.append('page', String(options.page));
+
+    return this.request<GitHubRelease[]>(`/repos/${owner}/${repo}/releases?${params}`);
+  }
+
+  async getRelease(owner: string, repo: string, releaseId: number): Promise<GitHubRelease | null> {
+    try {
+      return await this.request<GitHubRelease>(`/repos/${owner}/${repo}/releases/${releaseId}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async getReleaseByTag(owner: string, repo: string, tag: string): Promise<GitHubRelease | null> {
+    try {
+      return await this.request<GitHubRelease>(`/repos/${owner}/${repo}/releases/tags/${tag}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async getLatestRelease(owner: string, repo: string): Promise<GitHubRelease | null> {
+    try {
+      return await this.request<GitHubRelease>(`/repos/${owner}/${repo}/releases/latest`);
+    } catch {
+      return null;
+    }
+  }
+
+  async createRelease(owner: string, repo: string, input: GitHubReleaseInput): Promise<GitHubRelease> {
+    return this.request<GitHubRelease>(`/repos/${owner}/${repo}/releases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateRelease(owner: string, repo: string, releaseId: number, input: Partial<GitHubReleaseInput>): Promise<GitHubRelease> {
+    return this.request<GitHubRelease>(`/repos/${owner}/${repo}/releases/${releaseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteRelease(owner: string, repo: string, releaseId: number): Promise<void> {
+    await this.request(`/repos/${owner}/${repo}/releases/${releaseId}`, {
+      method: 'DELETE',
+    });
   }
 }
