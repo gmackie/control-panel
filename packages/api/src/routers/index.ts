@@ -18,6 +18,7 @@ import { notionRouter } from "./notion";
 import { tasksRouter } from "./tasks";
 import { releasesRouter } from "./releases";
 import { syncRouter } from "./sync";
+import { webhooksRouter } from "./webhooks";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   tasks: tasksRouter,
   releases: releasesRouter,
   sync: syncRouter,
+  webhooks: webhooksRouter,
 });
 
 export type AppRouter = typeof appRouter;
