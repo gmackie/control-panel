@@ -15,6 +15,7 @@ import { ClerkAuthMetrics } from '@/components/dashboard/clerk-auth-metrics'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { PipelineStatusWidget } from '@/components/dashboard/pipeline-status-widget'
 import { CostOverview } from '@/components/dashboard/cost-overview'
+import { TasksWidget } from '@/components/dashboard/tasks-widget'
 import { fetchBusinessMetrics } from '@/lib/api'
 
 export default function Dashboard() {
@@ -64,7 +65,10 @@ export default function Dashboard() {
 
       <DashboardStats />
 
-      <PipelineStatusWidget />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <PipelineStatusWidget />
+        <TasksWidget />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RealtimeMetrics />
