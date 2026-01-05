@@ -80,11 +80,19 @@ export class LinearCloneClient {
     this.apiKey = config.apiKey;
   }
 
+  private wrapTrpcInput(input: Record<string, unknown>) {
+    return { json: input };
+  }
+
+  private extractTrpcResult<T>(response: { result?: { data?: { json?: T } } }): T {
+    return response.result?.data?.json as T;
+  }
+
   private async request<T>(procedure: string, input?: Record<string, unknown>): Promise<T> {
     const url = new URL(`${this.baseUrl}/api/trpc/${procedure}`);
     
     if (input) {
-      url.searchParams.set('input', JSON.stringify(input));
+      url.searchParams.set('input', JSON.stringify(this.wrapTrpcInput(input)));
     }
 
     const response = await fetch(url.toString(), {
@@ -100,8 +108,7 @@ export class LinearCloneClient {
       throw new Error(`Linear Clone API error: ${response.status} - ${error}`);
     }
 
-    const data = await response.json();
-    return data.result?.data as T;
+    return this.extractTrpcResult<T>(await response.json());
   }
 
   private async mutate<T>(procedure: string, input: Record<string, unknown>): Promise<T> {
@@ -111,7 +118,7 @@ export class LinearCloneClient {
         'x-api-key': this.apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify(this.wrapTrpcInput(input)),
     });
 
     if (!response.ok) {
@@ -119,8 +126,7 @@ export class LinearCloneClient {
       throw new Error(`Linear Clone API error: ${response.status} - ${error}`);
     }
 
-    const data = await response.json();
-    return data.result?.data as T;
+    return this.extractTrpcResult<T>(await response.json());
   }
 
   async healthCheck(): Promise<boolean> {
@@ -151,8 +157,17 @@ export class LinearCloneClient {
     return this.request<LinearCloneProject[]>('project.list', { workspaceId });
   }
 
-  async getIssues(options: { projectId?: string; workspaceId?: string; status?: string; limit?: number } = {}): Promise<LinearCloneIssue[]> {
-    return this.request<LinearCloneIssue[]>('issue.list', options);
+  async getIssues(workspaceId: string, options: { projectId?: string; status?: string[]; limit?: number } = {}): Promise<LinearCloneIssue[]> {
+    const filter = options.projectId || options.status 
+      ? { projectId: options.projectId, status: options.status }
+      : undefined;
+    const pagination = options.limit ? { limit: options.limit } : undefined;
+    
+    return this.request<LinearCloneIssue[]>('issue.list', { 
+      workspaceId, 
+      filter,
+      pagination,
+    });
   }
 
   async getIssue(id: string): Promise<LinearCloneIssue | null> {
@@ -193,7 +208,7 @@ export class LinearCloneClient {
     activeCycles: number;
   }> {
     const [issues, projects, cycles] = await Promise.all([
-      this.getIssues({ workspaceId }),
+      this.getIssues(workspaceId),
       this.getProjects(workspaceId),
       this.getCycles(workspaceId),
     ]);

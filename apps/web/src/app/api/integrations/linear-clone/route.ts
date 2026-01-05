@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
             [stats, projects, issues, cycles] = await Promise.all([
               client.getStats(primaryWorkspace.id),
               client.getProjects(primaryWorkspace.id),
-              client.getIssues({ workspaceId: primaryWorkspace.id, limit: 20 }),
+              client.getIssues(primaryWorkspace.id, { limit: 20 }),
               client.getCycles(primaryWorkspace.id),
             ]);
           }
@@ -80,14 +80,16 @@ export async function GET(request: NextRequest) {
       }
 
       case 'issues': {
+        if (!workspaceId) {
+          return NextResponse.json({ error: 'workspaceId required' }, { status: 400 });
+        }
         const projectId = searchParams.get('projectId');
         const status = searchParams.get('status');
         const limit = parseInt(searchParams.get('limit') || '50');
 
-        const issues = await client.getIssues({
-          workspaceId: workspaceId || undefined,
+        const issues = await client.getIssues(workspaceId, {
           projectId: projectId || undefined,
-          status: status || undefined,
+          status: status ? [status] : undefined,
           limit,
         });
 
