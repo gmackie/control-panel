@@ -228,10 +228,11 @@ export class LinearCloneClient {
 
 export function createLinearCloneClient(): LinearCloneClient {
   const baseUrl = process.env.LINEAR_CLONE_URL || 'https://tasks.gmac.io';
-  const apiKey = process.env.LINEAR_CLONE_API_KEY || '';
+  // Check both env var names for flexibility
+  const apiKey = process.env.LINEAR_CLONE_API_KEY || process.env.LINEAR_API_KEY || '';
 
   if (!apiKey) {
-    throw new Error('LINEAR_CLONE_API_KEY environment variable is required');
+    throw new Error('LINEAR_CLONE_API_KEY or LINEAR_API_KEY environment variable is required');
   }
 
   return new LinearCloneClient({ baseUrl, apiKey });
