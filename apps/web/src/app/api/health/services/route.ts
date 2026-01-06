@@ -223,24 +223,46 @@ async function checkK8sClusterDirect(): Promise<{
   
   try {
     const https = await import('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
     
-    const response = await fetch(`${apiUrl}/api/v1/nodes`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-      // @ts-ignore
-      agent,
+    const data = await new Promise<any>((resolve, reject) => {
+      const url = new URL(`${apiUrl}/api/v1/nodes`);
+      
+      const req = https.request({
+        hostname: url.hostname,
+        port: url.port || 6443,
+        path: url.pathname,
+        method: 'GET',
+        rejectUnauthorized: false,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              reject(new Error('Invalid JSON'));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        });
+      });
+      
+      req.on('error', reject);
+      req.setTimeout(10000, () => {
+        req.destroy();
+        reject(new Error('Timeout'));
+      });
+      req.end();
     });
     
     const responseTime = Date.now() - startTime;
     
-    if (!response.ok) {
-      return { healthy: false, nodes: [], responseTime };
-    }
-    
-    const data = await response.json();
     const nodes = data.items?.map((node: any) => {
       const conditions = node.status?.conditions || [];
       const readyCondition = conditions.find((c: any) => c.type === 'Ready');
