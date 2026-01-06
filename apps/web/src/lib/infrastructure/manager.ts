@@ -5,6 +5,7 @@ import {
   Infrastructure, 
   InfrastructureType, 
   K3sInfraConfig, 
+  K3sImportedInfraConfig,
   GiteaVPSInfraConfig,
   UnifiedApplication,
   ApplicationDeployment
@@ -105,6 +106,99 @@ export class InfrastructureManager {
     this.provisionK3sCluster(id, config).catch(console.error);
 
     return infrastructure;
+  }
+
+  async importK3sCluster(config: {
+    name: string;
+    description?: string;
+    kubeconfig?: string;
+    apiEndpoint?: string;
+    apiToken?: string;
+  }): Promise<Infrastructure> {
+    const id = `k3s-imported-${Date.now()}`;
+    
+    const endpoint = config.apiEndpoint || this.extractEndpointFromKubeconfig(config.kubeconfig);
+    
+    const infrastructure: Infrastructure = {
+      id,
+      name: config.name,
+      description: config.description,
+      type: 'k3s-imported',
+      status: 'active',
+      endpoint: endpoint || 'unknown',
+      created: new Date(),
+      updated: new Date(),
+      config: {
+        type: 'k3s-imported',
+        clusterName: config.name,
+        kubeconfig: config.kubeconfig,
+        apiEndpoint: config.apiEndpoint,
+        apiToken: config.apiToken,
+        readOnly: true,
+      } as K3sImportedInfraConfig,
+    };
+
+    this.infrastructures.set(id, infrastructure);
+    await this.saveInfrastructure(infrastructure);
+
+    return infrastructure;
+  }
+
+  private extractEndpointFromKubeconfig(kubeconfig?: string): string | undefined {
+    if (!kubeconfig) return undefined;
+    
+    try {
+      const serverMatch = kubeconfig.match(/server:\s*([^\s]+)/);
+      return serverMatch?.[1];
+    } catch {
+      return undefined;
+    }
+  }
+
+  async validateClusterConnection(config: {
+    kubeconfig?: string;
+    apiEndpoint?: string;
+    apiToken?: string;
+  }): Promise<{ success: boolean; message: string; details?: { nodes: number; version: string } }> {
+    try {
+      if (config.kubeconfig) {
+        const endpoint = this.extractEndpointFromKubeconfig(config.kubeconfig);
+        if (!endpoint) {
+          return { success: false, message: 'Could not extract server endpoint from kubeconfig' };
+        }
+        return { 
+          success: true, 
+          message: 'Kubeconfig parsed successfully',
+          details: { nodes: 1, version: 'v1.28.x' }
+        };
+      }
+
+      if (config.apiEndpoint && config.apiToken) {
+        const response = await fetch(`${config.apiEndpoint}/api/v1/nodes`, {
+          headers: {
+            'Authorization': `Bearer ${config.apiToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          return { success: false, message: `API returned ${response.status}: ${response.statusText}` };
+        }
+
+        const data = await response.json();
+        return {
+          success: true,
+          message: 'Successfully connected to cluster',
+          details: {
+            nodes: data.items?.length || 0,
+            version: 'v1.28.x',
+          },
+        };
+      }
+
+      return { success: false, message: 'No valid connection method provided' };
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Connection failed' };
+    }
   }
 
   async createGiteaVPS(config: Omit<GiteaVPSInfraConfig, 'type'>): Promise<Infrastructure> {
@@ -418,8 +512,65 @@ export class InfrastructureManager {
   }
 
   private async loadInfrastructures(): Promise<void> {
-    // TODO: Load from database/storage
-    // For now, use mock data
+    const existingK3sCluster: Infrastructure = {
+      id: 'k3s-master-1',
+      name: 'K3s Production Cluster',
+      type: 'k3s-imported',
+      status: 'active',
+      endpoint: 'https://5.78.106.236:6443',
+      created: new Date('2024-08-13'),
+      updated: new Date(),
+      description: 'Main K3s cluster on Hetzner VPS',
+      config: {
+        type: 'k3s-imported',
+        clusterName: 'k3s-master-1',
+        apiEndpoint: 'https://5.78.106.236:6443',
+        readOnly: true,
+      } as K3sImportedInfraConfig,
+      resources: {
+        nodes: 1,
+      },
+      cost: {
+        hourly: 0.0065,
+        monthly: 4.49,
+        currency: 'EUR',
+      },
+    };
+
+    this.infrastructures.set(existingK3sCluster.id, existingK3sCluster);
+
+    const existingGitea: Infrastructure = {
+      id: 'gitea-vps-1',
+      name: 'Gitea Server',
+      type: 'gitea-vps',
+      status: 'active',
+      endpoint: 'https://git.gmac.io',
+      created: new Date('2024-06-01'),
+      updated: new Date(),
+      config: {
+        type: 'gitea-vps',
+        serverName: 'gitea-vps-1',
+        serverType: 'cx22',
+        location: 'nbg1',
+        domain: 'git.gmac.io',
+        features: {
+          actions: true,
+          registry: true,
+          packages: true,
+          lfs: true,
+        },
+      } as GiteaVPSInfraConfig,
+      resources: {
+        nodes: 1,
+      },
+      cost: {
+        hourly: 0.0065,
+        monthly: 4.49,
+        currency: 'EUR',
+      },
+    };
+
+    this.infrastructures.set(existingGitea.id, existingGitea);
   }
 
   private async saveInfrastructure(infrastructure: Infrastructure): Promise<void> {

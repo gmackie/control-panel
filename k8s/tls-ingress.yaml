@@ -1,0 +1,51 @@
+# Let's Encrypt ClusterIssuer for automatic TLS certificates
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: gmackie@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+# TLS-enabled Ingress for control.gmac.io
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: control-panel-ingress
+  namespace: control-panel
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - control.gmac.io
+    secretName: control-panel-tls
+  rules:
+  - host: control.gmac.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: control-panel-service
+            port:
+              number: 80
+  # Also allow access via IP without host header (no TLS)
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: control-panel-service
+            port:
+              number: 80

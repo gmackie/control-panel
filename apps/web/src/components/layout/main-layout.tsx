@@ -32,6 +32,7 @@ import {
   Layers,
   Search,
   Command,
+  Package,
 } from 'lucide-react'
 import { useCommandPalette } from '@/components/command-palette/CommandPaletteProvider'
 import { useKeyboardShortcuts } from '@/components/keyboard-shortcuts/KeyboardShortcutsProvider'
@@ -53,6 +54,11 @@ const navigation: NavItem[] = [
     title: 'Dashboard',
     href: '/',
     icon: Home
+  },
+  {
+    title: 'Products',
+    href: '/products',
+    icon: Package
   },
   {
     title: 'Applications',

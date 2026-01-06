@@ -6,8 +6,11 @@ __pycache__/
 venv/
 env/
 .env
+.env.local
 */.env.local
+**/.env.local
 **/.env.dev*
+**/.env.development.local
 */.env.prod*
 
 # Build outputs
@@ -53,3 +56,10 @@ k8s/secrets/
 *.tar.gz
 control-panel.tar
 control-panel.tar.gz
+
+# Session files
+session-*.md
+
+# Test results
+test-results/
+**/test-results/

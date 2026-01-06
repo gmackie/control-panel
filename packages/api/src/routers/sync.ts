@@ -22,7 +22,7 @@ import { TRPCError } from "@trpc/server";
 // Note: The actual sync engine is in apps/web, so we'll need to call it differently
 // For now, we'll set up the router structure and database operations
 
-const syncProviderSchema = z.enum(['github', 'gitea', 'linear', 'notion']);
+const syncProviderSchema = z.enum(['github', 'gitea', 'task', 'notion']);
 const syncDirectionSchema = z.enum(['bidirectional', 'push_only', 'pull_only']);
 
 const configureSyncSchema = z.object({

@@ -125,7 +125,7 @@ export class KubeconfigManager extends BaseClusterModule {
         const execAsync = promisify(exec);
         
         const { stdout, stderr } = await execAsync(
-          `KUBECONFIG=${tempFile} kubectl ${command}`
+          `KUBECONFIG=${tempFile} kubectl --insecure-skip-tls-verify ${command}`
         );
         
         if (stderr) {
@@ -262,17 +262,17 @@ export class KubeconfigManager extends BaseClusterModule {
     // For now, we'll use environment variables or local storage
     
     const k3sToken = process.env.K3S_SA_TOKEN;
-    const k8sApiUrl = process.env.K8S_API_URL;
+    const k8sApiUrl = process.env.K8S_API_URL || process.env.K3S_API_URL || 'https://5.78.106.236:6443';
     
-    if (k3sToken && k8sApiUrl) {
+    if (k3sToken) {
       // Create a basic kubeconfig from service account token
       const kubeconfig = this.createKubeconfigFromToken(
-        'default',
+        'k3s-master-1',
         k8sApiUrl,
         k3sToken
       );
       
-      await this.storeKubeconfig('default', kubeconfig);
+      await this.storeKubeconfig('k3s-master-1', kubeconfig);
     }
   }
 

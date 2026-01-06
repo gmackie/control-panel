@@ -250,6 +250,7 @@ export function SendGridIntegrationForm({
 
     onSave({
       provider: 'sendgrid',
+      name: 'SendGrid',
       config: {
         fromEmail: config.fromEmail,
         fromName: config.fromName,
@@ -259,7 +260,7 @@ export function SendGridIntegrationForm({
         templates: config.templates,
         stats: config.stats,
       },
-      secrets: {
+      credentials: {
         SENDGRID_API_KEY: config.apiKey,
         SENDGRID_FROM_EMAIL: config.fromEmail,
         SENDGRID_FROM_NAME: config.fromName,

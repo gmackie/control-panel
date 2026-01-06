@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body: CreateApplicationRequest = await request.json();
+    const body = await request.json();
     
     if (!body.name) {
       return NextResponse.json(
@@ -79,6 +79,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const db = await getDbAsync();
+    
+    if (db) {
+      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      
+      const [newApp] = await db.insert(applications).values({
+        name: body.name,
+        slug,
+        description: body.description || null,
+        repositoryUrl: body.repository || null,
+        status: 'active',
+      }).returning();
+
+      return NextResponse.json(safeJson({
+        id: newApp.id,
+        name: newApp.name,
+        slug: newApp.slug,
+        description: newApp.description,
+        repositoryUrl: newApp.repositoryUrl,
+        status: newApp.status,
+        createdAt: newApp.createdAt.toISOString(),
+        updatedAt: newApp.updatedAt.toISOString(),
+      }), { status: 201 });
+    }
+    
     const application = await createApplication(
       body,
       (session.user as { login?: string }).login || session.user.email!
@@ -88,7 +113,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating application:', error);
     return NextResponse.json(
-      { error: 'Failed to create application' },
+      { error: 'Failed to create application', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

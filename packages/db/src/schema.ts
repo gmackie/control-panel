@@ -16,10 +16,21 @@ export const applications = pgTable("applications", {
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   description: text("description"),
   repositoryUrl: text("repository_url"),
+  repositoryPath: text("repository_path"),
+  appType: varchar("app_type", { length: 50 }).notNull().default("web"),
+  platform: varchar("platform", { length: 50 }),
+  productId: uuid("product_id"),
+  k8sNamespace: varchar("k8s_namespace", { length: 255 }),
+  k8sDeploymentName: varchar("k8s_deployment_name", { length: 255 }),
+  vercelProjectId: text("vercel_project_id"),
+  expoProjectId: text("expo_project_id"),
   status: varchar("status", { length: 50 }).notNull().default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  productIdIdx: index("applications_product_id_idx").on(table.productId),
+  appTypeIdx: index("applications_app_type_idx").on(table.appType),
+}));
 
 // ===================================
 // Activity Events
@@ -895,12 +906,12 @@ export const taskSyncConfigs = pgTable("task_sync_configs", {
   applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   
   // Provider configuration
-  provider: varchar("provider", { length: 50 }).notNull(), // github, gitea, linear, notion
+  provider: varchar("provider", { length: 50 }).notNull(), // github, gitea, task, notion
   enabled: boolean("enabled").notNull().default(false),
   
   // Provider-specific config
   // GitHub/Gitea: { owner, repo }
-  // Linear: { teamId, projectId? }
+  // Task: { workspaceId, projectId? }
   // Notion: { databaseId }
   config: text("config"), // JSON
   
@@ -957,7 +968,7 @@ export const tasks = pgTable("tasks", {
   // JSON: { id, number, url, provider }
   githubLink: text("github_link"), // { owner, repo, number, url, nodeId }
   giteaLink: text("gitea_link"), // { owner, repo, number, url }
-  linearLink: text("linear_link"), // { id, identifier, url }
+  taskLink: text("task_link"), // { id, identifier, url }
   notionLink: text("notion_link"), // { pageId, url }
   
   // Sync metadata
@@ -967,7 +978,7 @@ export const tasks = pgTable("tasks", {
   syncError: text("sync_error"),
   
   // Source tracking (where was this task originally created)
-  sourceProvider: varchar("source_provider", { length: 50 }), // control_panel, github, gitea, linear, notion
+  sourceProvider: varchar("source_provider", { length: 50 }), // control_panel, github, gitea, task, notion
   sourceId: text("source_id"), // External ID if created externally
   
   // Timestamps
@@ -1000,7 +1011,7 @@ export const taskComments = pgTable("task_comments", {
   // External sync
   githubCommentId: text("github_comment_id"),
   giteaCommentId: text("gitea_comment_id"),
-  linearCommentId: text("linear_comment_id"),
+  taskCommentId: text("task_comment_id"),
   
   // Timestamps
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1028,7 +1039,7 @@ export const taskActivityLog = pgTable("task_activity_log", {
   actorType: varchar("actor_type", { length: 20 }), // user, system, sync
   
   // Source of change
-  source: varchar("source", { length: 50 }).notNull(), // control_panel, github, gitea, linear, notion
+  source: varchar("source", { length: 50 }).notNull(), // control_panel, github, gitea, task, notion
   
   // Timestamps
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1139,3 +1150,194 @@ export type NewRelease = typeof releases.$inferInsert;
 
 export type ReleaseAsset = typeof releaseAssets.$inferSelect;
 export type NewReleaseAsset = typeof releaseAssets.$inferInsert;
+
+// ===================================
+// Products (Groups of Applications)
+// ===================================
+
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
+  description: text("description"),
+  icon: varchar("icon", { length: 50 }),
+  color: varchar("color", { length: 20 }),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  slugIdx: index("products_slug_idx").on(table.slug),
+}));
+
+// ===================================
+// Organization-wide Integrations
+// ===================================
+
+export const orgIntegrations = pgTable("org_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: varchar("provider", { length: 100 }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").notNull().default(true),
+  config: text("config"),
+  credentials: text("credentials"),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }),
+  lastSyncError: text("last_sync_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  providerIdx: index("org_integrations_provider_idx").on(table.provider),
+}));
+
+// ===================================
+// Product-level Integrations
+// ===================================
+
+export const productIntegrations = pgTable("product_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 100 }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").notNull().default(true),
+  config: text("config"),
+  credentials: text("credentials"),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  productIdIdx: index("product_integrations_product_id_idx").on(table.productId),
+  providerIdx: index("product_integrations_provider_idx").on(table.provider),
+}));
+
+// ===================================
+// Application-level Integrations
+// ===================================
+
+export const appIntegrations = pgTable("app_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 100 }).notNull(),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  config: text("config"),
+  credentials: text("credentials"),
+  productIntegrationId: uuid("product_integration_id").references(() => productIntegrations.id),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdIdx: index("app_integrations_application_id_idx").on(table.applicationId),
+  providerIdx: index("app_integrations_provider_idx").on(table.provider),
+}));
+
+// ===================================
+// Vercel Projects (org-wide tracking)
+// ===================================
+
+export const vercelProjects = pgTable("vercel_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  vercelProjectId: text("vercel_project_id").notNull().unique(),
+  name: text("name").notNull(),
+  framework: varchar("framework", { length: 50 }),
+  productionUrl: text("production_url"),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  lastDeploymentAt: timestamp("last_deployment_at"),
+  lastDeploymentStatus: varchar("last_deployment_status", { length: 50 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  vercelProjectIdIdx: index("vercel_projects_vercel_project_id_idx").on(table.vercelProjectId),
+  applicationIdIdx: index("vercel_projects_application_id_idx").on(table.applicationId),
+}));
+
+// ===================================
+// Expo Projects (org-wide tracking)
+// ===================================
+
+export const expoProjects = pgTable("expo_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  expoProjectId: text("expo_project_id").notNull().unique(),
+  name: text("name").notNull(),
+  slug: varchar("slug", { length: 255 }),
+  platform: varchar("platform", { length: 50 }),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  lastBuildAt: timestamp("last_build_at"),
+  lastBuildStatus: varchar("last_build_status", { length: 50 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  expoProjectIdIdx: index("expo_projects_expo_project_id_idx").on(table.expoProjectId),
+  applicationIdIdx: index("expo_projects_application_id_idx").on(table.applicationId),
+}));
+
+// ===================================
+// Neon Projects (org-wide tracking)
+// ===================================
+
+export const neonProjects = pgTable("neon_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  neonProjectId: text("neon_project_id").notNull().unique(),
+  name: text("name").notNull(),
+  regionId: varchar("region_id", { length: 50 }),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  neonProjectIdIdx: index("neon_projects_neon_project_id_idx").on(table.neonProjectId),
+  applicationIdIdx: index("neon_projects_application_id_idx").on(table.applicationId),
+}));
+
+// ===================================
+// Turso Databases (org-wide tracking)
+// ===================================
+
+export const tursoDatabases = pgTable("turso_databases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tursoDbId: text("turso_db_id").notNull().unique(),
+  name: text("name").notNull(),
+  group: varchar("group", { length: 100 }),
+  primaryRegion: varchar("primary_region", { length: 50 }),
+  hostname: text("hostname"),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  tursoDbIdIdx: index("turso_databases_turso_db_id_idx").on(table.tursoDbId),
+  applicationIdIdx: index("turso_databases_application_id_idx").on(table.applicationId),
+}));
+
+// ===================================
+// Product Type Exports
+// ===================================
+
+export type Product = typeof products.$inferSelect;
+export type NewProduct = typeof products.$inferInsert;
+
+export type OrgIntegration = typeof orgIntegrations.$inferSelect;
+export type NewOrgIntegration = typeof orgIntegrations.$inferInsert;
+
+export type ProductIntegration = typeof productIntegrations.$inferSelect;
+export type NewProductIntegration = typeof productIntegrations.$inferInsert;
+
+export type AppIntegration = typeof appIntegrations.$inferSelect;
+export type NewAppIntegration = typeof appIntegrations.$inferInsert;
+
+export type VercelProject = typeof vercelProjects.$inferSelect;
+export type NewVercelProject = typeof vercelProjects.$inferInsert;
+
+export type ExpoProject = typeof expoProjects.$inferSelect;
+export type NewExpoProject = typeof expoProjects.$inferInsert;
+
+export type NeonProject = typeof neonProjects.$inferSelect;
+export type NewNeonProject = typeof neonProjects.$inferInsert;
+
+export type TursoDatabase = typeof tursoDatabases.$inferSelect;
+export type NewTursoDatabase = typeof tursoDatabases.$inferInsert;

@@ -1,0 +1,185 @@
+# Simplified deployment for initial K3s setup
+# Use: kubectl apply -f deploy-simple.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: control-panel
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-config
+  namespace: control-panel
+data:
+  NODE_ENV: "production"
+  NEXTAUTH_URL: "https://control.gmac.io"
+  GITEA_URL: "https://git.gmac.io"
+  DRONE_SERVER: ""
+  HARBOR_URL: "https://registry.gmac.io"
+  ARGOCD_SERVER: ""
+  PROMETHEUS_URL: ""
+  K8S_API_SERVER: "https://5.78.106.236:6443"
+  DATABASE_HOST: ""
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "control_panel"
+  REDIS_HOST: ""
+  REDIS_PORT: "6379"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-panel-integrations
+  namespace: control-panel
+data:
+  GRAFANA_URL: ""
+  GRAFANA_EXTERNAL_URL: ""
+  HARBOR_PROJECT: "library"
+  GITEA_ORG: "gmac"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: control-panel-secrets
+  namespace: control-panel
+type: Opaque
+stringData:
+  # Placeholder values - update with ./update-cluster-secrets.sh
+  NEXTAUTH_SECRET: "placeholder-change-me-32-chars-min"
+  GITHUB_CLIENT_ID: "placeholder"
+  GITHUB_CLIENT_SECRET: "placeholder"
+  # Microsoft Entra ID (Azure AD) - for SSO with gmacko.com domain
+  AZURE_AD_CLIENT_ID: ""
+  AZURE_AD_CLIENT_SECRET: ""
+  AZURE_AD_TENANT_ID: ""
+  # Database
+  DATABASE_USER: "control_panel_user"
+  DATABASE_PASSWORD: "placeholder"
+  NEON_DATABASE_URL: ""
+  # Infrastructure
+  GITEA_TOKEN: "placeholder"
+  DRONE_TOKEN: ""
+  HARBOR_USERNAME: "admin"
+  HARBOR_PASSWORD: "placeholder"
+  ARGOCD_TOKEN: ""
+  WEBHOOK_SECRET: "placeholder"
+  GITHUB_TOKEN: ""
+  K3S_SA_TOKEN: "placeholder"
+  HETZNER_API_TOKEN: ""
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: control-panel
+  namespace: control-panel
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-panel
+  namespace: control-panel
+  labels:
+    app.kubernetes.io/name: control-panel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-panel
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-panel
+    spec:
+      serviceAccountName: control-panel
+      containers:
+      - name: control-panel
+        image: docker.io/library/control-panel:latest
+        imagePullPolicy: Never
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-config
+              key: NODE_ENV
+        - name: NEXTAUTH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-config
+              key: NEXTAUTH_URL
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: NEXTAUTH_SECRET
+        - name: GITHUB_ID
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: GITHUB_CLIENT_ID
+        - name: GITHUB_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: GITHUB_CLIENT_SECRET
+        - name: AZURE_AD_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: AZURE_AD_CLIENT_ID
+              optional: true
+        - name: AZURE_AD_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: AZURE_AD_CLIENT_SECRET
+              optional: true
+        - name: AZURE_AD_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: AZURE_AD_TENANT_ID
+              optional: true
+        - name: NEON_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: NEON_DATABASE_URL
+              optional: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-panel-service
+  namespace: control-panel
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    nodePort: 30080
+  selector:
+    app.kubernetes.io/name: control-panel

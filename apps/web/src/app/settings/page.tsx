@@ -471,9 +471,26 @@ export default function SettingsPage() {
 
           {/* Integrations Tab */}
           <TabsContent value="integrations">
+            <Card className="bg-gray-900/50 border-gray-800 mb-6">
+              <CardHeader>
+                <CardTitle className="text-gray-100">Organization Integrations</CardTitle>
+                <CardDescription>
+                  Connect organization-wide accounts for Vercel, Expo, Neon, and other services
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/integrations/hub">
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    <Network className="w-4 h-4 mr-2" />
+                    Manage Organization Integrations
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+            
             <Card className="bg-gray-900/50 border-gray-800">
               <CardHeader>
-                <CardTitle className="text-gray-100">Integrations</CardTitle>
+                <CardTitle className="text-gray-100">Quick Integrations</CardTitle>
                 <CardDescription>
                   Connect third-party services to enhance your workflow
                 </CardDescription>

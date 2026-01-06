@@ -269,6 +269,20 @@ spec:
               key: SENTRY_ORG
               optional: true
         
+        # Task.gmac.io Integration (linear-clone)
+        - name: TASK_API_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: TASK_API_URL
+              optional: true
+        - name: LINEAR_CLONE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: LINEAR_CLONE_API_KEY
+              optional: true
+        
         # Build DATABASE_URL from components
         - name: DATABASE_URL
           value: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"

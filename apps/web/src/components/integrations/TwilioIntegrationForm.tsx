@@ -234,6 +234,7 @@ export function TwilioIntegrationForm({
 
     onSave({
       provider: 'twilio',
+      name: 'Twilio',
       config: {
         phoneNumber: config.phoneNumber,
         messagingServiceSid: config.messagingServiceSid,
@@ -242,7 +243,7 @@ export function TwilioIntegrationForm({
         phoneNumbers: config.phoneNumbers,
         stats: config.stats,
       },
-      secrets: {
+      credentials: {
         TWILIO_ACCOUNT_SID: config.accountSid,
         TWILIO_AUTH_TOKEN: config.authToken,
         TWILIO_PHONE_NUMBER: config.phoneNumber,

@@ -217,12 +217,13 @@ export function StripeIntegrationForm({
 
     onSave({
       provider: 'stripe',
+      name: 'Stripe',
       config: {
         mode: config.mode,
         features: config.features,
         webhooks: config.webhooks,
       },
-      secrets: {
+      credentials: {
         STRIPE_SECRET_KEY: config.secretKey,
         STRIPE_PUBLISHABLE_KEY: config.publishableKey,
         STRIPE_WEBHOOK_SECRET: config.webhookSecret,

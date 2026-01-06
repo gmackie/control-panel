@@ -1,4 +1,4 @@
-export type SyncProvider = 'github' | 'gitea' | 'linear' | 'notion';
+export type SyncProvider = 'github' | 'gitea' | 'task' | 'notion';
 
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
 export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';
@@ -68,8 +68,8 @@ export interface GiteaProviderConfig {
   [key: string]: unknown;
 }
 
-export interface LinearProviderConfig {
-  teamId: string;
+export interface TaskProviderConfig {
+  workspaceId: string;
   projectId?: string;
   [key: string]: unknown;
 }

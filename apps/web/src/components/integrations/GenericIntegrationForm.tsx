@@ -95,6 +95,10 @@ export function GenericIntegrationForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    const nonEmptySecrets = Object.fromEntries(
+      Object.entries(secrets).filter(([_, v]) => v?.trim())
+    );
+    
     onSave({
       provider: template.provider,
       name: template.name,
@@ -102,9 +106,7 @@ export function GenericIntegrationForm({
       config: {
         ...existingConfig?.config,
       },
-      secrets: Object.keys(secrets).filter(k => secrets[k]),
-      // The secrets will be stored separately via the secrets API
-      secretValues: secrets,
+      credentials: nonEmptySecrets,
     });
   };
 

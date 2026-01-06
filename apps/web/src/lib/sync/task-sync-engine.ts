@@ -24,13 +24,13 @@ import type {
   SyncDirection,
   GithubProviderConfig,
   GiteaProviderConfig,
-  LinearProviderConfig,
+  TaskProviderConfig,
   NotionProviderConfig,
 } from './types';
 import { SyncProviderAdapter } from './providers/base';
 import { GitHubSyncAdapter } from './providers/github';
 import { GiteaSyncAdapter } from './providers/gitea';
-import { LinearSyncAdapter } from './providers/linear';
+import { TaskSyncAdapter } from './providers/task';
 import { NotionSyncAdapter } from './providers/notion';
 
 /**
@@ -61,10 +61,10 @@ function createAdapter(
         provider: 'gitea',
         config: config as GiteaProviderConfig & { baseUrl: string; token?: string },
       });
-    case 'linear':
-      return new LinearSyncAdapter({
-        provider: 'linear',
-        config: config as LinearProviderConfig,
+    case 'task':
+      return new TaskSyncAdapter({
+        provider: 'task',
+        config: config as TaskProviderConfig,
       });
     case 'notion':
       return new NotionSyncAdapter({
@@ -600,8 +600,8 @@ export class TaskSyncEngine {
       case 'gitea':
         linkJson = task.giteaLink;
         break;
-      case 'linear':
-        linkJson = task.linearLink;
+      case 'task':
+        linkJson = task.taskLink;
         break;
       case 'notion':
         linkJson = task.notionLink;
@@ -640,8 +640,8 @@ export class TaskSyncEngine {
       case 'gitea':
         updateData.giteaLink = JSON.stringify(linkData);
         break;
-      case 'linear':
-        updateData.linearLink = JSON.stringify(linkData);
+      case 'task':
+        updateData.taskLink = JSON.stringify(linkData);
         break;
       case 'notion':
         updateData.notionLink = JSON.stringify({ pageId: externalTask.id, url: externalTask.url });
@@ -669,8 +669,8 @@ export class TaskSyncEngine {
       case 'gitea':
         task.giteaLink = JSON.stringify(linkData);
         break;
-      case 'linear':
-        task.linearLink = JSON.stringify(linkData);
+      case 'task':
+        task.taskLink = JSON.stringify(linkData);
         break;
       case 'notion':
         task.notionLink = JSON.stringify({ pageId: externalTask.id, url: externalTask.url });

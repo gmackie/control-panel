@@ -16,7 +16,7 @@ import {
 } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
-const webhookProviderSchema = z.enum(['github', 'gitea', 'linear', 'notion']);
+const webhookProviderSchema = z.enum(['github', 'gitea', 'task', 'notion']);
 
 /**
  * Generate a random webhook secret
@@ -62,12 +62,12 @@ export const webhooksRouter = router({
           signatureHeader: 'X-Gitea-Signature',
           configured: !!process.env.GITEA_WEBHOOK_SECRET,
         },
-        linear: {
-          url: `${baseUrl}/api/webhooks/linear`,
-          description: 'Linear webhook endpoint for issues',
+        task: {
+          url: `${baseUrl}/api/webhooks/task`,
+          description: 'Task.gmac.io webhook endpoint for issues',
           events: ['Issue'],
-          signatureHeader: 'Linear-Signature',
-          configured: !!process.env.LINEAR_WEBHOOK_SECRET,
+          signatureHeader: 'X-Task-Signature',
+          configured: !!process.env.TASK_WEBHOOK_SECRET,
         },
         notion: {
           url: `${baseUrl}/api/webhooks/notion`,
@@ -107,11 +107,11 @@ export const webhooksRouter = router({
           signatureHeader: 'X-Gitea-Signature',
           configured: !!process.env.GITEA_WEBHOOK_SECRET,
         },
-        linear: {
-          url: `${baseUrl}/api/webhooks/linear`,
+        task: {
+          url: `${baseUrl}/api/webhooks/task`,
           events: ['Issue'],
-          signatureHeader: 'Linear-Signature',
-          configured: !!process.env.LINEAR_WEBHOOK_SECRET,
+          signatureHeader: 'X-Task-Signature',
+          configured: !!process.env.TASK_WEBHOOK_SECRET,
         },
         notion: {
           url: `${baseUrl}/api/webhooks/notion`,
@@ -165,7 +165,7 @@ export const webhooksRouter = router({
           switch (config.provider) {
             case 'github': return !!process.env.GITHUB_WEBHOOK_SECRET;
             case 'gitea': return !!process.env.GITEA_WEBHOOK_SECRET;
-            case 'linear': return !!process.env.LINEAR_WEBHOOK_SECRET;
+            case 'task': return !!process.env.TASK_WEBHOOK_SECRET;
             case 'notion': return !!process.env.NOTION_WEBHOOK_SECRET;
             default: return false;
           }
@@ -289,21 +289,21 @@ export const webhooksRouter = router({
           contentType: 'application/json',
           secretEnvVar: 'GITEA_WEBHOOK_SECRET',
         },
-        linear: {
-          title: 'Linear Webhook Setup',
+        task: {
+          title: 'Task.gmac.io Webhook Setup',
           steps: [
-            `1. Go to Linear Settings > API > Webhooks`,
+            `1. Go to Task.gmac.io Settings > Webhooks`,
             `2. Click "Create new webhook"`,
             `3. Set URL to: ${webhookUrl}`,
             `4. Copy the signing secret shown`,
-            `5. Add the signing secret to your environment as LINEAR_WEBHOOK_SECRET`,
+            `5. Add the signing secret to your environment as TASK_WEBHOOK_SECRET`,
             `6. Select data change events: Issue`,
-            `7. Optionally filter by team if needed`,
+            `7. Optionally filter by workspace if needed`,
             `8. Enable the webhook`,
           ],
           events: ['Issue'],
           contentType: 'application/json',
-          secretEnvVar: 'LINEAR_WEBHOOK_SECRET',
+          secretEnvVar: 'TASK_WEBHOOK_SECRET',
         },
         notion: {
           title: 'Notion Webhook Setup',
@@ -336,12 +336,12 @@ export const webhooksRouter = router({
       const envVars = {
         github: 'GITHUB_WEBHOOK_SECRET',
         gitea: 'GITEA_WEBHOOK_SECRET',
-        linear: 'LINEAR_WEBHOOK_SECRET',
+        task: 'TASK_WEBHOOK_SECRET',
         notion: 'NOTION_WEBHOOK_SECRET',
       } as const;
 
       type Provider = keyof typeof envVars;
-      const providers: Provider[] = ['github', 'gitea', 'linear', 'notion'];
+      const providers: Provider[] = ['github', 'gitea', 'task', 'notion'];
 
       const status = providers.map(provider => {
         const envVar = envVars[provider];

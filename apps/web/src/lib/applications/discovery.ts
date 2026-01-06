@@ -1,13 +1,24 @@
-/**
- * Application Discovery Service
- *
- * Scans Kubernetes clusters to discover existing applications and imports them
- * into the control panel's application management system.
- */
-
 import { KubeconfigManager } from '../cluster/modules/kubeconfig-manager';
 import { DeploymentManager } from '../cluster/modules/deployment-manager';
 import { Application } from '@/types/applications';
+import { K8sApiClient, getK8sClient } from '../cluster/k8s-api-client';
+
+interface GiteaRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  description: string;
+  html_url: string;
+  clone_url: string;
+  default_branch: string;
+  private: boolean;
+  created_at: string;
+  updated_at: string;
+  language: string;
+  owner: {
+    login: string;
+  };
+}
 
 export interface DiscoveredApplication {
   name: string;
@@ -41,12 +52,15 @@ export interface DiscoveredApplication {
 export interface DiscoveryOptions {
   clusterName?: string;
   namespaces?: string[];
-  includeManaged?: boolean; // Include apps already managed by control panel
-  includeSystemNamespaces?: boolean; // Include kube-system, kube-public, etc.
+  includeManaged?: boolean;
+  includeSystemNamespaces?: boolean;
+  source?: 'all' | 'kubernetes' | 'gitea';
 }
 
 export class ApplicationDiscoveryService {
   private kubeconfigManager: KubeconfigManager;
+  private giteaUrl: string;
+  private giteaToken: string;
   private systemNamespaces = [
     'kube-system',
     'kube-public',
@@ -57,6 +71,8 @@ export class ApplicationDiscoveryService {
 
   constructor(kubeconfigManager: KubeconfigManager) {
     this.kubeconfigManager = kubeconfigManager;
+    this.giteaUrl = process.env.GITEA_URL || 'https://git.gmac.io';
+    this.giteaToken = process.env.GITEA_TOKEN || '';
   }
 
   /**
@@ -65,30 +81,179 @@ export class ApplicationDiscoveryService {
   async discoverApplications(
     options: DiscoveryOptions = {}
   ): Promise<DiscoveredApplication[]> {
-    const clusters = options.clusterName
-      ? [options.clusterName]
-      : await this.kubeconfigManager.listClusters();
-
     const allDiscoveredApps: DiscoveredApplication[] = [];
+    const source = options.source || 'all';
 
-    for (const cluster of clusters) {
-      const kubectl = this.kubeconfigManager.getKubectlCommand(cluster);
+    if (source === 'all' || source === 'gitea') {
+      const giteaApps = await this.discoverFromGitea(options);
+      allDiscoveredApps.push(...giteaApps);
+    }
 
-      // Get all namespaces or use specified ones
-      const namespaces = options.namespaces || await this.getAllNamespaces(kubectl);
+    if (source === 'all' || source === 'kubernetes') {
+      const clusters = options.clusterName
+        ? [options.clusterName]
+        : await this.kubeconfigManager.listClusters();
 
-      // Filter out system namespaces if needed
-      const filteredNamespaces = options.includeSystemNamespaces
-        ? namespaces
-        : namespaces.filter(ns => !this.systemNamespaces.includes(ns));
+      for (const cluster of clusters) {
+        try {
+          const kubectl = this.kubeconfigManager.getKubectlCommand(cluster);
+          const namespaces = options.namespaces || await this.getAllNamespaces(kubectl);
+          const filteredNamespaces = options.includeSystemNamespaces
+            ? namespaces
+            : namespaces.filter(ns => !this.systemNamespaces.includes(ns));
 
-      for (const namespace of filteredNamespaces) {
-        const apps = await this.discoverInNamespace(kubectl, cluster, namespace, options);
-        allDiscoveredApps.push(...apps);
+          for (const namespace of filteredNamespaces) {
+            const apps = await this.discoverInNamespace(kubectl, cluster, namespace, options);
+            allDiscoveredApps.push(...apps);
+          }
+        } catch (error) {
+          console.error(`Error discovering from cluster ${cluster}:`, error);
+        }
       }
     }
 
     return allDiscoveredApps;
+  }
+
+  private async discoverFromGitea(options: DiscoveryOptions): Promise<DiscoveredApplication[]> {
+    if (!this.giteaToken) {
+      console.warn('No GITEA_TOKEN configured, skipping Gitea discovery');
+      return [];
+    }
+
+    try {
+      const allRepos: GiteaRepo[] = [];
+      let page = 1;
+      const perPage = 50;
+      
+      while (true) {
+        const response = await fetch(
+          `${this.giteaUrl}/api/v1/user/repos?page=${page}&limit=${perPage}`,
+          {
+            headers: {
+              'Authorization': `token ${this.giteaToken}`,
+              'Accept': 'application/json',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          console.error(`Gitea API error: ${response.status}`);
+          break;
+        }
+
+        const repos: GiteaRepo[] = await response.json();
+        if (repos.length === 0) break;
+        
+        allRepos.push(...repos);
+        if (repos.length < perPage) break;
+        page++;
+      }
+
+      const k8sDeployments = await this.getK8sDeploymentNames();
+
+      return allRepos.map(repo => {
+        const deploymentMatch = k8sDeployments.find(d => 
+          d.name === repo.name || 
+          d.name === repo.name.toLowerCase() ||
+          d.name.includes(repo.name.toLowerCase())
+        );
+
+        return {
+          name: repo.name,
+          namespace: deploymentMatch?.namespace || 'gitea',
+          slug: this.generateSlug(repo.name),
+          description: repo.description || `Repository: ${repo.full_name}`,
+          replicas: deploymentMatch 
+            ? { desired: deploymentMatch.replicas, ready: deploymentMatch.ready, available: deploymentMatch.available }
+            : { desired: 0, ready: 0, available: 0 },
+          labels: { 
+            source: 'gitea', 
+            language: repo.language || 'unknown',
+            hasK8sDeployment: deploymentMatch ? 'true' : 'false',
+          },
+          annotations: {},
+          createdAt: repo.created_at,
+          repository: repo.clone_url,
+          environment: deploymentMatch ? 'production' : 'development',
+          clusterName: deploymentMatch ? 'k3s-master-1' : 'gitea',
+          managedByControlPanel: false,
+          ingress: deploymentMatch?.ingress,
+          image: deploymentMatch?.image,
+        };
+      });
+    } catch (error) {
+      console.error('Error discovering from Gitea:', error);
+      return [];
+    }
+  }
+
+  private async getK8sDeploymentNames(): Promise<Array<{
+    name: string;
+    namespace: string;
+    replicas: number;
+    ready: number;
+    available: number;
+    image?: string;
+    ingress?: { host: string; tls: boolean };
+  }>> {
+    try {
+      const k8sClient = getK8sClient();
+      if (!k8sClient) {
+        console.warn('No K8s client available, skipping K8s discovery');
+        return [];
+      }
+
+      const deployments = await k8sClient.getAllDeployments();
+      const ingresses = await k8sClient.getAllIngresses();
+
+      const results: Array<{
+        name: string;
+        namespace: string;
+        replicas: number;
+        ready: number;
+        available: number;
+        image?: string;
+        ingress?: { host: string; tls: boolean };
+      }> = [];
+
+      for (const dep of deployments) {
+        const ns = dep.metadata.namespace;
+        if (this.systemNamespaces.includes(ns)) continue;
+
+        const name = dep.metadata.name;
+        const containers = dep.spec?.template?.spec?.containers || [];
+        const image = containers[0]?.image;
+
+        const matchingIngress = ingresses.find(ing => 
+          ing.metadata.namespace === ns && 
+          (ing.metadata.name === name || ing.metadata.name.includes(name))
+        );
+
+        let ingressInfo: { host: string; tls: boolean } | undefined;
+        if (matchingIngress?.spec?.rules?.[0]?.host) {
+          ingressInfo = {
+            host: matchingIngress.spec.rules[0].host,
+            tls: !!matchingIngress.spec.tls?.length,
+          };
+        }
+
+        results.push({
+          name,
+          namespace: ns,
+          replicas: dep.spec?.replicas || 1,
+          ready: dep.status?.readyReplicas || 0,
+          available: dep.status?.availableReplicas || 0,
+          image,
+          ingress: ingressInfo,
+        });
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error getting K8s deployments:', error);
+      return [];
+    }
   }
 
   /**

@@ -250,12 +250,13 @@ export function TursoIntegrationForm({
 
     onSave({
       provider: 'turso',
+      name: 'Turso',
       config: {
         databases: config.databases,
         features: config.features,
         monitoring: config.monitoring,
       },
-      secrets: {
+      credentials: {
         TURSO_DATABASE_URL: config.databaseUrl,
         TURSO_AUTH_TOKEN: config.authToken,
       },

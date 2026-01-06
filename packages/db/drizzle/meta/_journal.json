@@ -43,6 +43,27 @@
       "when": 1767466621067,
       "tag": "0005_typical_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767637752126,
+      "tag": "0006_cold_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1767649323637,
+      "tag": "0007_lean_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1767699617000,
+      "tag": "0008_rename_linear_to_task",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,9 @@ import {
   Heart,
   TrendingUp,
   ExternalLink,
+  Package,
+  Globe,
+  Box,
 } from "lucide-react";
 import { Infrastructure } from "@/lib/infrastructure/types";
 import { ClusterOverview } from "@/components/cluster/ClusterOverview";
@@ -51,6 +54,19 @@ export default function InfrastructurePage() {
       const response = await fetch('/api/cluster');
       if (!response.ok) {
         throw new Error('Failed to fetch cluster info');
+      }
+      return response.json();
+    },
+    enabled: selectedInfra?.type === 'k3s',
+    refetchInterval: 30000,
+  });
+
+  const { data: k8sResources, isLoading: resourcesLoading, refetch: refetchResources } = useQuery({
+    queryKey: ['k8s-resources'],
+    queryFn: async () => {
+      const response = await fetch('/api/k8s/deployments');
+      if (!response.ok) {
+        throw new Error('Failed to fetch K8s resources');
       }
       return response.json();
     },
@@ -137,10 +153,14 @@ export default function InfrastructurePage() {
           {stats && <ClusterOverview stats={stats} />}
 
           <Tabs defaultValue="nodes" className="mt-6 space-y-4">
-            <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
               <TabsTrigger value="nodes" className="flex items-center gap-2">
                 <Server className="h-4 w-4" />
                 Nodes
+              </TabsTrigger>
+              <TabsTrigger value="resources" className="flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Resources
               </TabsTrigger>
               <TabsTrigger value="health" className="flex items-center gap-2">
                 <Heart className="h-4 w-4" />
@@ -197,6 +217,74 @@ export default function InfrastructurePage() {
                         <Plus className="h-4 w-4 mr-2" />
                         Add Node
                       </Button>
+                    </Card>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="resources" className="space-y-6">
+              {resourcesLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Package className="h-5 w-5 text-gray-400" />
+                      <h3 className="text-lg font-semibold">Deployments</h3>
+                      <Badge variant="secondary">{k8sResources?.deployments?.length || 0} total</Badge>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => refetchResources()}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {k8sResources?.deployments?.map((dep: any) => (
+                      <Card key={`${dep.namespace}/${dep.name}`} className="p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h4 className="font-semibold">{dep.name}</h4>
+                            <Badge variant="outline" className="mt-1">{dep.namespace}</Badge>
+                          </div>
+                          <Badge variant={dep.readyReplicas === dep.replicas ? "success" : "warning"}>
+                            {dep.readyReplicas}/{dep.replicas} ready
+                          </Badge>
+                        </div>
+                        
+                        {dep.ingress && (
+                          <div className="flex items-center gap-2 text-sm text-blue-400 mb-2">
+                            <Globe className="h-3 w-3" />
+                            <a 
+                              href={`https://${dep.ingress.host}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              {dep.ingress.host}
+                            </a>
+                            {dep.ingress.tls && <Shield className="h-3 w-3 text-green-500" />}
+                          </div>
+                        )}
+                        
+                        {dep.image && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
+                            <Box className="h-3 w-3" />
+                            <span className="truncate">{dep.image}</span>
+                          </div>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+
+                  {(!k8sResources?.deployments || k8sResources.deployments.length === 0) && (
+                    <Card className="p-12 text-center">
+                      <Package className="h-12 w-12 text-gray-600 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No deployments found</h3>
+                      <p className="text-gray-400">No deployments are running in this cluster</p>
                     </Card>
                   )}
                 </>

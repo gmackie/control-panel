@@ -1,271 +1,625 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import MainLayout from "@/components/layout/main-layout";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  Database,
-  Shield,
-  CreditCard,
-  BarChart3,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Plus,
   RefreshCw,
+  Check,
   Settings,
-  FileText,
+  Trash2,
+  AlertCircle,
+  ExternalLink,
 } from "lucide-react";
-import { NeonDashboard } from "@/components/integrations/dashboards/NeonDashboard";
-import { ClerkDashboard } from "@/components/integrations/dashboards/ClerkDashboard";
-import { StripeDashboard } from "@/components/integrations/dashboards/StripeDashboard";
-import { SentryDashboard } from "@/components/integrations/dashboards/SentryDashboard";
-import { PostHogDashboard } from "@/components/integrations/dashboards/PostHogDashboard";
-import { NotionDashboard } from "@/components/integrations/dashboards/NotionDashboard";
 
-type IntegrationTab = "overview" | "neon" | "clerk" | "stripe" | "sentry" | "posthog" | "notion";
-
-interface IntegrationStatus {
+interface OrgIntegration {
   id: string;
+  provider: string;
   name: string;
-  icon: React.ReactNode;
-  status: "connected" | "error" | "not_configured";
-  description: string;
-  envVar: string;
+  description: string | null;
+  enabled: boolean;
+  config: Record<string, unknown> | null;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  lastSyncError: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
+interface ProviderConfig {
+  name: string;
+  icon: string;
+  description: string;
+  docsUrl?: string;
+  fields: { key: string; label: string; type: string; placeholder: string; secret?: boolean }[];
+  configFields?: { key: string; label: string; type: string; placeholder: string }[];
+}
+
+const PROVIDERS: Record<string, ProviderConfig> = {
+  vercel: {
+    name: "Vercel",
+    icon: "▲",
+    description: "Deploy and host web applications",
+    docsUrl: "https://vercel.com/docs/rest-api",
+    fields: [
+      { key: "token", label: "API Token", type: "password", placeholder: "Bearer token from Vercel", secret: true },
+    ],
+    configFields: [
+      { key: "teamId", label: "Team ID (optional)", type: "text", placeholder: "team_xxx" },
+    ],
+  },
+  expo: {
+    name: "Expo",
+    icon: "📱",
+    description: "Build and deploy React Native apps",
+    docsUrl: "https://docs.expo.dev/",
+    fields: [
+      { key: "token", label: "Access Token", type: "password", placeholder: "Expo access token", secret: true },
+    ],
+    configFields: [
+      { key: "username", label: "Username (optional)", type: "text", placeholder: "@username" },
+    ],
+  },
+  neon: {
+    name: "Neon",
+    icon: "🐘",
+    description: "Serverless Postgres with branching",
+    docsUrl: "https://neon.tech/docs",
+    fields: [
+      { key: "apiKey", label: "API Key", type: "password", placeholder: "Neon API key", secret: true },
+    ],
+  },
+  turso: {
+    name: "Turso",
+    icon: "🗄️",
+    description: "Edge SQLite with global replication",
+    docsUrl: "https://docs.turso.tech/",
+    fields: [
+      { key: "apiToken", label: "API Token", type: "password", placeholder: "Turso platform API token", secret: true },
+    ],
+    configFields: [
+      { key: "organization", label: "Organization (optional)", type: "text", placeholder: "my-org" },
+    ],
+  },
+  github: {
+    name: "GitHub",
+    icon: "🐙",
+    description: "Source code hosting and CI/CD",
+    docsUrl: "https://docs.github.com/en/rest",
+    fields: [
+      { key: "token", label: "Personal Access Token", type: "password", placeholder: "ghp_xxx", secret: true },
+    ],
+    configFields: [
+      { key: "org", label: "Organization (optional)", type: "text", placeholder: "my-org" },
+    ],
+  },
+  gitea: {
+    name: "Gitea",
+    icon: "🍵",
+    description: "Self-hosted Git service",
+    docsUrl: "https://docs.gitea.com/",
+    fields: [
+      { key: "token", label: "API Token", type: "password", placeholder: "Gitea access token", secret: true },
+      { key: "url", label: "Gitea URL", type: "text", placeholder: "https://git.example.com" },
+    ],
+  },
+};
+
 export default function IntegrationHubPage() {
-  const [activeTab, setActiveTab] = useState<IntegrationTab>("overview");
-  const [healthChecks, setHealthChecks] = useState<Record<string, boolean>>({});
-  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const queryClient = useQueryClient();
 
-  const checkHealth = async () => {
-    setIsCheckingHealth(true);
-    const checks: Record<string, boolean> = {};
+  const { data: integrations, isLoading } = useQuery<OrgIntegration[]>({
+    queryKey: ["org-integrations"],
+    queryFn: async () => {
+      const response = await fetch("/api/integrations/org");
+      if (!response.ok) throw new Error("Failed to fetch integrations");
+      return response.json();
+    },
+  });
 
-    const services = ["neon", "clerk", "stripe", "sentry", "posthog", "notion"];
+  const createMutation = useMutation({
+    mutationFn: async (data: { provider: string; name: string; credentials: Record<string, string>; config?: Record<string, string> }) => {
+      const response = await fetch("/api/integrations/org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create integration");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-integrations"] });
+      setShowAddModal(false);
+      setSelectedProvider(null);
+      setFormData({});
+      setTestResult(null);
+    },
+  });
 
-    await Promise.all(
-      services.map(async (service) => {
-        try {
-          const res = await fetch(`/api/integrations/${service}?action=health`);
-          const data = await res.json();
-          checks[service] = data.healthy === true;
-        } catch {
-          checks[service] = false;
-        }
-      })
-    );
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/integrations/org/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete integration");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-integrations"] });
+    },
+  });
 
-    setHealthChecks(checks);
-    setIsCheckingHealth(false);
+  const syncMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setSyncingId(id);
+      const response = await fetch(`/api/integrations/org/${id}/sync`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Sync failed");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-integrations"] });
+    },
+    onSettled: () => {
+      setSyncingId(null);
+    },
+  });
+
+  const handleAddIntegration = () => {
+    if (!selectedProvider) return;
+    const provider = PROVIDERS[selectedProvider];
+
+    const credentials: Record<string, string> = {};
+    const config: Record<string, string> = {};
+
+    provider.fields.forEach(field => {
+      if (formData[field.key]) {
+        credentials[field.key] = formData[field.key];
+      }
+    });
+
+    provider.configFields?.forEach(field => {
+      if (formData[field.key]) {
+        config[field.key] = formData[field.key];
+      }
+    });
+
+    createMutation.mutate({
+      provider: selectedProvider,
+      name: formData.name || provider.name,
+      credentials,
+      config: Object.keys(config).length > 0 ? config : undefined,
+    });
   };
 
-  useEffect(() => {
-    checkHealth();
-  }, []);
+  const handleTestConnection = async () => {
+    if (!selectedProvider) return;
+    const provider = PROVIDERS[selectedProvider];
 
-  const integrations: IntegrationStatus[] = [
-    {
-      id: "neon",
-      name: "Neon",
-      icon: <Database className="h-5 w-5" />,
-      status: healthChecks.neon ? "connected" : healthChecks.neon === false ? "error" : "not_configured",
-      description: "Serverless PostgreSQL",
-      envVar: "NEON_API_KEY",
-    },
-    {
-      id: "clerk",
-      name: "Clerk",
-      icon: <Shield className="h-5 w-5" />,
-      status: healthChecks.clerk ? "connected" : healthChecks.clerk === false ? "error" : "not_configured",
-      description: "Authentication & Users",
-      envVar: "CLERK_SECRET_KEY",
-    },
-    {
-      id: "stripe",
-      name: "Stripe",
-      icon: <CreditCard className="h-5 w-5" />,
-      status: healthChecks.stripe ? "connected" : healthChecks.stripe === false ? "error" : "not_configured",
-      description: "Payments & Billing",
-      envVar: "STRIPE_SECRET_KEY",
-    },
-    {
-      id: "sentry",
-      name: "Sentry",
-      icon: <AlertTriangle className="h-5 w-5" />,
-      status: healthChecks.sentry ? "connected" : healthChecks.sentry === false ? "error" : "not_configured",
-      description: "Error Tracking",
-      envVar: "SENTRY_AUTH_TOKEN",
-    },
-    {
-      id: "posthog",
-      name: "PostHog",
-      icon: <BarChart3 className="h-5 w-5" />,
-      status: healthChecks.posthog ? "connected" : healthChecks.posthog === false ? "error" : "not_configured",
-      description: "Product Analytics",
-      envVar: "POSTHOG_API_KEY",
-    },
-    {
-      id: "notion",
-      name: "Notion",
-      icon: <FileText className="h-5 w-5" />,
-      status: healthChecks.notion ? "connected" : healthChecks.notion === false ? "error" : "not_configured",
-      description: "Task Management",
-      envVar: "NOTION_API_TOKEN",
-    },
-  ];
+    const credentials: Record<string, string> = {};
+    const config: Record<string, string> = {};
 
-  const getStatusBadge = (status: IntegrationStatus["status"]) => {
-    switch (status) {
-      case "connected":
-        return (
-          <Badge variant="success" className="flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" />
-            Connected
-          </Badge>
-        );
-      case "error":
-        return (
-          <Badge variant="error" className="flex items-center gap-1">
-            <XCircle className="h-3 w-3" />
-            Error
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Settings className="h-3 w-3" />
-            Not Configured
-          </Badge>
-        );
+    provider.fields.forEach(field => {
+      if (formData[field.key]) {
+        credentials[field.key] = formData[field.key];
+      }
+    });
+
+    provider.configFields?.forEach(field => {
+      if (formData[field.key]) {
+        config[field.key] = formData[field.key];
+      }
+    });
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch("/api/integrations/org/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: selectedProvider, credentials, config }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setTestResult({ success: false, message: data.error || "Connection failed" });
+      } else {
+        setTestResult({ success: true, message: data.message || "Connection successful" });
+      }
+    } catch {
+      setTestResult({ success: false, message: "Connection test failed" });
+    } finally {
+      setIsTesting(false);
     }
   };
 
-  const connectedCount = integrations.filter((i) => i.status === "connected").length;
+  const getProviderInfo = (provider: string) => PROVIDERS[provider] || { name: provider, icon: "🔌", description: "" };
+
+  const connectedCount = integrations?.filter(i => i.enabled).length || 0;
+  const totalProviders = Object.keys(PROVIDERS).length;
 
   return (
-    <MainLayout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Integration Hub</h1>
-        <p className="mt-2 text-muted-foreground">
-          Single pane of glass for all your third-party integrations
-        </p>
-      </div>
-
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
-          <Button
-            variant={activeTab === "overview" ? "default" : "ghost"}
-            onClick={() => setActiveTab("overview")}
-          >
-            Overview
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Integration Hub</h1>
+            <p className="mt-2 text-muted-foreground">
+              Connect and manage your third-party services
+            </p>
+          </div>
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Integration
           </Button>
-          {integrations.map((integration) => (
-            <Button
-              key={integration.id}
-              variant={activeTab === integration.id ? "default" : "ghost"}
-              onClick={() => setActiveTab(integration.id as IntegrationTab)}
-              className="flex items-center gap-2"
-            >
-              {integration.icon}
-              {integration.name}
-              {integration.status === "connected" && (
-                <span className="w-2 h-2 bg-green-500 rounded-full" />
-              )}
-            </Button>
-          ))}
         </div>
 
-        {/* Content */}
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            {/* Summary */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-semibold">Integration Status</h2>
-                  <p className="text-sm text-gray-400">
-                    {connectedCount} of {integrations.length} integrations connected
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={checkHealth}
-                  disabled={isCheckingHealth}
-                >
-                  {isCheckingHealth ? (
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Check Health
-                </Button>
-              </div>
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold">Connected Services</h2>
+              <p className="text-sm text-muted-foreground">
+                {connectedCount} integration{connectedCount !== 1 ? "s" : ""} active
+              </p>
+            </div>
+          </div>
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {integrations.map((integration) => (
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-lg border border-border">
+                  <div className="animate-pulse flex items-center gap-4">
+                    <div className="h-12 w-12 bg-muted rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-5 bg-muted rounded w-1/4" />
+                      <div className="h-4 bg-muted rounded w-1/2" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : integrations && integrations.length > 0 ? (
+            <div className="space-y-3">
+              {integrations.map((integration) => {
+                const providerInfo = getProviderInfo(integration.provider);
+                const isSyncing = syncingId === integration.id;
+
+                return (
                   <div
                     key={integration.id}
-                    className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                      integration.status === "connected"
-                        ? "border-green-500/30 bg-green-500/5 hover:bg-green-500/10"
-                        : integration.status === "error"
-                        ? "border-red-500/30 bg-red-500/5 hover:bg-red-500/10"
-                        : "border-gray-700 bg-gray-900 hover:bg-gray-800"
-                    }`}
-                    onClick={() => setActiveTab(integration.id as IntegrationTab)}
+                    className="p-4 rounded-lg border border-border hover:border-border/80 transition-colors"
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${
-                            integration.status === "connected"
-                              ? "bg-green-500/20 text-green-500"
-                              : integration.status === "error"
-                              ? "bg-red-500/20 text-red-500"
-                              : "bg-gray-800 text-gray-400"
-                          }`}
-                        >
-                          {integration.icon}
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 bg-muted rounded-lg flex items-center justify-center text-2xl">
+                          {providerInfo.icon}
                         </div>
                         <div>
-                          <p className="font-medium">{integration.name}</p>
-                          <p className="text-sm text-gray-400">{integration.description}</p>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{integration.name}</h3>
+                            <Badge variant={integration.enabled ? "default" : "secondary"}>
+                              {integration.enabled ? "Active" : "Disabled"}
+                            </Badge>
+                            {integration.lastSyncStatus === "success" && (
+                              <Badge variant="outline" className="text-green-500 border-green-500/30">
+                                <Check className="h-3 w-3 mr-1" />
+                                Synced
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{providerInfo.description}</p>
+                          {integration.lastSyncAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Last synced: {new Date(integration.lastSyncAt).toLocaleString()}
+                            </p>
+                          )}
+                          {integration.lastSyncError && (
+                            <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {integration.lastSyncError}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      {getStatusBadge(integration.status)}
+                      <div className="flex items-center gap-2">
+                        {providerInfo.docsUrl && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={providerInfo.docsUrl} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncMutation.mutate(integration.id)}
+                          disabled={isSyncing}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+                          {isSyncing ? "Syncing..." : "Sync"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm("Delete this integration? This cannot be undone.")) {
+                              deleteMutation.mutate(integration.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    {integration.status !== "connected" && (
-                      <p className="text-xs text-gray-500 mt-3">
-                        Set <code className="bg-gray-800 px-1 rounded">{integration.envVar}</code> to connect
-                      </p>
-                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">No integrations configured</h3>
+              <p className="text-muted-foreground mb-6">
+                Connect your external services to get started
+              </p>
+              <Button onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Your First Integration
+              </Button>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Available Integrations</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            {totalProviders} integrations available to connect
+          </p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(PROVIDERS).map(([key, provider]) => {
+              const isConnected = integrations?.some(i => i.provider === key && i.enabled);
+              return (
+                <div
+                  key={key}
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+                    isConnected
+                      ? "border-green-500/30 bg-green-500/5"
+                      : "border-border hover:border-border/80 hover:bg-muted/50"
+                  }`}
+                  onClick={() => {
+                    if (!isConnected) {
+                      setSelectedProvider(key);
+                      setShowAddModal(true);
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-xl ${
+                      isConnected ? "bg-green-500/20" : "bg-muted"
+                    }`}>
+                      {provider.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{provider.name}</p>
+                        {isConnected && (
+                          <Check className="h-4 w-4 text-green-500" />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{provider.description}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+
+      <Dialog open={showAddModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowAddModal(false);
+          setSelectedProvider(null);
+          setFormData({});
+          setTestResult(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className="text-xl">
+              {selectedProvider ? `Connect ${PROVIDERS[selectedProvider]?.name}` : "Add Integration"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedProvider
+                ? "Enter your credentials to connect this service"
+                : "Select a service to connect to your organization"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!selectedProvider ? (
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              {Object.entries(PROVIDERS).map(([key, provider]) => {
+                const isConnected = integrations?.some(i => i.provider === key && i.enabled);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => !isConnected && setSelectedProvider(key)}
+                    disabled={isConnected}
+                    className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+                      isConnected
+                        ? "border-green-500/30 bg-green-500/5 cursor-not-allowed opacity-60"
+                        : "border-border hover:border-primary hover:bg-accent/50 hover:shadow-sm"
+                    }`}
+                  >
+                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-xl ${
+                      isConnected ? "bg-green-500/20" : "bg-muted"
+                    }`}>
+                      {provider.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{provider.name}</p>
+                        {isConnected && <Check className="h-4 w-4 text-green-500" />}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{provider.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-6 pt-4">
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border">
+                <div className="h-12 w-12 rounded-lg bg-background flex items-center justify-center text-2xl shadow-sm">
+                  {PROVIDERS[selectedProvider].icon}
+                </div>
+                <div>
+                  <p className="font-semibold">{PROVIDERS[selectedProvider].name}</p>
+                  <p className="text-sm text-muted-foreground">{PROVIDERS[selectedProvider].description}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="display-name">Display Name</Label>
+                  <Input
+                    id="display-name"
+                    placeholder={PROVIDERS[selectedProvider].name}
+                    value={formData.name || ""}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">A friendly name to identify this integration</p>
+                </div>
+
+                {PROVIDERS[selectedProvider].fields.map((field) => (
+                  <div key={field.key} className="grid gap-2">
+                    <Label htmlFor={field.key}>{field.label}</Label>
+                    <Input
+                      id={field.key}
+                      type={field.type}
+                      placeholder={field.placeholder}
+                      value={formData[field.key] || ""}
+                      onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                      className="font-mono"
+                    />
                   </div>
                 ))}
+
+                {PROVIDERS[selectedProvider].configFields && PROVIDERS[selectedProvider].configFields.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <p className="text-sm font-medium text-muted-foreground">Optional Configuration</p>
+                    {PROVIDERS[selectedProvider].configFields?.map((field) => (
+                      <div key={field.key} className="grid gap-2">
+                        <Label htmlFor={field.key}>{field.label}</Label>
+                        <Input
+                          id={field.key}
+                          type={field.type}
+                          placeholder={field.placeholder}
+                          value={formData[field.key] || ""}
+                          onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </Card>
 
-            {/* Quick Stats for Connected Services */}
-            {connectedCount > 0 && (
-              <Card className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Quick Overview</h2>
-                <p className="text-gray-400">
-                  Click on an integration tab above to view detailed metrics and take actions.
-                </p>
-              </Card>
+              {testResult && (
+                <div className={`p-4 rounded-lg text-sm flex items-start gap-3 ${
+                  testResult.success
+                    ? "bg-green-500/10 border border-green-500/20 text-green-500"
+                    : "bg-destructive/10 border border-destructive/20 text-destructive"
+                }`}>
+                  {testResult.success ? <Check className="h-5 w-5 flex-shrink-0" /> : <AlertCircle className="h-5 w-5 flex-shrink-0" />}
+                  <div>
+                    <p className="font-medium">{testResult.success ? "Connection Successful" : "Connection Failed"}</p>
+                    <p className="text-xs opacity-80 mt-0.5">{testResult.message}</p>
+                  </div>
+                </div>
+              )}
+
+              {createMutation.isError && (
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Failed to Save</p>
+                    <p className="text-xs opacity-80 mt-0.5">{createMutation.error?.message || "Failed to connect integration"}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2 pt-4">
+            {selectedProvider ? (
+              <>
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setSelectedProvider(null);
+                    setFormData({});
+                    setTestResult(null);
+                  }}
+                >
+                  Back
+                </Button>
+                <div className="flex-1" />
+                <Button
+                  variant="outline"
+                  onClick={handleTestConnection}
+                  disabled={isTesting || !PROVIDERS[selectedProvider].fields.every(f => formData[f.key])}
+                >
+                  {isTesting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : "Test Connection"}
+                </Button>
+                <Button
+                  onClick={handleAddIntegration}
+                  disabled={createMutation.isPending || !PROVIDERS[selectedProvider].fields.every(f => formData[f.key])}
+                >
+                  {createMutation.isPending ? "Connecting..." : "Connect"}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
             )}
-          </div>
-        )}
-
-        {activeTab === "neon" && <NeonDashboard />}
-        {activeTab === "clerk" && <ClerkDashboard />}
-        {activeTab === "stripe" && <StripeDashboard />}
-        {activeTab === "sentry" && <SentryDashboard />}
-        {activeTab === "posthog" && <PostHogDashboard />}
-        {activeTab === "notion" && <NotionDashboard />}
-    </MainLayout>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

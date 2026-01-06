@@ -1,4 +1,4 @@
-export type InfrastructureType = 'k3s' | 'gitea-vps';
+export type InfrastructureType = 'k3s' | 'k3s-imported' | 'gitea-vps';
 
 export interface Infrastructure {
   id: string;
@@ -8,7 +8,8 @@ export interface Infrastructure {
   endpoint: string;
   created: Date;
   updated: Date;
-  config: K3sInfraConfig | GiteaVPSInfraConfig;
+  config: K3sInfraConfig | K3sImportedInfraConfig | GiteaVPSInfraConfig;
+  description?: string;
   resources?: {
     nodes?: number;
     cpu?: number;
@@ -35,6 +36,15 @@ export interface K3sInfraConfig {
     registry: boolean;
     ingress: boolean;
   };
+}
+
+export interface K3sImportedInfraConfig {
+  type: 'k3s-imported';
+  clusterName: string;
+  kubeconfig?: string;
+  apiEndpoint?: string;
+  apiToken?: string;
+  readOnly: true;
 }
 
 export interface GiteaVPSInfraConfig {

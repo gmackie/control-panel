@@ -216,13 +216,14 @@ export function ElevenLabsIntegrationForm({
 
     onSave({
       provider: 'elevenlabs',
+      name: 'ElevenLabs',
       config: {
         defaultVoiceId: config.defaultVoiceId,
         features: config.features,
         settings: config.settings,
         quota: config.quota,
       },
-      secrets: {
+      credentials: {
         ELEVENLABS_API_KEY: config.apiKey,
         ELEVENLABS_VOICE_ID: config.defaultVoiceId,
       },

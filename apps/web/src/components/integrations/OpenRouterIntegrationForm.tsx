@@ -230,6 +230,7 @@ export function OpenRouterIntegrationForm({
 
     onSave({
       provider: 'openrouter',
+      name: 'OpenRouter',
       config: {
         defaultModel: config.defaultModel,
         features: config.features,
@@ -237,7 +238,7 @@ export function OpenRouterIntegrationForm({
         modelPreferences: config.modelPreferences,
         usage: config.usage,
       },
-      secrets: {
+      credentials: {
         OPENROUTER_API_KEY: config.apiKey,
         OPENROUTER_DEFAULT_MODEL: config.defaultModel,
       },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbAsync } from '@/lib/db';
+import { getK8sClient } from '@/lib/cluster/k8s-api-client';
 
 interface HealthCheck {
   service: string;
@@ -20,6 +21,83 @@ interface SystemHealth {
 }
 
 const startTime = Date.now();
+
+async function checkK8sCluster(): Promise<HealthCheck> {
+  const startMs = Date.now();
+  try {
+    const client = getK8sClient();
+    if (!client) {
+      return {
+        service: 'kubernetes',
+        status: 'unhealthy',
+        message: 'K3S_SA_TOKEN not configured',
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    const health = await client.healthCheck();
+    return {
+      service: 'kubernetes',
+      status: health.healthy ? 'healthy' : 'unhealthy',
+      message: health.healthy ? 'K8s API accessible' : health.message,
+      latencyMs: Date.now() - startMs,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      service: 'kubernetes',
+      status: 'unhealthy',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+async function checkGitea(): Promise<HealthCheck> {
+  const startMs = Date.now();
+  const giteaUrl = process.env.GITEA_URL || 'https://git.gmac.io';
+  const giteaToken = process.env.GITEA_TOKEN;
+  
+  if (!giteaToken) {
+    return {
+      service: 'gitea',
+      status: 'unhealthy',
+      message: 'GITEA_TOKEN not configured',
+      timestamp: new Date().toISOString()
+    };
+  }
+  
+  try {
+    const response = await fetch(`${giteaUrl}/api/v1/user`, {
+      headers: { 'Authorization': `token ${giteaToken}` }
+    });
+    
+    if (!response.ok) {
+      return {
+        service: 'gitea',
+        status: 'unhealthy',
+        message: `Gitea API returned ${response.status}`,
+        latencyMs: Date.now() - startMs,
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    return {
+      service: 'gitea',
+      status: 'healthy',
+      message: 'Gitea API accessible',
+      latencyMs: Date.now() - startMs,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      service: 'gitea',
+      status: 'unhealthy',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    };
+  }
+}
 
 async function checkDatabase(): Promise<HealthCheck> {
   const startMs = Date.now();
@@ -76,7 +154,8 @@ export async function GET(request: NextRequest) {
     
     const checks: HealthCheck[] = [];
     
-    // Check database
+    checks.push(await checkK8sCluster());
+    checks.push(await checkGitea());
     checks.push(await checkDatabase());
 
     // Calculate overall status
