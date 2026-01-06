@@ -12,7 +12,6 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
-  GitBranch,
   Home,
   Menu,
   Monitor,
@@ -64,11 +63,6 @@ const navigation: NavItem[] = [
     title: 'Applications',
     href: '/applications',
     icon: Container
-  },
-  {
-    title: 'Pipelines',
-    href: '/pipelines',
-    icon: GitBranch
   },
   {
     title: 'Infrastructure',

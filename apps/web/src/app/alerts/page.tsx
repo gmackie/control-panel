@@ -96,16 +96,42 @@ export default function AlertsPage() {
         fetch('/api/alerts/channels')
       ]);
       
-      const alertsData = await alertsRes.json();
-      const rulesData = await rulesRes.json();
-      const channelsData = await channelsRes.json();
-      
-      setAlerts(alertsData.alerts || generateMockAlerts());
-      setAlertRules(rulesData.rules || generateMockAlertRules());
-      setNotificationChannels(channelsData.channels || generateMockChannels());
+      if (alertsRes.ok && rulesRes.ok && channelsRes.ok) {
+        const alertsData = await alertsRes.json();
+        const rulesData = await rulesRes.json();
+        const channelsData = await channelsRes.json();
+        
+        const parsedAlerts = (alertsData.alerts || []).map((a: any) => ({
+          ...a,
+          startedAt: new Date(a.startTime || a.startedAt),
+          acknowledgedAt: a.acknowledgedAt ? new Date(a.acknowledgedAt) : undefined,
+          resolvedAt: a.endTime ? new Date(a.endTime) : undefined,
+        }));
+        
+        const parsedRules = (rulesData.rules || []).map((r: any) => ({
+          ...r,
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(r.updatedAt),
+          lastTriggered: r.lastTriggered ? new Date(r.lastTriggered) : undefined,
+        }));
+        
+        const parsedChannels = (channelsData.channels || []).map((c: any) => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+          lastUsed: c.lastUsed ? new Date(c.lastUsed) : undefined,
+        }));
+        
+        setAlerts(parsedAlerts.length > 0 ? parsedAlerts : generateMockAlerts());
+        setAlertRules(parsedRules.length > 0 ? parsedRules : generateMockAlertRules());
+        setNotificationChannels(parsedChannels.length > 0 ? parsedChannels : generateMockChannels());
+      } else {
+        setAlerts(generateMockAlerts());
+        setAlertRules(generateMockAlertRules());
+        setNotificationChannels(generateMockChannels());
+      }
     } catch (error) {
       console.error('Error fetching alerts data:', error);
-      // Use mock data as fallback
       setAlerts(generateMockAlerts());
       setAlertRules(generateMockAlertRules());
       setNotificationChannels(generateMockChannels());
