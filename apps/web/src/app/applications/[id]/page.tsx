@@ -44,6 +44,9 @@ import {
   AnalyticsTab,
   PaymentsTab,
   ActivityTab,
+  MetricsTab,
+  LogsTab,
+  AlertsTab,
 } from "@/components/applications/tabs";
 
 // Import existing components for secrets/integrations/settings
@@ -220,6 +223,9 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
 
   const tabs = [
     { id: "overview", label: "Overview", icon: Code },
+    { id: "metrics", label: "Metrics", icon: Activity },
+    { id: "logs", label: "Logs", icon: Code },
+    { id: "alerts", label: "Alerts", icon: AlertTriangle },
     { id: "tasks", label: "Tasks", icon: CheckSquare },
     { id: "releases", label: "Releases", icon: Tag },
     { id: "activity", label: "Activity", icon: Activity },
@@ -572,6 +578,21 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
               )}
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Metrics Tab */}
+        <TabsContent value="metrics">
+          <MetricsTab appId={params.id} />
+        </TabsContent>
+
+        {/* Logs Tab */}
+        <TabsContent value="logs">
+          <LogsTab appId={params.id} />
+        </TabsContent>
+
+        {/* Alerts Tab */}
+        <TabsContent value="alerts">
+          <AlertsTab appId={params.id} />
         </TabsContent>
 
         {/* Tasks Tab */}

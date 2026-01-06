@@ -6,3 +6,6 @@ export { UsersTab } from "./UsersTab";
 export { AnalyticsTab } from "./AnalyticsTab";
 export { PaymentsTab } from "./PaymentsTab";
 export { ActivityTab } from "./ActivityTab";
+export { MetricsTab } from "./MetricsTab";
+export { LogsTab } from "./LogsTab";
+export { AlertsTab } from "./AlertsTab";
