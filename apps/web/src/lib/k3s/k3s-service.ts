@@ -31,9 +31,14 @@ export class K3sService {
       kubeconfigPath: process.env.KUBECONFIG,
     };
 
-    // Default kubeconfig path
-    this.kubeconfigPath = this.config.kubeconfigPath || 
-      path.join(os.homedir(), '.kube', 'config-hetzner');
+    const possiblePaths = [
+      this.config.kubeconfigPath,
+      '/app/.kube/config',
+      path.join(os.homedir(), '.kube', 'config-hetzner'),
+      path.join(os.homedir(), '.kube', 'config'),
+    ].filter(Boolean) as string[];
+
+    this.kubeconfigPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
   }
 
   private async executeKubectl(args: string[]): Promise<{ stdout: string; stderr: string }> {

@@ -294,6 +294,15 @@ spec:
               name: control-panel-secrets
               key: SECRETS_ENCRYPTION_KEY
               optional: true
+        
+        # Kubeconfig for K8s API access
+        - name: KUBECONFIG
+          value: "/app/.kube/config"
+
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /app/.kube
+          readOnly: true
 
         resources:
           requests:
@@ -337,6 +346,14 @@ spec:
           readOnlyRootFilesystem: false
           runAsNonRoot: true
           runAsUser: 1001
+
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: control-panel-secrets
+          items:
+          - key: KUBECONFIG_DATA
+            path: config
 
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
