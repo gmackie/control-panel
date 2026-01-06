@@ -19,6 +19,47 @@ export interface GiteaRepo {
   };
 }
 
+interface GiteaOrg {
+  id: number;
+  username: string;
+  full_name: string;
+}
+
+async function fetchPaginated<T>(
+  baseUrl: string,
+  endpoint: string,
+  token: string,
+  perPage: number = 50
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let page = 1;
+
+  while (true) {
+    const response = await fetch(
+      `${baseUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}page=${page}&limit=${perPage}`,
+      {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gitea API error: ${response.status}`);
+    }
+
+    const items: T[] = await response.json();
+    if (items.length === 0) break;
+
+    allItems.push(...items);
+    if (items.length < perPage) break;
+    page++;
+  }
+
+  return allItems;
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -34,36 +75,55 @@ export async function GET() {
     }
 
     const allRepos: GiteaRepo[] = [];
-    let page = 1;
-    const perPage = 50;
+    const seenIds = new Set<number>();
 
-    while (true) {
-      const response = await fetch(
-        `${giteaUrl}/api/v1/user/repos?page=${page}&limit=${perPage}`,
-        {
-          headers: {
-            'Authorization': `token ${giteaToken}`,
-            'Accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        return NextResponse.json(
-          { error: `Gitea API error: ${response.status}` },
-          { status: response.status }
-        );
+    const userRepos = await fetchPaginated<GiteaRepo>(
+      giteaUrl,
+      '/api/v1/user/repos',
+      giteaToken
+    );
+    
+    for (const repo of userRepos) {
+      if (!seenIds.has(repo.id)) {
+        seenIds.add(repo.id);
+        allRepos.push(repo);
       }
-
-      const repos: GiteaRepo[] = await response.json();
-      if (repos.length === 0) break;
-
-      allRepos.push(...repos);
-      if (repos.length < perPage) break;
-      page++;
     }
 
-    return NextResponse.json({ repos: allRepos });
+    try {
+      const orgs = await fetchPaginated<GiteaOrg>(
+        giteaUrl,
+        '/api/v1/user/orgs',
+        giteaToken
+      );
+
+      for (const org of orgs) {
+        try {
+          const orgRepos = await fetchPaginated<GiteaRepo>(
+            giteaUrl,
+            `/api/v1/orgs/${org.username}/repos`,
+            giteaToken
+          );
+          
+          for (const repo of orgRepos) {
+            if (!seenIds.has(repo.id)) {
+              seenIds.add(repo.id);
+              allRepos.push(repo);
+            }
+          }
+        } catch (orgErr) {
+          console.warn(`Failed to fetch repos for org ${org.username}:`, orgErr);
+        }
+      }
+    } catch (orgsErr) {
+      console.warn('Failed to fetch user organizations:', orgsErr);
+    }
+
+    allRepos.sort((a, b) => 
+      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+
+    return NextResponse.json({ repos: allRepos, count: allRepos.length });
   } catch (error) {
     console.error('Error fetching Gitea repos:', error);
     return NextResponse.json(
