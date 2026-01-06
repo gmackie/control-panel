@@ -19,11 +19,13 @@ import {
 import Link from "next/link";
 import { Application } from "@/types/applications";
 import { AppCreationWizard } from "@/components/applications/AppCreationWizard";
-import { ImportApplicationsModal } from "@/components/applications/ImportApplicationsModal";
+import { ImportAppWizard } from "@/components/applications/ImportAppWizard";
+import { K8sImportWizard } from "@/components/applications/K8sImportWizard";
 
 export default function ApplicationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showK8sImportModal, setShowK8sImportModal] = useState(false);
 
   const { data: applications, isLoading, refetch } = useQuery<Application[]>({
     queryKey: ["applications"],
@@ -59,9 +61,13 @@ export default function ApplicationsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowK8sImportModal(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Import from K8s
+          </Button>
           <Button variant="outline" onClick={() => setShowImportModal(true)}>
             <Download className="h-4 w-4 mr-2" />
-            Import from Cluster
+            Import from Repo
           </Button>
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -175,11 +181,20 @@ export default function ApplicationsPage() {
         />
       )}
 
-      <ImportApplicationsModal
+      <ImportAppWizard
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
           setShowImportModal(false);
+          refetch();
+        }}
+      />
+
+      <K8sImportWizard
+        isOpen={showK8sImportModal}
+        onClose={() => setShowK8sImportModal(false)}
+        onSuccess={() => {
+          setShowK8sImportModal(false);
           refetch();
         }}
       />
