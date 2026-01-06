@@ -612,7 +612,12 @@ export class K3sService {
       const { stdout } = await this.executeKubectl(['cluster-info']);
       return stdout.includes('is running');
     } catch {
-      return false;
+      try {
+        await this.fetchFromK8sAPI('/api/v1/namespaces');
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 }

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { K3sService } from "@/lib/k3s/k3s-service";
 
 interface ServiceHealth {
   id: string;
@@ -213,18 +212,68 @@ async function checkService(config: EndpointConfig): Promise<ServiceHealth> {
   };
 }
 
-async function checkK8sCluster(): Promise<ServiceHealth> {
-  const k3s = new K3sService();
+async function checkK8sClusterDirect(): Promise<{
+  healthy: boolean;
+  nodes: Array<{ name: string; status: string; roles: string[] }>;
+  responseTime: number;
+}> {
+  const apiUrl = process.env.K8S_API_URL || 'https://5.78.106.236:6443';
+  const token = process.env.K3S_SA_TOKEN || '';
   const startTime = Date.now();
   
   try {
-    const isHealthy = await k3s.healthCheck();
+    const https = await import('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
+    
+    const response = await fetch(`${apiUrl}/api/v1/nodes`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+      },
+      // @ts-ignore
+      agent,
+    });
+    
     const responseTime = Date.now() - startTime;
     
-    if (isHealthy) {
-      const nodes = await k3s.getNodes();
-      const readyNodes = nodes.filter(n => n.status === 'Ready').length;
-      const totalNodes = nodes.length;
+    if (!response.ok) {
+      return { healthy: false, nodes: [], responseTime };
+    }
+    
+    const data = await response.json();
+    const nodes = data.items?.map((node: any) => {
+      const conditions = node.status?.conditions || [];
+      const readyCondition = conditions.find((c: any) => c.type === 'Ready');
+      const labels = node.metadata?.labels || {};
+      const roles: string[] = [];
+      
+      if (labels['node-role.kubernetes.io/control-plane'] !== undefined || 
+          labels['node-role.kubernetes.io/master'] !== undefined) {
+        roles.push('control-plane');
+      }
+      if (labels['node-role.kubernetes.io/worker'] !== undefined || roles.length === 0) {
+        roles.push('worker');
+      }
+      
+      return {
+        name: node.metadata?.name,
+        status: readyCondition?.status === 'True' ? 'Ready' : 'NotReady',
+        roles,
+      };
+    }) || [];
+    
+    return { healthy: true, nodes, responseTime };
+  } catch (error) {
+    return { healthy: false, nodes: [], responseTime: Date.now() - startTime };
+  }
+}
+
+async function checkK8sCluster(): Promise<ServiceHealth> {
+  const { healthy, nodes, responseTime } = await checkK8sClusterDirect();
+  
+  if (healthy && nodes.length > 0) {
+    const readyNodes = nodes.filter(n => n.status === 'Ready').length;
+    const totalNodes = nodes.length;
       
       const status: ServiceHealth['status'] = 
         readyNodes === totalNodes ? 'healthy' :
@@ -275,38 +324,33 @@ async function checkK8sCluster(): Promise<ServiceHealth> {
           },
         },
       };
-    } else {
-      throw new Error('Cluster health check failed');
-    }
-  } catch (error: any) {
-    const responseTime = Date.now() - startTime;
-    
-    return {
-      id: 'k3s-cluster',
-      name: 'K3s Cluster',
-      type: 'infrastructure',
-      status: 'down',
-      uptime: 0,
-      responseTime,
-      errorRate: 100,
-      environment: 'production',
-      lastChecked: new Date(),
-      dependencies: [],
-      endpoints: [{
-        name: 'Kubernetes API',
-        status: 'failing',
-        responseTime,
-      }],
-      metrics: {
-        availability: 0,
-        responseTime: { p50: 0, p95: 0, p99: 0 },
-        throughput: 0,
-        errorRate: 100,
-        alertsTriggered: 1,
-        lastDay: { requests: 0, errors: 0, availability: 0 },
-      },
-    };
   }
+  
+  return {
+    id: 'k3s-cluster',
+    name: 'K3s Cluster',
+    type: 'infrastructure',
+    status: 'down',
+    uptime: 0,
+    responseTime,
+    errorRate: 100,
+    environment: 'production',
+    lastChecked: new Date(),
+    dependencies: [],
+    endpoints: [{
+      name: 'Kubernetes API',
+      status: 'failing',
+      responseTime,
+    }],
+    metrics: {
+      availability: 0,
+      responseTime: { p50: 0, p95: 0, p99: 0 },
+      throughput: 0,
+      errorRate: 100,
+      alertsTriggered: 1,
+      lastDay: { requests: 0, errors: 0, availability: 0 },
+    },
+  };
 }
 
 async function getServiceHealth(): Promise<ServiceHealth[]> {
