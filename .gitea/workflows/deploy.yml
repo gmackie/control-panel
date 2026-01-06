@@ -23,8 +23,10 @@ jobs:
       with:
         node-version: '20'
     
-    - name: Install pnpm
-      run: npm install -g pnpm@${{ env.PNPM_VERSION }}
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ env.PNPM_VERSION }}
     
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
@@ -98,9 +100,10 @@ jobs:
     
     - name: Deploy to K3s
       run: |
-        # Update the image
+        # Update the image (use short SHA to match docker metadata)
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
         kubectl set image deployment/control-panel \
-          control-panel=${{ env.REGISTRY }}/gmac/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          control-panel=${{ env.REGISTRY }}/gmac/${{ env.IMAGE_NAME }}:${SHORT_SHA} \
           -n control-panel
         
         # Wait for rollout
