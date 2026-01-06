@@ -62,84 +62,7 @@ interface SystemMetric {
   history: { timestamp: Date; value: number }[];
 }
 
-// Generate mock system metrics for real-time display
-function generateSystemMetrics(): SystemMetric[] {
-  const now = new Date();
-  return [
-    {
-      id: 'cpu',
-      name: 'CPU Usage',
-      value: Math.round(45 + Math.random() * 20),
-      unit: '%',
-      change: Math.round((Math.random() - 0.5) * 10),
-      status: 'healthy',
-      threshold: { warning: 70, critical: 90 },
-      lastUpdated: now,
-      source: 'K3s Cluster',
-      history: []
-    },
-    {
-      id: 'memory',
-      name: 'Memory Usage',
-      value: Math.round(55 + Math.random() * 15),
-      unit: '%',
-      change: Math.round((Math.random() - 0.5) * 8),
-      status: 'healthy',
-      threshold: { warning: 75, critical: 90 },
-      lastUpdated: now,
-      source: 'K3s Cluster',
-      history: []
-    },
-    {
-      id: 'disk',
-      name: 'Disk Usage',
-      value: Math.round(40 + Math.random() * 10),
-      unit: '%',
-      change: Math.round((Math.random() - 0.5) * 5),
-      status: 'healthy',
-      threshold: { warning: 80, critical: 95 },
-      lastUpdated: now,
-      source: 'K3s Cluster',
-      history: []
-    },
-    {
-      id: 'network',
-      name: 'Network I/O',
-      value: Math.round(120 + Math.random() * 50),
-      unit: 'MB/s',
-      change: Math.round((Math.random() - 0.5) * 20),
-      status: 'healthy',
-      threshold: { warning: 200, critical: 500 },
-      lastUpdated: now,
-      source: 'K3s Cluster',
-      history: []
-    },
-    {
-      id: 'response-time',
-      name: 'Avg Response Time',
-      value: Math.round(80 + Math.random() * 40),
-      unit: 'ms',
-      change: Math.round((Math.random() - 0.5) * 15),
-      status: 'healthy',
-      threshold: { warning: 200, critical: 500 },
-      lastUpdated: now,
-      source: 'API Gateway',
-      history: []
-    },
-    {
-      id: 'error-rate',
-      name: 'Error Rate',
-      value: parseFloat((Math.random() * 2).toFixed(2)),
-      unit: '%',
-      change: parseFloat(((Math.random() - 0.5) * 0.5).toFixed(2)),
-      status: 'healthy',
-      threshold: { warning: 5, critical: 10 },
-      lastUpdated: now,
-      source: 'API Gateway',
-      history: []
-    }
-  ];
-}
+
 
 export default function MonitoringPage() {
   const [selectedCluster, setSelectedCluster] = useState('all');
@@ -173,8 +96,10 @@ export default function MonitoringPage() {
   const { data: metricsData, refetch: refetchMetrics } = useQuery<SystemMetric[]>({
     queryKey: ['monitoring', 'metrics', timeRange],
     queryFn: async () => {
-      // For now, generate mock metrics - can be replaced with real API call
-      return generateSystemMetrics();
+      const response = await fetch(`/api/monitoring/metrics?timeRange=${timeRange}`);
+      if (!response.ok) throw new Error('Failed to fetch metrics');
+      const data = await response.json();
+      return data.metrics || [];
     },
     refetchInterval: 10000,
   });
