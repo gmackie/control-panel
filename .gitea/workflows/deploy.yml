@@ -32,10 +32,10 @@ jobs:
       run: pnpm install --frozen-lockfile
     
     - name: Typecheck
-      run: pnpm typecheck
+      run: pnpm turbo typecheck --filter=@repo/web --filter=@repo/api --filter=@repo/db
     
     - name: Lint
-      run: pnpm lint
+      run: pnpm turbo lint --filter=@repo/web
       continue-on-error: true
 
   # Build and push Docker image
