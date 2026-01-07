@@ -303,6 +303,18 @@ spec:
         - name: kubeconfig
           mountPath: /app/.kube
           readOnly: true
+        - name: ssh-keys
+          mountPath: /home/nextjs/.ssh/id_ed25519
+          subPath: id_ed25519
+          readOnly: true
+        - name: ssh-keys
+          mountPath: /home/nextjs/.ssh/id_ed25519.pub
+          subPath: id_ed25519.pub
+          readOnly: true
+        - name: ssh-known-hosts
+          mountPath: /home/nextjs/.ssh/known_hosts
+          subPath: known_hosts
+          readOnly: true
 
         resources:
           requests:
@@ -354,6 +366,14 @@ spec:
           items:
           - key: KUBECONFIG_DATA
             path: config
+      - name: ssh-keys
+        secret:
+          secretName: ssh-keys
+          defaultMode: 0600
+      - name: ssh-known-hosts
+        secret:
+          secretName: ssh-known-hosts
+          defaultMode: 0644
 
       restartPolicy: Always
       terminationGracePeriodSeconds: 30

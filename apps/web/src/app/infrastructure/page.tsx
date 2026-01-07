@@ -34,6 +34,34 @@ import { HealthDashboard } from "@/components/cluster/HealthDashboard";
 import { CostDashboard } from "@/components/cluster/CostDashboard";
 import { formatDistanceToNow } from "date-fns";
 
+interface SystemMetrics {
+  cpu: { usage: number; cores: number; loadAvg: [number, number, number] };
+  memory: { total: number; used: number; available: number; usagePercent: number };
+  disk: { total: number; used: number; available: number; usagePercent: number };
+  uptime: string;
+}
+
+interface ServiceStatus {
+  name: string;
+  status: 'running' | 'stopped' | 'failed' | 'unknown';
+  memory?: string;
+  pid?: number;
+}
+
+interface ContainerStatus {
+  name: string;
+  status: 'running' | 'stopped' | 'unhealthy' | 'unknown';
+  health?: string;
+  uptime?: string;
+  image?: string;
+}
+
+interface AppStatus {
+  name: string;
+  url: string;
+  status: 'healthy' | 'unhealthy' | 'unknown';
+}
+
 interface VPSServer {
   id: string;
   name: string;
@@ -43,20 +71,15 @@ interface VPSServer {
   type: 'gitea' | 'cluster-node' | 'standalone';
   provider: 'hetzner';
   location: string;
-  specs: {
-    cpu: string;
-    memory: string;
-    disk: string;
-  };
-  services: Array<{
-    name: string;
-    status: 'running' | 'stopped' | 'unknown';
-    port?: number;
-  }>;
-  uptime?: string;
-  lastChecked: string;
+  specs: { cpu: string; memory: string; disk: string };
+  reachable: boolean;
   responseTime: number;
   monthlyPrice: number;
+  systemMetrics?: SystemMetrics;
+  services: ServiceStatus[];
+  containers: ContainerStatus[];
+  apps?: AppStatus[];
+  error?: string;
 }
 
 export default function InfrastructurePage() {
@@ -331,10 +354,17 @@ export default function InfrastructurePage() {
 
         <TabsContent value="vps" className="space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Cloud className="h-5 w-5 text-blue-500" />
-              Hetzner VPS Servers
-            </h3>
+            <div className="flex items-center gap-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Cloud className="h-5 w-5 text-blue-500" />
+                Hetzner VPS Servers
+              </h3>
+              {vpsSummary.services && (
+                <Badge variant="outline">
+                  {vpsSummary.services.running}/{vpsSummary.services.total} services
+                </Badge>
+              )}
+            </div>
             <Button variant="outline" size="sm" onClick={() => refetchVps()}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -346,7 +376,7 @@ export default function InfrastructurePage() {
               <RefreshCw className="h-6 w-6 animate-spin" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
               {servers.map((server) => (
                 <Card key={server.id} className="p-6">
                   <div className="flex items-start justify-between mb-4">
@@ -365,64 +395,149 @@ export default function InfrastructurePage() {
                         </div>
                       )}
                       <div>
-                        <h4 className="font-semibold">{server.name}</h4>
-                        <p className="text-sm text-gray-500">{server.hostname}</p>
+                        <h4 className="font-semibold text-lg">{server.name}</h4>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <span>{server.hostname}</span>
+                          <span>•</span>
+                          <span className="font-mono">{server.ip}</span>
+                          <span>•</span>
+                          <span>{server.location}</span>
+                        </div>
                       </div>
                     </div>
-                    <Badge variant={getStatusColor(server.status) as any}>
-                      {server.status}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Network className="h-4 w-4 text-gray-500" />
-                      <span className="text-gray-400">IP:</span>
-                      <span className="font-mono">{server.ip}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Globe className="h-4 w-4 text-gray-500" />
-                      <span className="text-gray-400">Location:</span>
-                      <span>{server.location}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Activity className="h-4 w-4 text-gray-500" />
-                      <span className="text-gray-400">Response:</span>
-                      <span>{server.responseTime}ms</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">{server.responseTime}ms</span>
+                      <Badge variant={getStatusColor(server.status) as any}>
+                        {server.status}
+                      </Badge>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 p-3 bg-gray-900 rounded-lg mb-4">
-                    <div className="text-center">
-                      <Cpu className="h-4 w-4 mx-auto text-blue-400 mb-1" />
-                      <p className="text-xs text-gray-500">{server.specs.cpu}</p>
+                  {server.error && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+                      {server.error}
                     </div>
-                    <div className="text-center">
-                      <MemoryStick className="h-4 w-4 mx-auto text-green-400 mb-1" />
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-gray-900 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Cpu className="h-4 w-4 text-blue-400" />
+                        <span className="text-sm text-gray-400">CPU</span>
+                      </div>
+                      <p className="text-xl font-semibold">
+                        {server.systemMetrics?.cpu.usage.toFixed(1) || '—'}%
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {server.specs.cpu} • Load: {server.systemMetrics?.cpu.loadAvg.map(l => l.toFixed(2)).join(', ') || '—'}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-900 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MemoryStick className="h-4 w-4 text-green-400" />
+                        <span className="text-sm text-gray-400">Memory</span>
+                      </div>
+                      <p className="text-xl font-semibold">
+                        {server.systemMetrics?.memory.usagePercent || '—'}%
+                      </p>
                       <p className="text-xs text-gray-500">{server.specs.memory}</p>
                     </div>
-                    <div className="text-center">
-                      <HardDrive className="h-4 w-4 mx-auto text-purple-400 mb-1" />
+                    <div className="p-3 bg-gray-900 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <HardDrive className="h-4 w-4 text-purple-400" />
+                        <span className="text-sm text-gray-400">Disk</span>
+                      </div>
+                      <p className="text-xl font-semibold">
+                        {server.systemMetrics?.disk.usagePercent || '—'}%
+                      </p>
                       <p className="text-xs text-gray-500">{server.specs.disk}</p>
                     </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <p className="text-xs text-gray-500 mb-2">Services</p>
-                    <div className="flex flex-wrap gap-1">
-                      {server.services.map((service, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {service.name}
-                          {service.port && <span className="ml-1 text-gray-500">:{service.port}</span>}
-                        </Badge>
-                      ))}
+                    <div className="p-3 bg-gray-900 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Activity className="h-4 w-4 text-yellow-400" />
+                        <span className="text-sm text-gray-400">Uptime</span>
+                      </div>
+                      <p className="text-sm font-medium">
+                        {server.systemMetrics?.uptime || '—'}
+                      </p>
+                      <p className="text-xs text-gray-500">${server.monthlyPrice}/mo</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-                    <span className="text-sm text-gray-500">
-                      ${server.monthlyPrice}/mo
-                    </span>
+                  {server.apps && server.apps.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-400 mb-2">Applications</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {server.apps.map((app, idx) => (
+                          <a 
+                            key={idx}
+                            href={app.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Globe className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm">{app.name}</span>
+                            </div>
+                            <Badge 
+                              variant={app.status === 'healthy' ? 'success' : app.status === 'unhealthy' ? 'destructive' : 'secondary'}
+                              className="text-xs"
+                            >
+                              {app.status}
+                            </Badge>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {server.services.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-400 mb-2">
+                        Systemd Services ({server.services.filter(s => s.status === 'running').length}/{server.services.length} running)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {server.services.map((service, idx) => (
+                          <Badge 
+                            key={idx} 
+                            variant={service.status === 'running' ? 'success' : service.status === 'failed' ? 'destructive' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {service.name}
+                            {service.memory && <span className="ml-1 opacity-70">({service.memory})</span>}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {server.containers.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-400 mb-2">Docker Containers</p>
+                      <div className="space-y-2">
+                        {server.containers.map((container, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-900 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <Box className="h-4 w-4 text-blue-400" />
+                              <span className="text-sm font-medium">{container.name}</span>
+                              {container.uptime && (
+                                <span className="text-xs text-gray-500">Up {container.uptime}</span>
+                              )}
+                            </div>
+                            <Badge 
+                              variant={container.status === 'running' ? 'success' : container.status === 'unhealthy' ? 'warning' : 'destructive'}
+                              className="text-xs"
+                            >
+                              {container.health || container.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end pt-4 border-t border-gray-800">
                     <Button variant="ghost" size="sm" asChild>
                       <a href={`https://${server.hostname}`} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-4 w-4 mr-1" />

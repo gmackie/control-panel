@@ -53,9 +53,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create non-root user
+RUN apk add --no-cache openssh-client
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN adduser --system --uid 1001 --home /home/nextjs nextjs
+RUN mkdir -p /home/nextjs/.ssh && chown -R nextjs:nodejs /home/nextjs/.ssh && chmod 700 /home/nextjs/.ssh
 
 # Copy necessary files from builder
 COPY --from=builder /app/apps/web/public ./public
