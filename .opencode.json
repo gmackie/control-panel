@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "servers": {
+      "control-panel": {
+        "command": "node",
+        "args": ["packages/mcp-server/dist/index.js"],
+        "env": {
+          "CONTROL_PANEL_URL": "http://localhost:3000",
+          "CONTROL_PANEL_API_KEY": "${CONTROL_PANEL_API_KEY}"
+        }
+      }
+    }
+  }
+}

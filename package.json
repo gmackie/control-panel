@@ -30,7 +30,9 @@
     "clean": "turbo clean && rm -rf node_modules",
     "db:generate": "pnpm --filter @repo/db db:generate",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
-    "db:studio": "pnpm --filter @repo/db db:studio"
+    "db:studio": "pnpm --filter @repo/db db:studio",
+    "mcp:build": "pnpm --filter @gmac/control-panel-mcp build",
+    "mcp:create-key": "echo 'Create an API key at http://localhost:3000/settings (API Keys tab) then set CONTROL_PANEL_API_KEY env var'"
   },
   "devDependencies": {
     "turbo": "^2.3.3"

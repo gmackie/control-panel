@@ -133,6 +133,50 @@ Automated via GitHub Actions:
 
 See [apps/mobile/README.md](apps/mobile/README.md) for mobile development setup.
 
+## MCP Server (AI Assistant Integration)
+
+The control panel includes an MCP (Model Context Protocol) server that allows AI assistants like Claude to interact with your infrastructure.
+
+### Setup for OpenCode
+
+1. **Build the MCP server:**
+   ```bash
+   pnpm mcp:build
+   ```
+
+2. **Create an API key:**
+   - Start the dev server: `pnpm dev`
+   - Go to http://localhost:3000/settings
+   - Click the "API Keys" tab
+   - Click "Create New API Key"
+   - Copy the key (it's only shown once!)
+
+3. **Configure OpenCode:**
+   
+   Set the API key as an environment variable:
+   ```bash
+   export CONTROL_PANEL_API_KEY="cp_your_key_here"
+   ```
+
+   The `.opencode.json` in this repo is already configured. OpenCode will automatically use it when you open this project.
+
+4. **Verify the MCP server is connected:**
+   ```bash
+   opencode mcp list
+   ```
+
+### Available MCP Tools
+
+Once connected, you can ask your AI assistant to:
+- List and manage applications
+- View cluster health and scale nodes
+- Trigger deployments and rollbacks
+- Check alerts and acknowledge them
+- View activity feed and notifications
+- Manage AI dev sessions for automated bug fixing
+
+See [packages/mcp-server/README.md](packages/mcp-server/README.md) for the full list of tools.
+
 ## Contributing
 
 1. Create a feature branch from `main`
