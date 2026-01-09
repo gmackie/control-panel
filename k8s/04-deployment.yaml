@@ -34,12 +34,36 @@ spec:
         runAsNonRoot: true
         runAsUser: 1001
         runAsGroup: 1001
-        fsGroup: 1001
       imagePullSecrets:
       - name: harbor-registry
+
+      initContainers:
+      - name: init-ssh
+        image: alpine:3.19
+        command: ["sh", "-c"]
+        args:
+        - >
+          set -e;
+          mkdir -p /ssh;
+          cp /ssh-secrets/id_ed25519 /ssh/id_ed25519;
+          cp /ssh-secrets/id_ed25519.pub /ssh/id_ed25519.pub;
+          cp /ssh-known-hosts/known_hosts /ssh/known_hosts;
+          chmod 700 /ssh;
+          chmod 600 /ssh/id_ed25519;
+          chmod 644 /ssh/id_ed25519.pub /ssh/known_hosts;
+        volumeMounts:
+        - name: ssh-dir
+          mountPath: /ssh
+        - name: ssh-keys
+          mountPath: /ssh-secrets
+          readOnly: true
+        - name: ssh-known-hosts
+          mountPath: /ssh-known-hosts
+          readOnly: true
+
       containers:
       - name: control-panel
-        image: registry.gmac.io/library/control-panel:latest
+        image: registry.gmac.io/gmac/control-panel:latest
         imagePullPolicy: Always
         ports:
         - name: http
@@ -303,18 +327,8 @@ spec:
         - name: kubeconfig
           mountPath: /app/.kube
           readOnly: true
-        - name: ssh-keys
-          mountPath: /home/nextjs/.ssh/id_ed25519
-          subPath: id_ed25519
-          readOnly: true
-        - name: ssh-keys
-          mountPath: /home/nextjs/.ssh/id_ed25519.pub
-          subPath: id_ed25519.pub
-          readOnly: true
-        - name: ssh-known-hosts
-          mountPath: /home/nextjs/.ssh/known_hosts
-          subPath: known_hosts
-          readOnly: true
+        - name: ssh-dir
+          mountPath: /home/nextjs/.ssh
 
         resources:
           requests:
@@ -366,14 +380,16 @@ spec:
           items:
           - key: KUBECONFIG_DATA
             path: config
+      - name: ssh-dir
+        emptyDir: {}
       - name: ssh-keys
         secret:
           secretName: ssh-keys
-          defaultMode: 0600
+          defaultMode: 0440
       - name: ssh-known-hosts
         secret:
           secretName: ssh-known-hosts
-          defaultMode: 0644
+          defaultMode: 0444
 
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
