@@ -116,6 +116,30 @@ const PROVIDERS: Record<string, ProviderConfig> = {
       { key: "url", label: "Gitea URL", type: "text", placeholder: "https://git.example.com" },
     ],
   },
+  hetzner: {
+    name: "Hetzner Cloud",
+    icon: "☁️",
+    description: "Cloud servers, volumes, and networking",
+    docsUrl: "https://docs.hetzner.cloud/",
+    fields: [
+      { key: "apiToken", label: "API Token", type: "password", placeholder: "Hetzner Cloud API token", secret: true },
+    ],
+    configFields: [
+      { key: "defaultLocation", label: "Default Location (optional)", type: "text", placeholder: "fsn1, nbg1, hel1, ash, hil" },
+    ],
+  },
+  aws: {
+    name: "Amazon Web Services",
+    icon: "🔶",
+    description: "Lambda, S3, SQS, SNS, IoT, and more",
+    docsUrl: "https://docs.aws.amazon.com/",
+    fields: [
+      { key: "awsExport", label: "Paste AWS Export Commands", type: "textarea", placeholder: "export AWS_ACCESS_KEY_ID=\"...\"\nexport AWS_SECRET_ACCESS_KEY=\"...\"\nexport AWS_SESSION_TOKEN=\"...\"", secret: false },
+    ],
+    configFields: [
+      { key: "region", label: "Default Region", type: "text", placeholder: "us-east-1" },
+    ],
+  },
 };
 
 export default function IntegrationHubPage() {
@@ -191,18 +215,39 @@ export default function IntegrationHubPage() {
     },
   });
 
+  const parseAWSExportCommands = (exportText: string): Record<string, string> => {
+    const credentials: Record<string, string> = {};
+    const lines = exportText.split('\n');
+    
+    for (const line of lines) {
+      const match = line.match(/export\s+(AWS_\w+)=["']?([^"'\n]+)["']?/);
+      if (match) {
+        const [, key, value] = match;
+        if (key === 'AWS_ACCESS_KEY_ID') credentials.accessKeyId = value;
+        else if (key === 'AWS_SECRET_ACCESS_KEY') credentials.secretAccessKey = value;
+        else if (key === 'AWS_SESSION_TOKEN') credentials.sessionToken = value;
+      }
+    }
+    
+    return credentials;
+  };
+
   const handleAddIntegration = () => {
     if (!selectedProvider) return;
     const provider = PROVIDERS[selectedProvider];
 
-    const credentials: Record<string, string> = {};
+    let credentials: Record<string, string> = {};
     const config: Record<string, string> = {};
 
-    provider.fields.forEach(field => {
-      if (formData[field.key]) {
-        credentials[field.key] = formData[field.key];
-      }
-    });
+    if (selectedProvider === 'aws' && formData.awsExport) {
+      credentials = parseAWSExportCommands(formData.awsExport);
+    } else {
+      provider.fields.forEach(field => {
+        if (formData[field.key]) {
+          credentials[field.key] = formData[field.key];
+        }
+      });
+    }
 
     provider.configFields?.forEach(field => {
       if (formData[field.key]) {
@@ -222,14 +267,18 @@ export default function IntegrationHubPage() {
     if (!selectedProvider) return;
     const provider = PROVIDERS[selectedProvider];
 
-    const credentials: Record<string, string> = {};
+    let credentials: Record<string, string> = {};
     const config: Record<string, string> = {};
 
-    provider.fields.forEach(field => {
-      if (formData[field.key]) {
-        credentials[field.key] = formData[field.key];
-      }
-    });
+    if (selectedProvider === 'aws' && formData.awsExport) {
+      credentials = parseAWSExportCommands(formData.awsExport);
+    } else {
+      provider.fields.forEach(field => {
+        if (formData[field.key]) {
+          credentials[field.key] = formData[field.key];
+        }
+      });
+    }
 
     provider.configFields?.forEach(field => {
       if (formData[field.key]) {
@@ -406,7 +455,9 @@ export default function IntegrationHubPage() {
           </p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(PROVIDERS).map(([key, provider]) => {
-              const isConnected = integrations?.some(i => i.provider === key && i.enabled);
+              const connectedCount = integrations?.filter(i => i.provider === key && i.enabled).length || 0;
+              const isConnected = connectedCount > 0;
+              const supportsMultiple = key === 'hetzner';
               return (
                 <div
                   key={key}
@@ -416,7 +467,7 @@ export default function IntegrationHubPage() {
                       : "border-border hover:border-border/80 hover:bg-muted/50"
                   }`}
                   onClick={() => {
-                    if (!isConnected) {
+                    if (!isConnected || supportsMultiple) {
                       setSelectedProvider(key);
                       setShowAddModal(true);
                     }
@@ -434,8 +485,14 @@ export default function IntegrationHubPage() {
                         {isConnected && (
                           <Check className="h-4 w-4 text-green-500" />
                         )}
+                        {supportsMultiple && connectedCount > 0 && (
+                          <span className="text-xs text-muted-foreground">({connectedCount})</span>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{provider.description}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {provider.description}
+                        {supportsMultiple && " (supports multiple)"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -468,15 +525,20 @@ export default function IntegrationHubPage() {
           {!selectedProvider ? (
             <div className="grid grid-cols-2 gap-3 pt-4">
               {Object.entries(PROVIDERS).map(([key, provider]) => {
-                const isConnected = integrations?.some(i => i.provider === key && i.enabled);
+                const connectedCount = integrations?.filter(i => i.provider === key && i.enabled).length || 0;
+                const isConnected = connectedCount > 0;
+                const supportsMultiple = key === 'hetzner';
+                const isDisabled = isConnected && !supportsMultiple;
                 return (
                   <button
                     key={key}
-                    onClick={() => !isConnected && setSelectedProvider(key)}
-                    disabled={isConnected}
+                    onClick={() => !isDisabled && setSelectedProvider(key)}
+                    disabled={isDisabled}
                     className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
-                      isConnected
+                      isDisabled
                         ? "border-green-500/30 bg-green-500/5 cursor-not-allowed opacity-60"
+                        : isConnected && supportsMultiple
+                        ? "border-green-500/30 bg-green-500/5 hover:border-primary hover:bg-accent/50"
                         : "border-border hover:border-primary hover:bg-accent/50 hover:shadow-sm"
                     }`}
                   >
@@ -489,6 +551,9 @@ export default function IntegrationHubPage() {
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">{provider.name}</p>
                         {isConnected && <Check className="h-4 w-4 text-green-500" />}
+                        {supportsMultiple && connectedCount > 0 && (
+                          <span className="text-xs text-muted-foreground">({connectedCount})</span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{provider.description}</p>
                     </div>
@@ -523,14 +588,24 @@ export default function IntegrationHubPage() {
                 {PROVIDERS[selectedProvider].fields.map((field) => (
                   <div key={field.key} className="grid gap-2">
                     <Label htmlFor={field.key}>{field.label}</Label>
-                    <Input
-                      id={field.key}
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={formData[field.key] || ""}
-                      onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                      className="font-mono"
-                    />
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        id={field.key}
+                        placeholder={field.placeholder}
+                        value={formData[field.key] || ""}
+                        onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                        className="font-mono text-sm min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      />
+                    ) : (
+                      <Input
+                        id={field.key}
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={formData[field.key] || ""}
+                        onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                        className="font-mono"
+                      />
+                    )}
                   </div>
                 ))}
 

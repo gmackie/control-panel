@@ -9,7 +9,7 @@ function safeJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-const SUPPORTED_PROVIDERS = ['vercel', 'expo', 'neon', 'turso', 'github', 'gitea'] as const;
+const SUPPORTED_PROVIDERS = ['vercel', 'expo', 'neon', 'turso', 'github', 'gitea', 'hetzner', 'aws'] as const;
 type Provider = typeof SUPPORTED_PROVIDERS[number];
 
 export async function GET(request: NextRequest) {

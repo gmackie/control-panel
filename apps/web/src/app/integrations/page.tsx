@@ -8,7 +8,7 @@ export default function IntegrationsPage() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace('/integrations/hub')
+    router.replace('/integrations/dashboard')
   }, [router])
 
   return (
