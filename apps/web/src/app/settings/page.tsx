@@ -590,107 +590,6 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
-          {/* Create API Key Dialog */}
-          <Dialog open={createKeyOpen} onOpenChange={setCreateKeyOpen}>
-            <DialogContent className="bg-gray-900 border-gray-800">
-              <DialogHeader>
-                <DialogTitle className="text-gray-100">Create API Key</DialogTitle>
-                <DialogDescription>
-                  Create a new API key for programmatic access. The key will only be shown once after creation.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="key-name" className="text-gray-300">Name</Label>
-                  <Input
-                    id="key-name"
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                    placeholder="e.g., MCP Server, CI/CD Pipeline"
-                    className="bg-gray-800 border-gray-700 text-gray-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="key-description" className="text-gray-300">Description (optional)</Label>
-                  <Input
-                    id="key-description"
-                    value={newKeyDescription}
-                    onChange={(e) => setNewKeyDescription(e.target.value)}
-                    placeholder="What will this key be used for?"
-                    className="bg-gray-800 border-gray-700 text-gray-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="key-expires" className="text-gray-300">Expiration</Label>
-                  <select
-                    id="key-expires"
-                    value={newKeyExpires}
-                    onChange={(e) => setNewKeyExpires(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Never expires</option>
-                    <option value="7d">7 days</option>
-                    <option value="30d">30 days</option>
-                    <option value="90d">90 days</option>
-                    <option value="6m">6 months</option>
-                    <option value="1y">1 year</option>
-                  </select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setCreateKeyOpen(false)}
-                  className="border-gray-700 text-gray-300"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateKey}
-                  disabled={!newKeyName.trim() || createKeyMutation.isPending}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {createKeyMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  Create Key
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Revoke API Key Confirmation Dialog */}
-          <Dialog open={!!revokeKeyId} onOpenChange={(open) => !open && setRevokeKeyId(null)}>
-            <DialogContent className="bg-gray-900 border-gray-800">
-              <DialogHeader>
-                <DialogTitle className="text-gray-100">Revoke API Key</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will stop working.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setRevokeKeyId(null)}
-                  className="border-gray-700 text-gray-300"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => revokeKeyId && handleRevokeKey(revokeKeyId)}
-                  disabled={revokeKeyMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  {revokeKeyMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  Revoke Key
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           {/* Integrations Tab */}
           <TabsContent value="integrations">
             <Card className="bg-gray-900/50 border-gray-800 mb-6">
@@ -896,6 +795,107 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Create API Key Dialog */}
+        <Dialog open={createKeyOpen} onOpenChange={setCreateKeyOpen}>
+          <DialogContent className="bg-gray-900 border-gray-800">
+            <DialogHeader>
+              <DialogTitle className="text-gray-100">Create API Key</DialogTitle>
+              <DialogDescription>
+                Create a new API key for programmatic access. The key will only be shown once after creation.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="key-name" className="text-gray-300">Name</Label>
+                <Input
+                  id="key-name"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="e.g., MCP Server, CI/CD Pipeline"
+                  className="bg-gray-800 border-gray-700 text-gray-100"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="key-description" className="text-gray-300">Description (optional)</Label>
+                <Input
+                  id="key-description"
+                  value={newKeyDescription}
+                  onChange={(e) => setNewKeyDescription(e.target.value)}
+                  placeholder="What will this key be used for?"
+                  className="bg-gray-800 border-gray-700 text-gray-100"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="key-expires" className="text-gray-300">Expiration</Label>
+                <select
+                  id="key-expires"
+                  value={newKeyExpires}
+                  onChange={(e) => setNewKeyExpires(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Never expires</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="90d">90 days</option>
+                  <option value="6m">6 months</option>
+                  <option value="1y">1 year</option>
+                </select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setCreateKeyOpen(false)}
+                className="border-gray-700 text-gray-300"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateKey}
+                disabled={!newKeyName.trim() || createKeyMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {createKeyMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Create Key
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Revoke API Key Confirmation Dialog */}
+        <Dialog open={!!revokeKeyId} onOpenChange={(open) => !open && setRevokeKeyId(null)}>
+          <DialogContent className="bg-gray-900 border-gray-800">
+            <DialogHeader>
+              <DialogTitle className="text-gray-100">Revoke API Key</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will stop working.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setRevokeKeyId(null)}
+                className="border-gray-700 text-gray-300"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => revokeKeyId && handleRevokeKey(revokeKeyId)}
+                disabled={revokeKeyMutation.isPending}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {revokeKeyMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Revoke Key
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
