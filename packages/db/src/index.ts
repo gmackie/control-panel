@@ -7,7 +7,6 @@
 export { db, getDb, getDbAsync, type Database } from "./client";
 export * from "./schema";
 
-// Re-export common drizzle-orm utilities to ensure version consistency
 export { 
   eq, 
   ne, 
@@ -21,6 +20,8 @@ export {
   like, 
   ilike, 
   inArray, 
+  isNull,
+  isNotNull,
   sql,
   desc,
   asc,

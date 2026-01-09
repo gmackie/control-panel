@@ -172,6 +172,39 @@ export const users = pgTable("users", {
 });
 
 // ===================================
+// API Keys
+// ===================================
+
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  keyHash: text("key_hash").notNull(),
+  keyPrefix: varchar("key_prefix", { length: 12 }).notNull(),
+  
+  permissions: text("permissions").notNull().default("[]"),
+  
+  lastUsedAt: timestamp("last_used_at"),
+  lastUsedIp: text("last_used_ip"),
+  usageCount: integer("usage_count").notNull().default(0),
+  
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("api_keys_user_id_idx").on(table.userId),
+  keyPrefixIdx: index("api_keys_key_prefix_idx").on(table.keyPrefix),
+  keyHashIdx: index("api_keys_key_hash_idx").on(table.keyHash),
+}));
+
+// ===================================
 // Alerts
 // ===================================
 
@@ -597,6 +630,9 @@ export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
 
 export type Alert = typeof alerts.$inferSelect;
 export type NewAlert = typeof alerts.$inferInsert;
@@ -1341,3 +1377,32 @@ export type NewNeonProject = typeof neonProjects.$inferInsert;
 
 export type TursoDatabase = typeof tursoDatabases.$inferSelect;
 export type NewTursoDatabase = typeof tursoDatabases.$inferInsert;
+
+// ===================================
+// Integration Resources (Generic Resource Linking)
+// ===================================
+
+export const integrationResources = pgTable("integration_resources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  integrationId: uuid("integration_id").notNull().references(() => orgIntegrations.id, { onDelete: "cascade" }),
+  
+  resourceType: varchar("resource_type", { length: 100 }).notNull(),
+  resourceId: text("resource_id").notNull(),
+  resourceName: text("resource_name").notNull(),
+  
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  
+  metadata: text("metadata"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  integrationIdIdx: index("integration_resources_integration_id_idx").on(table.integrationId),
+  applicationIdIdx: index("integration_resources_application_id_idx").on(table.applicationId),
+  resourceTypeIdx: index("integration_resources_resource_type_idx").on(table.resourceType),
+  uniqueResource: index("integration_resources_unique").on(table.integrationId, table.resourceType, table.resourceId),
+}));
+
+export type IntegrationResource = typeof integrationResources.$inferSelect;
+export type NewIntegrationResource = typeof integrationResources.$inferInsert;

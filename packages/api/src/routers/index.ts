@@ -19,6 +19,7 @@ import { tasksRouter } from "./tasks";
 import { releasesRouter } from "./releases";
 import { syncRouter } from "./sync";
 import { webhooksRouter } from "./webhooks";
+import { apiKeysRouter } from "./api-keys";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -35,6 +36,7 @@ export const appRouter = router({
   releases: releasesRouter,
   sync: syncRouter,
   webhooks: webhooksRouter,
+  apiKeys: apiKeysRouter,
 });
 
 export type AppRouter = typeof appRouter;
