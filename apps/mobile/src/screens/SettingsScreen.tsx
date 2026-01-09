@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  TextInput,
+  Modal,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { trpc } from "../lib/trpc";
@@ -15,6 +17,7 @@ import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useBiometricAuth } from "../hooks/useBiometricAuth";
 import { useSettingsStore } from "../stores/settings";
 import { useOfflineStore } from "../stores/offline";
+import { useAuthStore } from "../stores/auth";
 
 interface SettingSectionProps {
   title: string;
@@ -100,6 +103,14 @@ export function SettingsScreen() {
   const setHapticEnabled = useSettingsStore((s) => s.setHapticFeedbackEnabled);
   const clearOfflineCache = useOfflineStore((s) => s.clearCache);
   const offlineQueueLength = useOfflineStore((s) => s.actionQueue.length);
+  
+  const apiKey = useAuthStore((s) => s.apiKey);
+  const setApiKey = useAuthStore((s) => s.setApiKey);
+  const clearApiKey = useAuthStore((s) => s.clearApiKey);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  
+  const [apiKeyModalVisible, setApiKeyModalVisible] = React.useState(false);
+  const [apiKeyInput, setApiKeyInput] = React.useState("");
 
   const preferencesQuery = trpc.notifications.getPreferences?.useQuery?.();
   const updatePreferencesMutation = trpc.notifications.updatePreferences?.useMutation?.();
@@ -221,17 +232,52 @@ export function SettingsScreen() {
     }
   };
 
+  const handleSaveApiKey = () => {
+    const trimmedKey = apiKeyInput.trim();
+    if (!trimmedKey) {
+      Alert.alert("Error", "Please enter a valid API key");
+      return;
+    }
+    if (!trimmedKey.startsWith("cp_")) {
+      Alert.alert("Error", "API key should start with 'cp_'");
+      return;
+    }
+    setApiKey(trimmedKey);
+    setApiKeyInput("");
+    setApiKeyModalVisible(false);
+    Alert.alert("Success", "API key saved successfully");
+  };
+
+  const handleRemoveApiKey = () => {
+    Alert.alert(
+      "Remove API Key",
+      "Are you sure you want to remove your API key? You'll need to enter a new one to access the API.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            clearApiKey();
+            Alert.alert("Success", "API key removed");
+          },
+        },
+      ]
+    );
+  };
+
   const handleSignOut = () => {
     Alert.alert(
       "Sign Out",
-      "Are you sure you want to sign out?",
+      "Are you sure you want to sign out? This will remove your API key.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Sign Out",
           style: "destructive",
           onPress: () => {
-            console.log("Sign out");
+            clearApiKey();
+            console.log("Signed out");
           },
         },
       ]
@@ -352,6 +398,31 @@ export function SettingsScreen() {
         />
       </SettingSection>
 
+      <SettingSection title="API Connection">
+        <SettingRow
+          icon="key"
+          iconColor={isAuthenticated ? "#22c55e" : "#f59e0b"}
+          label="API Key"
+          description={
+            isAuthenticated
+              ? `Connected (${apiKey?.slice(0, 10)}...)`
+              : "Enter your API key to connect"
+          }
+          onPress={() => setApiKeyModalVisible(true)}
+          showChevron
+        />
+        {isAuthenticated && (
+          <SettingRow
+            icon="close-circle"
+            iconColor="#ef4444"
+            label="Remove API Key"
+            description="Disconnect from the control panel API"
+            onPress={handleRemoveApiKey}
+            showChevron
+          />
+        )}
+      </SettingSection>
+
       <SettingSection title="App">
         <SettingRow
           icon="radio-button-on"
@@ -397,6 +468,55 @@ export function SettingsScreen() {
           {expoPushToken ? `Push Token: ${expoPushToken.slice(0, 20)}...` : "No push token"}
         </Text>
       </View>
+
+      <Modal
+        visible={apiKeyModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setApiKeyModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setApiKeyModalVisible(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>API Key</Text>
+            <TouchableOpacity onPress={handleSaveApiKey}>
+              <Text style={styles.modalSave}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.modalContent}>
+            <Text style={styles.modalDescription}>
+              Enter your API key from the Control Panel web app. You can create one in Settings → API Keys.
+            </Text>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.apiKeyInput}
+                value={apiKeyInput}
+                onChangeText={setApiKeyInput}
+                placeholder="cp_xxxxxxxxxxxxxxxx"
+                placeholderTextColor="#64748b"
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry={false}
+                autoComplete="off"
+              />
+            </View>
+            
+            {isAuthenticated && (
+              <Text style={styles.currentKeyInfo}>
+                Current key: {apiKey?.slice(0, 15)}...
+              </Text>
+            )}
+            
+            <Text style={styles.modalHint}>
+              Your API key is stored securely on this device and is used to authenticate with the Control Panel API.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -471,5 +591,64 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontSize: 12,
     marginTop: 4,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#0f172a",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#334155",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  modalCancel: {
+    color: "#3b82f6",
+    fontSize: 17,
+  },
+  modalSave: {
+    color: "#3b82f6",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  modalContent: {
+    padding: 16,
+  },
+  modalDescription: {
+    color: "#94a3b8",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  inputContainer: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+    marginBottom: 16,
+  },
+  apiKeyInput: {
+    color: "#fff",
+    fontSize: 16,
+    padding: 16,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  currentKeyInfo: {
+    color: "#22c55e",
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  modalHint: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 20,
   },
 });
