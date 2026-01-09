@@ -158,9 +158,6 @@ export const applicationsRouter = router({
       });
     }),
 
-  /**
-   * Create a new application
-   */
   create: protectedProcedure
     .input(z.object({
       name: z.string().min(1),
@@ -175,7 +172,7 @@ export const applicationsRouter = router({
 
       const now = new Date();
 
-      await ctx.db.insert(applications).values({
+      const [inserted] = await ctx.db.insert(applications).values({
         name: input.name,
         slug: input.slug,
         description: input.description || null,
@@ -183,8 +180,48 @@ export const applicationsRouter = router({
         status: "active",
         createdAt: now,
         updatedAt: now,
-      });
+      }).returning();
 
-      return { ...input, status: "active", createdAt: now, updatedAt: now };
+      return inserted;
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).optional(),
+      description: z.string().optional(),
+      repositoryUrl: z.string().optional(),
+      localRepoPath: z.string().optional(),
+      status: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const existing = await ctx.db
+        .select()
+        .from(applications)
+        .where(eq(applications.id, input.id))
+        .limit(1);
+
+      if (!existing[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+      }
+
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (input.name !== undefined) updateData.name = input.name;
+      if (input.description !== undefined) updateData.description = input.description;
+      if (input.repositoryUrl !== undefined) updateData.repositoryUrl = input.repositoryUrl;
+      if (input.localRepoPath !== undefined) updateData.localRepoPath = input.localRepoPath;
+      if (input.status !== undefined) updateData.status = input.status;
+
+      const [updated] = await ctx.db
+        .update(applications)
+        .set(updateData)
+        .where(eq(applications.id, input.id))
+        .returning();
+
+      return updated;
     }),
 });

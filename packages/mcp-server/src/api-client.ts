@@ -114,6 +114,18 @@ export class ControlPanelClient {
       bySlug: (slug: string) => this.query<Application>("applications.bySlug", slug),
       listWithHealth: () => this.query<ApplicationHealth[]>("applications.listWithHealth"),
       create: (input: CreateApplicationInput) => this.mutate<Application>("applications.create", input),
+      update: (input: UpdateApplicationInput) => this.mutate<Application>("applications.update", input),
+    };
+  }
+
+  get integrations() {
+    return {
+      discover: (input?: DiscoverInput) => this.query<DiscoverResult>("integrations.discover", input),
+      applicationResources: (appId: string) => this.query<ApplicationResourcesResult>("integrations.applicationResources", appId),
+      linkResources: (input: LinkResourcesInput) => this.mutate<LinkResourcesResult>("integrations.linkResources", input),
+      applicationSecrets: (appId: string) => this.query<ApplicationSecretsResult>("integrations.applicationSecrets", appId),
+      exportEnv: (input: ExportEnvInput) => this.query<ExportEnvResult>("integrations.exportEnv", input),
+      listOrgIntegrations: () => this.query<OrgIntegrationSummary[]>("integrations.listOrgIntegrations"),
     };
   }
 
@@ -227,6 +239,7 @@ export interface Application {
   slug: string;
   description?: string | null;
   repositoryUrl?: string | null;
+  localRepoPath?: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -247,6 +260,104 @@ export interface CreateApplicationInput {
   slug: string;
   description?: string;
   repositoryUrl?: string;
+}
+
+export interface UpdateApplicationInput {
+  id: string;
+  name?: string;
+  description?: string;
+  repositoryUrl?: string;
+  localRepoPath?: string;
+  status?: string;
+}
+
+export interface DiscoverInput {
+  unlinkedOnly?: boolean;
+}
+
+export interface DiscoveredResource {
+  id: string;
+  provider: string;
+  resourceType: string;
+  resourceId: string;
+  name: string;
+  metadata: Record<string, unknown>;
+  applicationId: string | null;
+  integrationId: string;
+}
+
+export interface DiscoverResult {
+  total: number;
+  unlinked: number;
+  byProvider: Record<string, DiscoveredResource[]>;
+  resources: DiscoveredResource[];
+}
+
+export interface ApplicationResource {
+  provider: string;
+  resourceType: string;
+  resourceId: string;
+  name: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ApplicationResourcesResult {
+  application: Application;
+  resources: ApplicationResource[];
+  integrations: { provider: string; name: string; enabled: boolean; hasCredentials: boolean }[];
+  summary: {
+    totalResources: number;
+    totalIntegrations: number;
+    byProvider: Record<string, number>;
+  };
+}
+
+export interface LinkResourcesInput {
+  applicationId: string;
+  resources: { provider: string; resourceId: string }[];
+}
+
+export interface LinkResourcesResult {
+  linked: number;
+  failed: number;
+  errors: string[];
+}
+
+export interface IntegrationSecret {
+  provider: string;
+  integrationName: string;
+  secrets: { key: string; value: string; description?: string }[];
+}
+
+export interface ApplicationSecretsResult {
+  applicationId: string;
+  applicationName: string;
+  secrets: IntegrationSecret[];
+  totalSecrets: number;
+}
+
+export interface ExportEnvInput {
+  applicationId: string;
+  format?: "dotenv" | "json" | "yaml";
+}
+
+export interface ExportEnvResult {
+  applicationId: string;
+  applicationName: string;
+  format: string;
+  content: string;
+  variableCount: number;
+}
+
+export interface OrgIntegrationSummary {
+  id: string;
+  provider: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  hasCredentials: boolean;
+  lastSyncAt: Date | null;
+  lastSyncStatus: string | null;
 }
 
 export interface ClusterSummary {

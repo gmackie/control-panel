@@ -17,6 +17,7 @@ export const applications = pgTable("applications", {
   description: text("description"),
   repositoryUrl: text("repository_url"),
   repositoryPath: text("repository_path"),
+  localRepoPath: text("local_repo_path"), // Local filesystem path for LLM agent to read secrets
   appType: varchar("app_type", { length: 50 }).notNull().default("web"),
   platform: varchar("platform", { length: 50 }),
   productId: uuid("product_id"),

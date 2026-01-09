@@ -20,6 +20,7 @@ import { releasesRouter } from "./releases";
 import { syncRouter } from "./sync";
 import { webhooksRouter } from "./webhooks";
 import { apiKeysRouter } from "./api-keys";
+import { integrationsRouter } from "./integrations";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -37,6 +38,7 @@ export const appRouter = router({
   sync: syncRouter,
   webhooks: webhooksRouter,
   apiKeys: apiKeysRouter,
+  integrations: integrationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

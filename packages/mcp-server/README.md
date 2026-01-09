@@ -171,6 +171,16 @@ docker run -it \
 - `get_infrastructure_status` - Infrastructure health
 - `get_system_overview` - Complete system overview
 
+### Application Setup & Resource Discovery
+- `discover_resources` - Discover all resources across org integrations (Vercel, Neon, Turso, Expo)
+- `get_application_resources` - Get all resources and integrations linked to an application
+- `link_resources_to_application` - Link discovered resources to an application
+- `get_application_secrets` - Get all secrets/credentials for an application from its integrations
+- `export_application_env` - Export secrets as .env, JSON, or YAML format
+- `update_application` - Update application settings including local repo path
+- `list_org_integrations` - List all organization-level integrations
+- `setup_application_from_resources` - Create app and link resources in one step
+
 ## Example Prompts
 
 Once connected, you can ask your AI assistant things like:
@@ -182,6 +192,11 @@ Once connected, you can ask your AI assistant things like:
 - "Deploy version v1.2.3 to production for app-id"
 - "What are the cluster costs this month?"
 - "Create an AI dev session to fix Sentry issue #12345"
+- "Discover all unlinked resources across my integrations"
+- "Set up a new application called 'my-app' and link the Neon database to it"
+- "Get all the secrets for the classback application"
+- "Export the environment variables for my-app as a .env file"
+- "Set the local repo path for classback to /Users/me/projects/classback"
 
 ## Development
 

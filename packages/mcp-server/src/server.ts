@@ -8,6 +8,7 @@ import { registerCicdTools } from "./tools/cicd.js";
 import { registerIntegrationsTools } from "./tools/integrations.js";
 import { registerActivityTools } from "./tools/activity.js";
 import { registerAiDevTools } from "./tools/ai-dev.js";
+import { registerAppSetupTools } from "./tools/app-setup.js";
 
 export interface McpServerConfig {
   name: string;
@@ -31,6 +32,7 @@ export async function createMcpServer(
   registerIntegrationsTools(server, ctx);
   registerActivityTools(server, ctx);
   registerAiDevTools(server, ctx);
+  registerAppSetupTools(server, ctx);
 
   return { server, ctx };
 }
