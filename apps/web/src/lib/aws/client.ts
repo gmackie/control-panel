@@ -904,7 +904,6 @@ export class AWSClient {
   }
 }
 
-// Factory function to create AWS client from environment
 export function createAWSClient(credentials?: Partial<AWSCredentials>): AWSClient | null {
   const accessKeyId = credentials?.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = credentials?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
@@ -921,6 +920,38 @@ export function createAWSClient(credentials?: Partial<AWSCredentials>): AWSClien
     region,
     sessionToken: credentials?.sessionToken || process.env.AWS_SESSION_TOKEN,
   });
+}
+
+export async function createAWSClientAsync(): Promise<AWSClient | null> {
+  const envAccessKey = process.env.AWS_ACCESS_KEY_ID;
+  const envSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+  if (envAccessKey && envSecretKey) {
+    return new AWSClient({
+      accessKeyId: envAccessKey,
+      secretAccessKey: envSecretKey,
+      region: process.env.AWS_REGION || 'us-east-1',
+      sessionToken: process.env.AWS_SESSION_TOKEN,
+    });
+  }
+
+  try {
+    const { getAWSCredentials } = await import('@/lib/integrations/credentials');
+    const credentials = await getAWSCredentials();
+    if (credentials?.accessKeyId && credentials?.secretAccessKey) {
+      return new AWSClient({
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        sessionToken: credentials.sessionToken,
+        region: credentials.region || 'us-east-1',
+      });
+    }
+  } catch (error) {
+    console.error('Failed to create AWS client from credentials:', error);
+  }
+
+  console.warn('AWS credentials not configured');
+  return null;
 }
 
 export default AWSClient;

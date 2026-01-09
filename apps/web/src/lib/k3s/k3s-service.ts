@@ -1,16 +1,9 @@
 import { K3sDeployment, ClusterInfo } from '@/types/deployments';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-
-const execAsync = promisify(exec);
+import * as https from 'https';
 
 export interface K3sConfig {
   apiUrl: string;
   token: string;
-  kubeconfigPath?: string;
 }
 
 export interface DeploymentFilter {
@@ -20,63 +13,37 @@ export interface DeploymentFilter {
   labels?: Record<string, string>;
 }
 
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
 export class K3sService {
   private config: K3sConfig;
-  private kubeconfigPath: string;
 
   constructor() {
     this.config = {
       apiUrl: process.env.K8S_API_URL || process.env.K3S_API_URL || 'https://5.78.106.236:6443',
       token: process.env.K3S_SA_TOKEN || process.env.K8S_TOKEN || '',
-      kubeconfigPath: process.env.KUBECONFIG,
     };
-
-    const possiblePaths = [
-      this.config.kubeconfigPath,
-      '/app/.kube/config',
-      path.join(os.homedir(), '.kube', 'config-hetzner'),
-      path.join(os.homedir(), '.kube', 'config'),
-    ].filter(Boolean) as string[];
-
-    this.kubeconfigPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
   }
 
-  private async executeKubectl(args: string[]): Promise<{ stdout: string; stderr: string }> {
-    const kubeconfigArg = fs.existsSync(this.kubeconfigPath) 
-      ? `--kubeconfig=${this.kubeconfigPath}` 
-      : '';
-    
-    const command = `kubectl ${kubeconfigArg} ${args.join(' ')}`;
-    
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        timeout: 30000, // 30 second timeout
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
-        env: { ...process.env, KUBECONFIG: this.kubeconfigPath },
-      });
-      return { stdout, stderr };
-    } catch (error: any) {
-      console.error('kubectl error:', error.message);
-      throw error;
-    }
-  }
-
-  private async fetchFromK8sAPI(endpoint: string): Promise<any> {
+  private async fetchFromK8sAPI<T = unknown>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.config.apiUrl}${endpoint}`;
     
     try {
       const response = await fetch(url, {
+        ...options,
         headers: {
           'Authorization': `Bearer ${this.config.token}`,
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...options?.headers,
         },
-        // Skip TLS verification for self-signed certs (common in K3s)
-        // @ts-ignore - Node.js fetch option
-        agent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+        // @ts-expect-error - Node.js fetch accepts agent option
+        agent: httpsAgent,
       });
 
       if (!response.ok) {
-        throw new Error(`K8s API error: ${response.status} ${response.statusText}`);
+        const text = await response.text();
+        throw new Error(`K8s API error: ${response.status} ${response.statusText} - ${text}`);
       }
 
       return response.json();
@@ -99,18 +66,13 @@ export class K3sService {
     createdAt: string;
   }>> {
     try {
-      const { stdout } = await this.executeKubectl([
-        'get', 'nodes', '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>('/api/v1/nodes');
       
       return data.items.map((node: any) => {
         const conditions = node.status?.conditions || [];
         const readyCondition = conditions.find((c: any) => c.type === 'Ready');
         const addresses = node.status?.addresses || [];
         
-        // Determine roles from labels
         const labels = node.metadata?.labels || {};
         const roles: string[] = [];
         if (labels['node-role.kubernetes.io/control-plane'] !== undefined || 
@@ -155,12 +117,11 @@ export class K3sService {
 
   async getDeployments(filter: DeploymentFilter = {}): Promise<K3sDeployment[]> {
     try {
-      const namespaceArg = filter.namespace ? `-n ${filter.namespace}` : '--all-namespaces';
-      const { stdout } = await this.executeKubectl([
-        'get', 'deployments', namespaceArg, '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const endpoint = filter.namespace 
+        ? `/apis/apps/v1/namespaces/${filter.namespace}/deployments`
+        : '/apis/apps/v1/deployments';
+      
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>(endpoint);
       
       let deployments: K3sDeployment[] = data.items.map((dep: any) => ({
         name: dep.metadata?.name,
@@ -180,7 +141,6 @@ export class K3sService {
         })),
       }));
 
-      // Apply filters
       if (filter.environment) {
         deployments = deployments.filter(d => 
           d.labels.environment === filter.environment ||
@@ -214,12 +174,11 @@ export class K3sService {
     ip: string;
   }>> {
     try {
-      const namespaceArg = namespace ? `-n ${namespace}` : '--all-namespaces';
-      const { stdout } = await this.executeKubectl([
-        'get', 'pods', namespaceArg, '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const endpoint = namespace 
+        ? `/api/v1/namespaces/${namespace}/pods`
+        : '/api/v1/pods';
+      
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>(endpoint);
       
       return data.items.map((pod: any) => {
         const containerStatuses = pod.status?.containerStatuses || [];
@@ -259,12 +218,11 @@ export class K3sService {
     ports: string;
   }>> {
     try {
-      const namespaceArg = namespace ? `-n ${namespace}` : '--all-namespaces';
-      const { stdout } = await this.executeKubectl([
-        'get', 'services', namespaceArg, '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const endpoint = namespace 
+        ? `/api/v1/namespaces/${namespace}/services`
+        : '/api/v1/services';
+      
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>(endpoint);
       
       return data.items.map((svc: any) => {
         const ports = (svc.spec?.ports || [])
@@ -288,11 +246,8 @@ export class K3sService {
 
   async getNamespaces(): Promise<string[]> {
     try {
-      const { stdout } = await this.executeKubectl([
-        'get', 'namespaces', '-o', 'jsonpath={.items[*].metadata.name}'
-      ]);
-
-      return stdout.trim().split(' ').filter(Boolean);
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>('/api/v1/namespaces');
+      return data.items.map((ns: any) => ns.metadata?.name).filter(Boolean);
     } catch (error) {
       console.error('Error fetching namespaces:', error);
       return [];
@@ -309,12 +264,11 @@ export class K3sService {
     className?: string;
   }>> {
     try {
-      const namespaceArg = namespace ? `-n ${namespace}` : '--all-namespaces';
-      const { stdout } = await this.executeKubectl([
-        'get', 'ingresses', namespaceArg, '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const endpoint = namespace 
+        ? `/apis/networking.k8s.io/v1/namespaces/${namespace}/ingresses`
+        : '/apis/networking.k8s.io/v1/ingresses';
+      
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>(endpoint);
       
       return data.items.map((ing: any) => {
         const rules = ing.spec?.rules || [];
@@ -322,12 +276,10 @@ export class K3sService {
         const lbIngress = ing.status?.loadBalancer?.ingress || [];
         const address = lbIngress.map((lb: any) => lb.ip || lb.hostname).join(', ') || '';
         
-        // Get ports from TLS config or rules
         const ports: string[] = [];
         if (ing.spec?.tls) {
           ports.push('443');
         }
-        // Ingresses typically use 80/443
         if (!ports.includes('80')) {
           ports.push('80');
         }
@@ -417,7 +369,6 @@ export class K3sService {
     port?: number;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      // Create deployment manifest
       const deployment = {
         apiVersion: 'apps/v1',
         kind: 'Deployment',
@@ -452,17 +403,14 @@ export class K3sService {
         },
       };
 
-      // Write to temp file and apply
-      const tmpFile = `/tmp/deployment-${config.appName}-${Date.now()}.yaml`;
-      fs.writeFileSync(tmpFile, JSON.stringify(deployment, null, 2));
-
-      try {
-        await this.executeKubectl(['apply', '-f', tmpFile]);
-        return { success: true };
-      } finally {
-        // Clean up temp file
-        fs.unlinkSync(tmpFile);
-      }
+      await this.fetchFromK8sAPI(
+        `/apis/apps/v1/namespaces/${config.namespace}/deployments`,
+        {
+          method: 'POST',
+          body: JSON.stringify(deployment),
+        }
+      );
+      return { success: true };
     } catch (error) {
       console.error('Error deploying to K3s:', error);
       return {
@@ -478,11 +426,14 @@ export class K3sService {
     replicas: number
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.executeKubectl([
-        'scale', 'deployment', deploymentName,
-        '-n', namespace,
-        `--replicas=${replicas}`
-      ]);
+      await this.fetchFromK8sAPI(
+        `/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}/scale`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+          body: JSON.stringify({ spec: { replicas } }),
+        }
+      );
       return { success: true };
     } catch (error) {
       console.error('Error scaling K3s deployment:', error);
@@ -498,10 +449,10 @@ export class K3sService {
     deploymentName: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.executeKubectl([
-        'delete', 'deployment', deploymentName,
-        '-n', namespace
-      ]);
+      await this.fetchFromK8sAPI(
+        `/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}`,
+        { method: 'DELETE' }
+      );
       return { success: true };
     } catch (error) {
       console.error('Error deleting K3s deployment:', error);
@@ -518,13 +469,24 @@ export class K3sService {
     lines: number = 100
   ): Promise<string[]> {
     try {
-      const { stdout } = await this.executeKubectl([
-        'logs', `deployment/${deploymentName}`,
-        '-n', namespace,
-        `--tail=${lines}`
-      ]);
+      const pods = await this.getPods(namespace);
+      const pod = pods.find(p => p.name.startsWith(deploymentName));
+      if (!pod) return [];
 
-      return stdout.split('\n').filter(Boolean);
+      const response = await fetch(
+        `${this.config.apiUrl}/api/v1/namespaces/${namespace}/pods/${pod.name}/log?tailLines=${lines}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.config.token}`,
+          },
+          // @ts-expect-error - Node.js fetch accepts agent option
+          agent: httpsAgent,
+        }
+      );
+
+      if (!response.ok) return [];
+      const text = await response.text();
+      return text.split('\n').filter(Boolean);
     } catch (error) {
       console.error('Error fetching K3s deployment logs:', error);
       return [];
@@ -543,14 +505,9 @@ export class K3sService {
     lastTime: string;
   }>> {
     try {
-      const { stdout } = await this.executeKubectl([
-        'get', 'events',
-        '-n', namespace,
-        `--field-selector=involvedObject.name=${deploymentName}`,
-        '-o', 'json'
-      ]);
-
-      const data = JSON.parse(stdout);
+      const data = await this.fetchFromK8sAPI<{ items: any[] }>(
+        `/api/v1/namespaces/${namespace}/events?fieldSelector=involvedObject.name=${deploymentName}`
+      );
       
       return data.items.map((event: any) => ({
         type: event.type as 'Normal' | 'Warning',
@@ -568,7 +525,14 @@ export class K3sService {
 
   async cordonNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.executeKubectl(['cordon', nodeName]);
+      await this.fetchFromK8sAPI(
+        `/api/v1/nodes/${nodeName}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+          body: JSON.stringify({ spec: { unschedulable: true } }),
+        }
+      );
       return { success: true };
     } catch (error) {
       return {
@@ -580,7 +544,14 @@ export class K3sService {
 
   async uncordonNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.executeKubectl(['uncordon', nodeName]);
+      await this.fetchFromK8sAPI(
+        `/api/v1/nodes/${nodeName}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+          body: JSON.stringify({ spec: { unschedulable: false } }),
+        }
+      );
       return { success: true };
     } catch (error) {
       return {
@@ -592,12 +563,32 @@ export class K3sService {
 
   async drainNode(nodeName: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.executeKubectl([
-        'drain', nodeName,
-        '--ignore-daemonsets',
-        '--delete-emptydir-data',
-        '--force'
-      ]);
+      await this.cordonNode(nodeName);
+      
+      const pods = await this.getPods();
+      const nodePods = pods.filter(p => p.node === nodeName && !p.namespace.startsWith('kube-'));
+      
+      for (const pod of nodePods) {
+        try {
+          await this.fetchFromK8sAPI(
+            `/api/v1/namespaces/${pod.namespace}/pods/${pod.name}/eviction`,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                apiVersion: 'policy/v1',
+                kind: 'Eviction',
+                metadata: { name: pod.name, namespace: pod.namespace },
+              }),
+            }
+          );
+        } catch {
+          await this.fetchFromK8sAPI(
+            `/api/v1/namespaces/${pod.namespace}/pods/${pod.name}`,
+            { method: 'DELETE' }
+          );
+        }
+      }
+      
       return { success: true };
     } catch (error) {
       return {
@@ -609,15 +600,10 @@ export class K3sService {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const { stdout } = await this.executeKubectl(['cluster-info']);
-      return stdout.includes('is running');
+      await this.fetchFromK8sAPI('/api/v1/namespaces');
+      return true;
     } catch {
-      try {
-        await this.fetchFromK8sAPI('/api/v1/namespaces');
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
   }
 }

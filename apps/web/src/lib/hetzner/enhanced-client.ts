@@ -953,7 +953,6 @@ export class EnhancedHetznerClient {
   }
 }
 
-// Factory function
 export function createEnhancedHetznerClient(apiToken?: string): EnhancedHetznerClient | null {
   const token = apiToken || process.env.HETZNER_API_TOKEN;
   if (!token) {
@@ -961,6 +960,26 @@ export function createEnhancedHetznerClient(apiToken?: string): EnhancedHetznerC
     return null;
   }
   return new EnhancedHetznerClient(token);
+}
+
+export async function createEnhancedHetznerClientAsync(): Promise<EnhancedHetznerClient | null> {
+  const envToken = process.env.HETZNER_API_TOKEN;
+  if (envToken) {
+    return new EnhancedHetznerClient(envToken);
+  }
+
+  try {
+    const { getHetznerCredentials } = await import('@/lib/integrations/credentials');
+    const credentials = await getHetznerCredentials();
+    if (credentials?.apiToken) {
+      return new EnhancedHetznerClient(credentials.apiToken);
+    }
+  } catch (error) {
+    console.error('Failed to create Hetzner client from credentials:', error);
+  }
+
+  console.warn('Hetzner API token not configured');
+  return null;
 }
 
 export default EnhancedHetznerClient;

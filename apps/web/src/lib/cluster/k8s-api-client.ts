@@ -117,6 +117,50 @@ export interface K8sService {
   };
 }
 
+export interface K8sPod {
+  metadata: {
+    name: string;
+    namespace: string;
+    labels?: Record<string, string>;
+    creationTimestamp: string;
+  };
+  spec: {
+    nodeName?: string;
+    containers: Array<{
+      name: string;
+      image: string;
+      ports?: Array<{ containerPort: number; name?: string }>;
+      resources?: {
+        requests?: { cpu?: string; memory?: string };
+        limits?: { cpu?: string; memory?: string };
+      };
+    }>;
+    restartPolicy?: string;
+  };
+  status: {
+    phase: string;
+    podIP?: string;
+    hostIP?: string;
+    startTime?: string;
+    conditions?: Array<{
+      type: string;
+      status: string;
+      lastTransitionTime?: string;
+    }>;
+    containerStatuses?: Array<{
+      name: string;
+      ready: boolean;
+      restartCount: number;
+      state: {
+        running?: { startedAt: string };
+        waiting?: { reason: string; message?: string };
+        terminated?: { exitCode: number; reason: string };
+      };
+      image: string;
+    }>;
+  };
+}
+
 export class K8sApiClient {
   private config: K8sClientConfig;
 
@@ -359,6 +403,29 @@ export class K8sApiClient {
     return this.request<K8sService>(
       `/api/v1/namespaces/${namespace}/services/${name}`
     );
+  }
+
+  async getAllPods(): Promise<K8sPod[]> {
+    const result = await this.request<{ items: K8sPod[] }>('/api/v1/pods');
+    return result.items;
+  }
+
+  async getPods(namespace: string): Promise<K8sPod[]> {
+    const result = await this.request<{ items: K8sPod[] }>(
+      `/api/v1/namespaces/${namespace}/pods`
+    );
+    return result.items;
+  }
+
+  async getPod(namespace: string, name: string): Promise<K8sPod> {
+    return this.request<K8sPod>(
+      `/api/v1/namespaces/${namespace}/pods/${name}`
+    );
+  }
+
+  async getAllServices(): Promise<K8sService[]> {
+    const result = await this.request<{ items: K8sService[] }>('/api/v1/services');
+    return result.items;
   }
 }
 

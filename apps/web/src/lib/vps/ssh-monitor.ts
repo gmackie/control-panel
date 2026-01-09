@@ -12,6 +12,17 @@ export interface ServiceStatus {
   cpu?: string;
   uptime?: string;
   pid?: number;
+  description?: string;
+}
+
+export interface NginxSite {
+  name: string;
+  enabled: boolean;
+  serverNames: string[];
+  listenPorts: number[];
+  proxyPass?: string;
+  sslEnabled: boolean;
+  configFile: string;
 }
 
 export interface ContainerStatus {
@@ -52,6 +63,7 @@ export interface VPSMonitorResult {
   systemMetrics?: SystemMetrics;
   services: ServiceStatus[];
   containers: ContainerStatus[];
+  nginxSites?: NginxSite[];
   error?: string;
 }
 
@@ -145,7 +157,7 @@ async function getSystemdServices(host: string, serviceNames: string[]): Promise
   
   try {
     const servicesStr = serviceNames.join(' ');
-    const cmd = `systemctl show ${servicesStr} --property=Id,ActiveState,SubState,MainPID,MemoryCurrent 2>/dev/null | paste - - - - -`;
+    const cmd = `systemctl show ${servicesStr} --property=Id,ActiveState,SubState,MainPID,MemoryCurrent,Description 2>/dev/null | paste - - - - - -`;
     
     const output = await sshExec(host, cmd);
     const results: ServiceStatus[] = [];
@@ -157,8 +169,8 @@ async function getSystemdServices(host: string, serviceNames: string[]): Promise
       const props: Record<string, string> = {};
       
       for (const part of parts) {
-        const [key, value] = part.split('=');
-        if (key && value) props[key] = value;
+        const [key, ...rest] = part.split('=');
+        if (key && rest.length > 0) props[key] = rest.join('=');
       }
       
       if (props.Id) {
@@ -176,6 +188,7 @@ async function getSystemdServices(host: string, serviceNames: string[]): Promise
           memory: props.MemoryCurrent && props.MemoryCurrent !== '[not set]' 
             ? formatBytes(parseInt(props.MemoryCurrent)) 
             : undefined,
+          description: props.Description || undefined,
         });
       }
     }
@@ -187,6 +200,71 @@ async function getSystemdServices(host: string, serviceNames: string[]): Promise
       name: name.replace('.service', ''),
       status: 'unknown' as const,
     }));
+  }
+}
+
+async function getNginxSites(host: string): Promise<NginxSite[]> {
+  try {
+    const cmd = `
+      sites_dir="/etc/nginx/sites-enabled"
+      if [ -d "$sites_dir" ]; then
+        for site in "$sites_dir"/*; do
+          if [ -f "$site" ]; then
+            name=$(basename "$site")
+            echo "===SITE==="
+            echo "name:$name"
+            echo "file:$site"
+            # Extract server_name
+            grep -E "^\\s*server_name" "$site" 2>/dev/null | head -1 | sed 's/server_name//;s/;//;s/^\\s*//' | tr -d '\\n'
+            echo ""
+            # Extract listen ports
+            echo "listen:$(grep -oE 'listen\\s+[0-9]+' "$site" 2>/dev/null | awk '{print $2}' | sort -u | tr '\\n' ',')"
+            # Check SSL
+            echo "ssl:$(grep -q 'ssl_certificate' "$site" && echo 'yes' || echo 'no')"
+            # Extract proxy_pass
+            proxy=$(grep -oE 'proxy_pass\\s+[^;]+' "$site" 2>/dev/null | head -1 | awk '{print $2}')
+            echo "proxy:$proxy"
+          fi
+        done
+      fi
+    `;
+    
+    const output = await sshExec(host, cmd);
+    const sites: NginxSite[] = [];
+    
+    const siteBlocks = output.split('===SITE===').filter(Boolean);
+    for (const block of siteBlocks) {
+      const lines = block.trim().split('\n');
+      const props: Record<string, string> = {};
+      
+      for (const line of lines) {
+        const [key, ...rest] = line.split(':');
+        if (key && rest.length > 0) {
+          props[key.trim()] = rest.join(':').trim();
+        }
+      }
+      
+      if (props.name) {
+        const listenPorts = props.listen 
+          ? props.listen.split(',').filter(Boolean).map(p => parseInt(p))
+          : [80];
+        
+        sites.push({
+          name: props.name,
+          enabled: true,
+          serverNames: props.server_name ? props.server_name.split(/\s+/).filter(Boolean) : [],
+          listenPorts,
+          proxyPass: props.proxy || undefined,
+          sslEnabled: props.ssl === 'yes',
+          configFile: props.file || `/etc/nginx/sites-enabled/${props.name}`,
+        });
+      }
+    }
+    
+    return sites;
+  } catch (error) {
+    console.error(`Failed to get nginx sites for ${host}:`, error);
+    return [];
   }
 }
 
@@ -244,6 +322,7 @@ export interface VPSConfig {
   ip: string;
   systemdServices?: string[];
   checkDocker?: boolean;
+  checkNginx?: boolean;
 }
 
 export async function monitorVPS(config: VPSConfig): Promise<VPSMonitorResult> {
@@ -262,15 +341,19 @@ export async function monitorVPS(config: VPSConfig): Promise<VPSMonitorResult> {
     result.reachable = true;
     result.responseTime = Date.now() - startTime;
     
-    const [metrics, services, containers] = await Promise.all([
+    const [metrics, services, containers, nginxSites] = await Promise.all([
       getSystemMetrics(config.ip),
       config.systemdServices ? getSystemdServices(config.ip, config.systemdServices) : Promise.resolve([]),
       config.checkDocker !== false ? getDockerContainers(config.ip) : Promise.resolve([]),
+      config.checkNginx ? getNginxSites(config.ip) : Promise.resolve([]),
     ]);
     
     result.systemMetrics = metrics;
     result.services = services;
     result.containers = containers;
+    if (nginxSites.length > 0) {
+      result.nginxSites = nginxSites;
+    }
     
   } catch (error: any) {
     result.responseTime = Date.now() - startTime;
@@ -283,7 +366,7 @@ export async function monitorVPS(config: VPSConfig): Promise<VPSMonitorResult> {
 export const VPS_CONFIGS: Record<string, VPSConfig> = {
   'git.gmac.io': {
     hostname: 'git.gmac.io',
-    ip: '5.78.82.75',
+    ip: '5.78.128.106',
     systemdServices: [
       'gitea.service',
       'gitea-actions-runner.service',
@@ -295,24 +378,27 @@ export const VPS_CONFIGS: Record<string, VPSConfig> = {
       'docker.service',
     ],
     checkDocker: true,
+    checkNginx: true,
   },
   'claude.gmac.io': {
     hostname: 'claude.gmac.io',
-    ip: '49.13.134.119',
+    ip: '5.78.130.199',
     systemdServices: [
       'nginx.service',
       'docker.service',
+      'vault-agent.service',
     ],
     checkDocker: true,
+    checkNginx: true,
   },
   'gmac.io': {
     hostname: 'gmac.io',
     ip: '5.78.106.236',
     systemdServices: [
       'k3s.service',
-      'docker.service',
     ],
     checkDocker: false,
+    checkNginx: false,
   },
 };
 
