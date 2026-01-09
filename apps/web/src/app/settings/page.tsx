@@ -18,6 +18,8 @@ import {
   Check,
   Github,
   MessageSquare,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +27,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc/client";
 
 const TIMEZONES = [
   { value: "UTC", label: "UTC" },
@@ -36,30 +42,6 @@ const TIMEZONES = [
   { value: "Europe/Paris", label: "Paris (CET)" },
   { value: "Asia/Tokyo", label: "Tokyo (JST)" },
   { value: "Australia/Sydney", label: "Sydney (AEST)" },
-];
-
-const MOCK_API_KEYS = [
-  {
-    id: "1",
-    name: "Production API Key",
-    prefix: "cp_live_",
-    createdAt: "2024-12-15",
-    lastUsed: "2024-12-28",
-  },
-  {
-    id: "2",
-    name: "Development Key",
-    prefix: "cp_dev_",
-    createdAt: "2024-11-20",
-    lastUsed: "2024-12-27",
-  },
-  {
-    id: "3",
-    name: "CI/CD Pipeline",
-    prefix: "cp_ci_",
-    createdAt: "2024-10-05",
-    lastUsed: "2024-12-28",
-  },
 ];
 
 const INTEGRATIONS = [
@@ -131,6 +113,54 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+  
+  const [createKeyOpen, setCreateKeyOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyDescription, setNewKeyDescription] = useState("");
+  const [newKeyExpires, setNewKeyExpires] = useState("");
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [revokeKeyId, setRevokeKeyId] = useState<string | null>(null);
+
+  const utils = trpc.useUtils();
+  const { data: apiKeys, isLoading: apiKeysLoading } = trpc.apiKeys.list.useQuery();
+  
+  const createKeyMutation = trpc.apiKeys.create.useMutation({
+    onSuccess: (data) => {
+      setCreatedKey(data.key);
+      setCreateKeyOpen(false);
+      utils.apiKeys.list.invalidate();
+      setNewKeyName("");
+      setNewKeyDescription("");
+      setNewKeyExpires("");
+    },
+  });
+
+  const revokeKeyMutation = trpc.apiKeys.revoke.useMutation({
+    onSuccess: () => {
+      utils.apiKeys.list.invalidate();
+      setRevokeKeyId(null);
+    },
+  });
+
+  const handleCreateKey = () => {
+    createKeyMutation.mutate({
+      name: newKeyName,
+      description: newKeyDescription || undefined,
+      expiresIn: newKeyExpires || undefined,
+    });
+  };
+
+  const handleRevokeKey = (keyId: string) => {
+    revokeKeyMutation.mutate({ keyId });
+  };
+
+  const handleCopyNewKey = () => {
+    if (createdKey) {
+      navigator.clipboard.writeText(createdKey);
+      setCopiedKeyId("new");
+      setTimeout(() => setCopiedKeyId(null), 2000);
+    }
+  };
 
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
     displayName: "Admin User",
@@ -407,67 +437,259 @@ export default function SettingsPage() {
 
           {/* API Keys Tab */}
           <TabsContent value="api-keys">
-            <Card className="bg-gray-900/50 border-gray-800">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-gray-100">API Keys</CardTitle>
-                  <CardDescription>
-                    Manage API keys for programmatic access
-                  </CardDescription>
-                </div>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create New API Key
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y divide-gray-800">
-                  {MOCK_API_KEYS.map((apiKey) => (
-                    <div
-                      key={apiKey.id}
-                      className="flex items-center justify-between py-4"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-gray-100">
-                            {apiKey.name}
-                          </h3>
-                          <Badge variant="secondary" className="text-xs">
-                            {apiKey.prefix}***
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
-                          <span>Created: {apiKey.createdAt}</span>
-                          <span>Last used: {apiKey.lastUsed}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
+            {/* Newly created key alert */}
+            {createdKey && (
+              <Card className="bg-yellow-500/10 border-yellow-500/30 mb-6">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-yellow-400 mb-2">
+                        Save your API key now
+                      </h3>
+                      <p className="text-sm text-gray-300 mb-3">
+                        This key will only be shown once. Copy it now and store it securely.
+                      </p>
+                      <div className="flex items-center gap-2 p-2 bg-gray-900 rounded-lg border border-gray-700">
+                        <code className="flex-1 text-sm text-gray-100 font-mono break-all">
+                          {createdKey}
+                        </code>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleCopyKey(apiKey.id)}
-                          className="text-gray-400 hover:text-gray-100"
+                          onClick={handleCopyNewKey}
+                          className="text-gray-400 hover:text-gray-100 flex-shrink-0"
                         >
-                          {copiedKeyId === apiKey.id ? (
+                          {copiedKeyId === "new" ? (
                             <Check className="w-4 h-4 text-green-400" />
                           ) : (
                             <Copy className="w-4 h-4" />
                           )}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
                       </div>
                     </div>
-                  ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCreatedKey(null)}
+                      className="text-gray-400 hover:text-gray-100 flex-shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="bg-gray-900/50 border-gray-800">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-gray-100">API Keys</CardTitle>
+                  <CardDescription>
+                    Manage API keys for programmatic access to the control panel API
+                  </CardDescription>
                 </div>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setCreateKeyOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create New API Key
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {apiKeysLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between py-4">
+                        <div className="flex-1">
+                          <Skeleton className="h-5 w-32 mb-2" />
+                          <Skeleton className="h-4 w-48" />
+                        </div>
+                        <Skeleton className="h-8 w-20" />
+                      </div>
+                    ))}
+                  </div>
+                ) : !apiKeys || apiKeys.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Key className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                    <h3 className="text-gray-300 font-medium mb-1">No API keys yet</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Create an API key to access the control panel programmatically
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      className="border-gray-700"
+                      onClick={() => setCreateKeyOpen(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create your first API key
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-800">
+                    {apiKeys.map((apiKey) => (
+                      <div
+                        key={apiKey.id}
+                        className="flex items-center justify-between py-4"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-gray-100">
+                              {apiKey.name}
+                            </h3>
+                            <Badge variant="secondary" className="text-xs font-mono">
+                              {apiKey.keyPrefix}...
+                            </Badge>
+                            {apiKey.revokedAt && (
+                              <Badge variant="destructive" className="text-xs">
+                                Revoked
+                              </Badge>
+                            )}
+                            {apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date() && !apiKey.revokedAt && (
+                              <Badge variant="destructive" className="text-xs">
+                                Expired
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
+                            <span>Created: {new Date(apiKey.createdAt).toLocaleDateString()}</span>
+                            {apiKey.lastUsedAt && (
+                              <span>Last used: {new Date(apiKey.lastUsedAt).toLocaleDateString()}</span>
+                            )}
+                            {apiKey.expiresAt && !apiKey.revokedAt && (
+                              <span>
+                                Expires: {new Date(apiKey.expiresAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {apiKey.usageCount > 0 && (
+                              <span>{apiKey.usageCount} requests</span>
+                            )}
+                          </div>
+                          {apiKey.description && (
+                            <p className="text-sm text-gray-500 mt-1">{apiKey.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!apiKey.revokedAt && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setRevokeKeyId(apiKey.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Create API Key Dialog */}
+          <Dialog open={createKeyOpen} onOpenChange={setCreateKeyOpen}>
+            <DialogContent className="bg-gray-900 border-gray-800">
+              <DialogHeader>
+                <DialogTitle className="text-gray-100">Create API Key</DialogTitle>
+                <DialogDescription>
+                  Create a new API key for programmatic access. The key will only be shown once after creation.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="key-name" className="text-gray-300">Name</Label>
+                  <Input
+                    id="key-name"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    placeholder="e.g., MCP Server, CI/CD Pipeline"
+                    className="bg-gray-800 border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="key-description" className="text-gray-300">Description (optional)</Label>
+                  <Input
+                    id="key-description"
+                    value={newKeyDescription}
+                    onChange={(e) => setNewKeyDescription(e.target.value)}
+                    placeholder="What will this key be used for?"
+                    className="bg-gray-800 border-gray-700 text-gray-100"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="key-expires" className="text-gray-300">Expiration</Label>
+                  <select
+                    id="key-expires"
+                    value={newKeyExpires}
+                    onChange={(e) => setNewKeyExpires(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Never expires</option>
+                    <option value="7d">7 days</option>
+                    <option value="30d">30 days</option>
+                    <option value="90d">90 days</option>
+                    <option value="6m">6 months</option>
+                    <option value="1y">1 year</option>
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setCreateKeyOpen(false)}
+                  className="border-gray-700 text-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateKey}
+                  disabled={!newKeyName.trim() || createKeyMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {createKeyMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Create Key
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Revoke API Key Confirmation Dialog */}
+          <Dialog open={!!revokeKeyId} onOpenChange={(open) => !open && setRevokeKeyId(null)}>
+            <DialogContent className="bg-gray-900 border-gray-800">
+              <DialogHeader>
+                <DialogTitle className="text-gray-100">Revoke API Key</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will stop working.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setRevokeKeyId(null)}
+                  className="border-gray-700 text-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => revokeKeyId && handleRevokeKey(revokeKeyId)}
+                  disabled={revokeKeyMutation.isPending}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {revokeKeyMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Revoke Key
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Integrations Tab */}
           <TabsContent value="integrations">
