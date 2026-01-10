@@ -188,6 +188,26 @@ export function registerAppSetupTools(server: McpServer, ctx: McpContext): void 
   );
 
   server.tool(
+    "sync_integration",
+    "Sync resources from an org integration (Vercel, Neon, Expo, Gitea, GitHub, etc.). This pulls the latest resources from the provider API and stores them locally for discovery.",
+    {
+      integrationId: z.string().describe("Integration ID (UUID) from list_org_integrations"),
+    },
+    async (args) => {
+      return executeTool("sync_integration", async () => {
+        const result = await ctx.api.integrations.syncIntegration(args.integrationId);
+        return {
+          success: result.success,
+          resourcesSynced: result.projectsCount,
+          message: result.success 
+            ? `Successfully synced ${result.projectsCount} resources`
+            : `Sync failed: ${result.error || result.details || 'Unknown error'}`,
+        };
+      });
+    }
+  );
+
+  server.tool(
     "setup_application_from_resources",
     "Create a new application and link discovered resources to it in one step. Combines create_application + link_resources.",
     {

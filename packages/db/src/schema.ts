@@ -1352,6 +1352,99 @@ export const tursoDatabases = pgTable("turso_databases", {
 }));
 
 // ===================================
+// Gitea Repositories (org-wide tracking)
+// ===================================
+
+export const giteaRepositories = pgTable("gitea_repositories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  giteaRepoId: text("gitea_repo_id").notNull().unique(),
+  name: text("name").notNull(),
+  fullName: text("full_name").notNull(),
+  description: text("description"),
+  htmlUrl: text("html_url"),
+  cloneUrl: text("clone_url"),
+  sshUrl: text("ssh_url"),
+  defaultBranch: varchar("default_branch", { length: 100 }),
+  owner: varchar("owner", { length: 255 }),
+  private: boolean("private").default(false),
+  fork: boolean("fork").default(false),
+  archived: boolean("archived").default(false),
+  stars: integer("stars").default(0),
+  forks: integer("forks").default(0),
+  openIssues: integer("open_issues").default(0),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  giteaRepoIdIdx: index("gitea_repositories_gitea_repo_id_idx").on(table.giteaRepoId),
+  applicationIdIdx: index("gitea_repositories_application_id_idx").on(table.applicationId),
+  fullNameIdx: index("gitea_repositories_full_name_idx").on(table.fullName),
+}));
+
+// ===================================
+// GitHub Repositories (org-wide tracking)
+// ===================================
+
+export const githubRepositories = pgTable("github_repositories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  githubRepoId: text("github_repo_id").notNull().unique(),
+  name: text("name").notNull(),
+  fullName: text("full_name").notNull(),
+  description: text("description"),
+  htmlUrl: text("html_url"),
+  cloneUrl: text("clone_url"),
+  sshUrl: text("ssh_url"),
+  defaultBranch: varchar("default_branch", { length: 100 }),
+  owner: varchar("owner", { length: 255 }),
+  private: boolean("private").default(false),
+  fork: boolean("fork").default(false),
+  archived: boolean("archived").default(false),
+  stars: integer("stars").default(0),
+  forks: integer("forks").default(0),
+  openIssues: integer("open_issues").default(0),
+  topics: text("topics"), // JSON array of topics
+  language: varchar("language", { length: 100 }),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  githubRepoIdIdx: index("github_repositories_github_repo_id_idx").on(table.githubRepoId),
+  applicationIdIdx: index("github_repositories_application_id_idx").on(table.applicationId),
+  fullNameIdx: index("github_repositories_full_name_idx").on(table.fullName),
+}));
+
+// ===================================
+// K3s Deployments (org-wide tracking)
+// ===================================
+
+export const k3sDeployments = pgTable("k3s_deployments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  k3sDeploymentId: text("k3s_deployment_id").notNull().unique(), // namespace/name format
+  name: text("name").notNull(),
+  namespace: varchar("namespace", { length: 255 }).notNull(),
+  clusterName: varchar("cluster_name", { length: 255 }),
+  kind: varchar("kind", { length: 50 }).notNull().default("Deployment"), // Deployment, StatefulSet, DaemonSet
+  replicas: integer("replicas").default(1),
+  readyReplicas: integer("ready_replicas").default(0),
+  image: text("image"),
+  containerPort: integer("container_port"),
+  serviceType: varchar("service_type", { length: 50 }), // ClusterIP, NodePort, LoadBalancer
+  ingressHost: text("ingress_host"),
+  status: varchar("status", { length: 50 }).default("unknown"), // running, pending, failed, unknown
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  orgIntegrationId: uuid("org_integration_id").references(() => orgIntegrations.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  k3sDeploymentIdIdx: index("k3s_deployments_k3s_deployment_id_idx").on(table.k3sDeploymentId),
+  applicationIdIdx: index("k3s_deployments_application_id_idx").on(table.applicationId),
+  namespaceIdx: index("k3s_deployments_namespace_idx").on(table.namespace),
+  clusterNameIdx: index("k3s_deployments_cluster_name_idx").on(table.clusterName),
+}));
+
+// ===================================
 // Product Type Exports
 // ===================================
 
@@ -1378,6 +1471,15 @@ export type NewNeonProject = typeof neonProjects.$inferInsert;
 
 export type TursoDatabase = typeof tursoDatabases.$inferSelect;
 export type NewTursoDatabase = typeof tursoDatabases.$inferInsert;
+
+export type GiteaRepository = typeof giteaRepositories.$inferSelect;
+export type NewGiteaRepository = typeof giteaRepositories.$inferInsert;
+
+export type GithubRepository = typeof githubRepositories.$inferSelect;
+export type NewGithubRepository = typeof githubRepositories.$inferInsert;
+
+export type K3sDeployment = typeof k3sDeployments.$inferSelect;
+export type NewK3sDeployment = typeof k3sDeployments.$inferInsert;
 
 // ===================================
 // Integration Resources (Generic Resource Linking)

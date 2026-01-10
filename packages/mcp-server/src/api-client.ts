@@ -126,7 +126,31 @@ export class ControlPanelClient {
       applicationSecrets: (appId: string) => this.query<ApplicationSecretsResult>("integrations.applicationSecrets", appId),
       exportEnv: (input: ExportEnvInput) => this.query<ExportEnvResult>("integrations.exportEnv", input),
       listOrgIntegrations: () => this.query<OrgIntegrationSummary[]>("integrations.listOrgIntegrations"),
+      syncIntegration: (integrationId: string) => this.syncIntegrationById(integrationId),
     };
+  }
+
+  private async syncIntegrationById(integrationId: string): Promise<SyncIntegrationResult> {
+    const url = `${this.baseUrl}/api/integrations/org/${integrationId}/sync`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ApiError(
+        `Sync failed: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+
+    return response.json() as Promise<SyncIntegrationResult>;
   }
 
   get clusters() {
@@ -787,4 +811,12 @@ export interface UpdateAiDevStatusInput {
 export interface RejectAiDevInput {
   id: string;
   reason: string;
+}
+
+export interface SyncIntegrationResult {
+  success: boolean;
+  projectsCount: number;
+  projects: unknown[];
+  error?: string;
+  details?: string;
 }

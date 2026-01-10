@@ -15,6 +15,9 @@ import {
   expoProjects, 
   neonProjects, 
   tursoDatabases,
+  giteaRepositories,
+  githubRepositories,
+  k3sDeployments,
   integrationResources,
   eq, 
   isNull,
@@ -64,11 +67,14 @@ export const integrationsRouter = router({
 
       const unlinkedOnly = input?.unlinkedOnly ?? false;
 
-      const [vercel, expo, neon, turso, genericResources] = await Promise.all([
+      const [vercel, expo, neon, turso, gitea, github, k3s, genericResources] = await Promise.all([
         ctx.db.select().from(vercelProjects).orderBy(desc(vercelProjects.updatedAt)),
         ctx.db.select().from(expoProjects).orderBy(desc(expoProjects.updatedAt)),
         ctx.db.select().from(neonProjects).orderBy(desc(neonProjects.updatedAt)),
         ctx.db.select().from(tursoDatabases).orderBy(desc(tursoDatabases.updatedAt)),
+        ctx.db.select().from(giteaRepositories).orderBy(desc(giteaRepositories.updatedAt)),
+        ctx.db.select().from(githubRepositories).orderBy(desc(githubRepositories.updatedAt)),
+        ctx.db.select().from(k3sDeployments).orderBy(desc(k3sDeployments.updatedAt)),
         ctx.db.select().from(integrationResources).orderBy(desc(integrationResources.updatedAt)),
       ]);
 
@@ -130,6 +136,48 @@ export const integrationsRouter = router({
         });
       }
 
+      for (const r of gitea) {
+        if (unlinkedOnly && r.applicationId) continue;
+        resources.push({
+          id: r.id,
+          provider: "gitea",
+          resourceType: "repository",
+          resourceId: r.giteaRepoId,
+          name: r.name,
+          metadata: { fullName: r.fullName, htmlUrl: r.htmlUrl, defaultBranch: r.defaultBranch, private: r.private },
+          applicationId: r.applicationId,
+          integrationId: r.orgIntegrationId || "",
+        });
+      }
+
+      for (const r of github) {
+        if (unlinkedOnly && r.applicationId) continue;
+        resources.push({
+          id: r.id,
+          provider: "github",
+          resourceType: "repository",
+          resourceId: r.githubRepoId,
+          name: r.name,
+          metadata: { fullName: r.fullName, htmlUrl: r.htmlUrl, defaultBranch: r.defaultBranch, language: r.language, private: r.private },
+          applicationId: r.applicationId,
+          integrationId: r.orgIntegrationId || "",
+        });
+      }
+
+      for (const d of k3s) {
+        if (unlinkedOnly && d.applicationId) continue;
+        resources.push({
+          id: d.id,
+          provider: "k3s",
+          resourceType: "deployment",
+          resourceId: d.k3sDeploymentId,
+          name: d.name,
+          metadata: { namespace: d.namespace, clusterName: d.clusterName, replicas: d.replicas, status: d.status, image: d.image },
+          applicationId: d.applicationId,
+          integrationId: d.orgIntegrationId || "",
+        });
+      }
+
       for (const g of genericResources) {
         if (unlinkedOnly && g.applicationId) continue;
         resources.push({
@@ -147,7 +195,7 @@ export const integrationsRouter = router({
       const byProvider: Record<string, DiscoveredResource[]> = {};
       for (const r of resources) {
         if (!byProvider[r.provider]) byProvider[r.provider] = [];
-        byProvider[r.provider].push(r);
+        byProvider[r.provider]!.push(r);
       }
 
       return {
@@ -173,11 +221,14 @@ export const integrationsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
       }
 
-      const [vercel, expo, neon, turso, appIntegrationsList, genericResources] = await Promise.all([
+      const [vercel, expo, neon, turso, gitea, github, k3s, appIntegrationsList, genericResources] = await Promise.all([
         ctx.db.select().from(vercelProjects).where(eq(vercelProjects.applicationId, applicationId)),
         ctx.db.select().from(expoProjects).where(eq(expoProjects.applicationId, applicationId)),
         ctx.db.select().from(neonProjects).where(eq(neonProjects.applicationId, applicationId)),
         ctx.db.select().from(tursoDatabases).where(eq(tursoDatabases.applicationId, applicationId)),
+        ctx.db.select().from(giteaRepositories).where(eq(giteaRepositories.applicationId, applicationId)),
+        ctx.db.select().from(githubRepositories).where(eq(githubRepositories.applicationId, applicationId)),
+        ctx.db.select().from(k3sDeployments).where(eq(k3sDeployments.applicationId, applicationId)),
         ctx.db.select().from(appIntegrations).where(eq(appIntegrations.applicationId, applicationId)),
         ctx.db.select().from(integrationResources).where(eq(integrationResources.applicationId, applicationId)),
       ]);
@@ -221,6 +272,36 @@ export const integrationsRouter = router({
           resourceId: t.tursoDbId,
           name: t.name,
           metadata: { group: t.group, primaryRegion: t.primaryRegion, hostname: t.hostname },
+        });
+      }
+
+      for (const r of gitea) {
+        resources.push({
+          provider: "gitea",
+          resourceType: "repository",
+          resourceId: r.giteaRepoId,
+          name: r.name,
+          metadata: { fullName: r.fullName, htmlUrl: r.htmlUrl, defaultBranch: r.defaultBranch },
+        });
+      }
+
+      for (const r of github) {
+        resources.push({
+          provider: "github",
+          resourceType: "repository",
+          resourceId: r.githubRepoId,
+          name: r.name,
+          metadata: { fullName: r.fullName, htmlUrl: r.htmlUrl, defaultBranch: r.defaultBranch, language: r.language },
+        });
+      }
+
+      for (const d of k3s) {
+        resources.push({
+          provider: "k3s",
+          resourceType: "deployment",
+          resourceId: d.k3sDeploymentId,
+          name: d.name,
+          metadata: { namespace: d.namespace, clusterName: d.clusterName, replicas: d.replicas, status: d.status },
         });
       }
 
@@ -305,6 +386,24 @@ export const integrationsRouter = router({
                 .update(tursoDatabases)
                 .set({ applicationId: input.applicationId, updatedAt: new Date() })
                 .where(eq(tursoDatabases.tursoDbId, resource.resourceId));
+              break;
+            case "gitea":
+              await ctx.db
+                .update(giteaRepositories)
+                .set({ applicationId: input.applicationId, updatedAt: new Date() })
+                .where(eq(giteaRepositories.giteaRepoId, resource.resourceId));
+              break;
+            case "github":
+              await ctx.db
+                .update(githubRepositories)
+                .set({ applicationId: input.applicationId, updatedAt: new Date() })
+                .where(eq(githubRepositories.githubRepoId, resource.resourceId));
+              break;
+            case "k3s":
+              await ctx.db
+                .update(k3sDeployments)
+                .set({ applicationId: input.applicationId, updatedAt: new Date() })
+                .where(eq(k3sDeployments.k3sDeploymentId, resource.resourceId));
               break;
             default:
               await ctx.db

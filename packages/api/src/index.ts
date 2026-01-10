@@ -12,3 +12,4 @@ export type {
   ApplicationResource, 
   IntegrationSecret 
 } from "./routers/integrations";
+export { validateApiKey, hashApiKey, generateApiKey } from "./lib/api-keys";
