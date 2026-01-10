@@ -32,6 +32,6 @@ export const config = {
      * - /_next/* (Next.js internals)
      * - /favicon.ico, /robots.txt (static files)
      */
-    '/((?!auth|api/auth|api/trpc|api/health|api/webhooks|api/db|api/apps/sync|api/resources|api/integrations/org/.*/sync|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!auth|api/auth|api/trpc|api/health|api/webhooks|api/db|api/apps/sync|api/resources|api/integrations/org/.*/sync|api/integrations/k8s|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ]
 }
