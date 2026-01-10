@@ -208,6 +208,41 @@ export function registerAppSetupTools(server: McpServer, ctx: McpContext): void 
   );
 
   server.tool(
+    "discover_k8s_deployments",
+    "Discover K8s deployments from all namespaces, create k3sDeployments records, and auto-link to applications by matching namespace/deployment names to app slugs. Also detects integrations from secrets.",
+    {
+      linkToApplications: z.boolean().optional().default(true).describe("Auto-link deployments to applications by matching slugs (default: true)"),
+      syncIntegrations: z.boolean().optional().default(true).describe("Detect integrations from K8s secrets (default: true)"),
+    },
+    async (args) => {
+      return executeTool("discover_k8s_deployments", async () => {
+        const result = await ctx.api.integrations.discoverK8sDeployments({
+          linkToApplications: args.linkToApplications ?? true,
+          syncIntegrations: args.syncIntegrations ?? true,
+        });
+        return {
+          success: result.success,
+          namespacesScanned: result.namespacesScanned,
+          deploymentsDiscovered: result.deploymentsDiscovered,
+          deploymentsCreated: result.deploymentsCreated,
+          deploymentsUpdated: result.deploymentsUpdated,
+          applicationsLinked: result.applicationsLinked,
+          integrationsDetected: result.integrationsDetected,
+          errors: result.errors,
+          deployments: result.deployments.map((d: Record<string, unknown>) => ({
+            namespace: d.namespace,
+            name: d.name,
+            status: d.status,
+            application: d.applicationName,
+            environment: d.environment,
+            integrations: d.integrations,
+          })),
+        };
+      });
+    }
+  );
+
+  server.tool(
     "sync_k8s_integrations",
     "Sync integrations from Kubernetes secrets. Detects CLERK_, STRIPE_, TURSO_, NEON_, AWS_, etc. prefixes in K8s secrets and creates corresponding appIntegration entries linked to deployments.",
     {

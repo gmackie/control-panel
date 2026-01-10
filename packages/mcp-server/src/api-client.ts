@@ -128,6 +128,7 @@ export class ControlPanelClient {
       listOrgIntegrations: () => this.query<OrgIntegrationSummary[]>("integrations.listOrgIntegrations"),
       syncIntegration: (integrationId: string) => this.syncIntegrationById(integrationId),
       syncK8sIntegrations: (input?: SyncK8sIntegrationsInput) => this.syncK8sIntegrationsRequest(input),
+      discoverK8sDeployments: (input?: DiscoverK8sDeploymentsInput) => this.discoverK8sDeploymentsRequest(input),
       getAppIntegrationsByEnvironment: (appId: string) => this.query<AppIntegrationsByEnvironmentResult>("integrations.getAppIntegrationsByEnvironment", appId),
     };
   }
@@ -177,6 +178,30 @@ export class ControlPanelClient {
     }
 
     return response.json() as Promise<SyncK8sIntegrationsResult>;
+  }
+
+  private async discoverK8sDeploymentsRequest(input?: DiscoverK8sDeploymentsInput): Promise<DiscoverK8sDeploymentsResult> {
+    const url = `${this.baseUrl}/api/integrations/k8s/discover`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(input || {}),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ApiError(
+        `K8s discover failed: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+
+    return response.json() as Promise<DiscoverK8sDeploymentsResult>;
   }
 
   get clusters() {
@@ -862,6 +887,33 @@ export interface SyncK8sIntegrationsResult {
     applicationId: string;
     applicationName: string;
     namespace: string;
+    environment: string;
+    integrations: string[];
+  }>;
+}
+
+export interface DiscoverK8sDeploymentsInput {
+  linkToApplications?: boolean;
+  syncIntegrations?: boolean;
+}
+
+export interface DiscoverK8sDeploymentsResult {
+  success: boolean;
+  namespacesScanned: number;
+  deploymentsDiscovered: number;
+  deploymentsCreated: number;
+  deploymentsUpdated: number;
+  applicationsLinked: number;
+  integrationsDetected: number;
+  errors: string[];
+  deployments: Array<{
+    namespace: string;
+    name: string;
+    image: string | null;
+    replicas: number;
+    status: string;
+    applicationId: string | null;
+    applicationName: string | null;
     environment: string;
     integrations: string[];
   }>;
