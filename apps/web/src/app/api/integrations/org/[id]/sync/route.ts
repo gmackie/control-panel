@@ -413,10 +413,13 @@ export async function POST(
 
     const authHeader = request.headers.get('authorization');
     const apiKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const internalKey = request.headers.get('x-internal-key');
     
     let isAuthorized = false;
     
-    if (apiKey) {
+    if (internalKey === process.env.NEXTAUTH_SECRET) {
+      isAuthorized = true;
+    } else if (apiKey) {
       const validation = await validateApiKey(db, apiKey);
       isAuthorized = validation.valid;
     } else {

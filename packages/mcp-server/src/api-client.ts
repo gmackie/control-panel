@@ -127,6 +127,8 @@ export class ControlPanelClient {
       exportEnv: (input: ExportEnvInput) => this.query<ExportEnvResult>("integrations.exportEnv", input),
       listOrgIntegrations: () => this.query<OrgIntegrationSummary[]>("integrations.listOrgIntegrations"),
       syncIntegration: (integrationId: string) => this.syncIntegrationById(integrationId),
+      syncK8sIntegrations: (input?: SyncK8sIntegrationsInput) => this.syncK8sIntegrationsRequest(input),
+      getAppIntegrationsByEnvironment: (appId: string) => this.query<AppIntegrationsByEnvironmentResult>("integrations.getAppIntegrationsByEnvironment", appId),
     };
   }
 
@@ -151,6 +153,30 @@ export class ControlPanelClient {
     }
 
     return response.json() as Promise<SyncIntegrationResult>;
+  }
+
+  private async syncK8sIntegrationsRequest(input?: SyncK8sIntegrationsInput): Promise<SyncK8sIntegrationsResult> {
+    const url = `${this.baseUrl}/api/integrations/k8s/sync`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(input || {}),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ApiError(
+        `K8s sync failed: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+
+    return response.json() as Promise<SyncK8sIntegrationsResult>;
   }
 
   get clusters() {
@@ -819,4 +845,47 @@ export interface SyncIntegrationResult {
   projects: unknown[];
   error?: string;
   details?: string;
+}
+
+export interface SyncK8sIntegrationsInput {
+  applicationId?: string;
+}
+
+export interface SyncK8sIntegrationsResult {
+  success: boolean;
+  applicationsProcessed: number;
+  integrationsCreated: number;
+  integrationsUpdated: number;
+  deploymentsLinked: number;
+  errors: string[];
+  details: Array<{
+    applicationId: string;
+    applicationName: string;
+    namespace: string;
+    environment: string;
+    integrations: string[];
+  }>;
+}
+
+export interface AppIntegrationByEnvironment {
+  id: string;
+  applicationId: string;
+  provider: string;
+  name: string | null;
+  integrationId: string | null;
+  environment: string | null;
+  k8sDeploymentId: string | null;
+  k8sNamespace: string | null;
+  detectedFromK8s: boolean | null;
+  enabled: boolean;
+  config: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AppIntegrationsByEnvironmentResult {
+  applicationId: string;
+  byEnvironment: Record<string, AppIntegrationByEnvironment[]>;
+  totalIntegrations: number;
+  environments: string[];
 }

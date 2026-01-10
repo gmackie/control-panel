@@ -208,6 +208,68 @@ export function registerAppSetupTools(server: McpServer, ctx: McpContext): void 
   );
 
   server.tool(
+    "sync_k8s_integrations",
+    "Sync integrations from Kubernetes secrets. Detects CLERK_, STRIPE_, TURSO_, NEON_, AWS_, etc. prefixes in K8s secrets and creates corresponding appIntegration entries linked to deployments.",
+    {
+      applicationId: z.string().optional().describe("Sync for a specific application ID (optional - syncs all if not provided)"),
+    },
+    async (args) => {
+      return executeTool("sync_k8s_integrations", async () => {
+        const result = await ctx.api.integrations.syncK8sIntegrations({ applicationId: args.applicationId });
+        return {
+          success: result.success,
+          applicationsProcessed: result.applicationsProcessed,
+          integrationsCreated: result.integrationsCreated,
+          integrationsUpdated: result.integrationsUpdated,
+          deploymentsLinked: result.deploymentsLinked,
+          errors: result.errors,
+          details: result.details.map(d => ({
+            application: d.applicationName,
+            namespace: d.namespace,
+            environment: d.environment,
+            integrations: d.integrations,
+          })),
+        };
+      });
+    }
+  );
+
+  server.tool(
+    "get_app_integrations_by_environment",
+    "Get all integrations for an application grouped by environment (production, staging, shared). Shows which integrations were detected from K8s secrets.",
+    {
+      applicationId: z.string().describe("Application ID (UUID)"),
+    },
+    async (args) => {
+      return executeTool("get_app_integrations_by_environment", async () => {
+        const result = await ctx.api.integrations.getAppIntegrationsByEnvironment(args.applicationId);
+        
+        const formatIntegrations = (integrations: typeof result.byEnvironment[string]) =>
+          integrations.map(i => ({
+            id: i.id,
+            provider: i.provider,
+            name: i.name,
+            namespace: i.k8sNamespace,
+            detectedFromK8s: i.detectedFromK8s,
+            enabled: i.enabled,
+          }));
+
+        return {
+          applicationId: result.applicationId,
+          totalIntegrations: result.totalIntegrations,
+          environments: result.environments,
+          byEnvironment: Object.fromEntries(
+            Object.entries(result.byEnvironment).map(([env, integrations]) => [
+              env,
+              formatIntegrations(integrations),
+            ])
+          ),
+        };
+      });
+    }
+  );
+
+  server.tool(
     "setup_application_from_resources",
     "Create a new application and link discovered resources to it in one step. Combines create_application + link_resources.",
     {

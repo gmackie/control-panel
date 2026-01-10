@@ -1260,6 +1260,10 @@ export const appIntegrations = pgTable("app_integrations", {
   provider: varchar("provider", { length: 100 }).notNull(),
   name: text("name").notNull(),
   enabled: boolean("enabled").notNull().default(true),
+  environment: varchar("environment", { length: 50 }),
+  k8sDeploymentId: uuid("k8s_deployment_id").references(() => k3sDeployments.id, { onDelete: "set null" }),
+  k8sNamespace: varchar("k8s_namespace", { length: 255 }),
+  detectedFromK8s: boolean("detected_from_k8s").notNull().default(false),
   config: text("config"),
   credentials: text("credentials"),
   productIntegrationId: uuid("product_integration_id").references(() => productIntegrations.id),
@@ -1269,6 +1273,9 @@ export const appIntegrations = pgTable("app_integrations", {
 }, (table) => ({
   applicationIdIdx: index("app_integrations_application_id_idx").on(table.applicationId),
   providerIdx: index("app_integrations_provider_idx").on(table.provider),
+  environmentIdx: index("app_integrations_environment_idx").on(table.environment),
+  k8sDeploymentIdx: index("app_integrations_k8s_deployment_idx").on(table.k8sDeploymentId),
+  uniqueAppProviderEnv: index("app_integrations_unique_app_provider_env").on(table.applicationId, table.provider, table.environment),
 }));
 
 // ===================================

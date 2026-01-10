@@ -650,4 +650,125 @@ export const integrationsRouter = router({
         lastSyncStatus: i.lastSyncStatus,
       }));
     }),
+
+  /**
+   * Sync an org integration by ID
+   * Calls the sync endpoint internally
+   */
+  syncOrgIntegration: protectedProcedure
+    .input(z.string())
+    .mutation(async ({ ctx, input: integrationId }) => {
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const [integration] = await ctx.db
+        .select()
+        .from(orgIntegrations)
+        .where(eq(orgIntegrations.id, integrationId))
+        .limit(1);
+
+      if (!integration) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Integration not found" });
+      }
+
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      const syncUrl = `${baseUrl}/api/integrations/org/${integrationId}/sync`;
+      
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Key': process.env.NEXTAUTH_SECRET || '',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new TRPCError({ 
+          code: "INTERNAL_SERVER_ERROR", 
+          message: error.error || 'Sync failed',
+        });
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        provider: integration.provider,
+        name: integration.name,
+        projectsCount: result.projectsCount || 0,
+      };
+    }),
+
+  /**
+   * Sync K8s integrations for all applications
+   * Detects integrations (Clerk, Stripe, Turso, etc.) from K8s secrets
+   */
+  syncK8sIntegrations: protectedProcedure
+    .input(z.object({
+      applicationId: z.string().optional(),
+    }).optional())
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      const syncUrl = `${baseUrl}/api/integrations/k8s/sync`;
+      
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Key': process.env.NEXTAUTH_SECRET || '',
+        },
+        body: JSON.stringify({ applicationId: input?.applicationId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new TRPCError({ 
+          code: "INTERNAL_SERVER_ERROR", 
+          message: error.error || 'K8s sync failed',
+        });
+      }
+
+      return await response.json();
+    }),
+
+  /**
+   * Get application integrations grouped by environment
+   */
+  getAppIntegrationsByEnvironment: publicProcedure
+    .input(z.string())
+    .query(async ({ ctx, input: applicationId }) => {
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const integrations = await ctx.db
+        .select()
+        .from(appIntegrations)
+        .where(eq(appIntegrations.applicationId, applicationId))
+        .orderBy(appIntegrations.environment, appIntegrations.provider);
+
+      const byEnvironment: Record<string, typeof integrations> = {
+        production: [],
+        staging: [],
+        shared: [],
+      };
+
+      for (const integration of integrations) {
+        const env = integration.environment || 'shared';
+        if (!byEnvironment[env]) byEnvironment[env] = [];
+        byEnvironment[env].push(integration);
+      }
+
+      return {
+        applicationId,
+        byEnvironment,
+        totalIntegrations: integrations.length,
+        environments: Object.keys(byEnvironment).filter(e => byEnvironment[e].length > 0),
+      };
+    }),
 });
