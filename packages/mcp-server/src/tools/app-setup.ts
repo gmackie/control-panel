@@ -305,6 +305,64 @@ export function registerAppSetupTools(server: McpServer, ctx: McpContext): void 
   );
 
   server.tool(
+    "get_application_config",
+    "Get comprehensive application configuration showing all resources organized by environment. Shows how the app slug maps to K8s namespaces, deployments, integrations (Clerk, Stripe, etc.), and shared resources (Vercel, Expo, repos).",
+    {
+      applicationId: z.string().describe("Application ID (UUID)"),
+    },
+    async (args) => {
+      return executeTool("get_application_config", async () => {
+        const config = await ctx.api.integrations.getApplicationConfig(args.applicationId);
+        
+        return {
+          application: config.application,
+          resourceMapping: config.resourceMapping,
+          production: {
+            deployments: config.environments.production.deployments.map(d => ({
+              name: d.name,
+              namespace: d.namespace,
+              status: d.status,
+              replicas: `${d.readyReplicas}/${d.replicas}`,
+              image: d.image?.split(':').pop() || 'latest',
+            })),
+            integrations: config.environments.production.integrationsByProvider,
+          },
+          staging: {
+            deployments: config.environments.staging.deployments.map(d => ({
+              name: d.name,
+              namespace: d.namespace,
+              status: d.status,
+              replicas: `${d.readyReplicas}/${d.replicas}`,
+              image: d.image?.split(':').pop() || 'latest',
+            })),
+            integrations: config.environments.staging.integrationsByProvider,
+          },
+          shared: {
+            vercel: config.sharedResources.vercel.map(v => ({
+              name: v.name,
+              url: v.productionUrl,
+              framework: v.framework,
+            })),
+            expo: config.sharedResources.expo.map(e => ({
+              name: e.name,
+              slug: e.slug,
+            })),
+            repositories: [
+              ...config.sharedResources.repositories.gitea.map(r => ({ provider: 'gitea', name: r.fullName })),
+              ...config.sharedResources.repositories.github.map(r => ({ provider: 'github', name: r.fullName })),
+            ],
+            databases: [
+              ...config.sharedResources.databases.neon.map(d => ({ provider: 'neon', name: d.name })),
+              ...config.sharedResources.databases.turso.map(d => ({ provider: 'turso', name: d.name, group: d.group })),
+            ],
+          },
+          summary: config.summary,
+        };
+      });
+    }
+  );
+
+  server.tool(
     "setup_application_from_resources",
     "Create a new application and link discovered resources to it in one step. Combines create_application + link_resources.",
     {

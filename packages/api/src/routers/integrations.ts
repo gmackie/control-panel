@@ -684,14 +684,14 @@ export const integrationsRouter = router({
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const error = await response.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
         throw new TRPCError({ 
           code: "INTERNAL_SERVER_ERROR", 
           message: error.error || 'Sync failed',
         });
       }
 
-      const result = await response.json();
+      const result = await response.json() as { projectsCount?: number };
       return {
         success: true,
         provider: integration.provider,
@@ -726,7 +726,7 @@ export const integrationsRouter = router({
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const error = await response.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
         throw new TRPCError({ 
           code: "INTERNAL_SERVER_ERROR", 
           message: error.error || 'K8s sync failed',
@@ -768,7 +768,178 @@ export const integrationsRouter = router({
         applicationId,
         byEnvironment,
         totalIntegrations: integrations.length,
-        environments: Object.keys(byEnvironment).filter(e => byEnvironment[e].length > 0),
+        environments: Object.keys(byEnvironment).filter(e => (byEnvironment[e]?.length ?? 0) > 0),
+      };
+    }),
+
+  /**
+   * Get comprehensive application configuration across all environments
+   * Shows how the slug maps to resources and what's configured per environment
+   */
+  getApplicationConfig: publicProcedure
+    .input(z.string())
+    .query(async ({ ctx, input: applicationId }) => {
+      if (!ctx.db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const [app] = await ctx.db
+        .select()
+        .from(applications)
+        .where(eq(applications.id, applicationId))
+        .limit(1);
+
+      if (!app) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+      }
+
+      const [
+        deployments,
+        integrations,
+        vercel,
+        expo,
+        neon,
+        turso,
+        gitea,
+        github,
+      ] = await Promise.all([
+        ctx.db.select().from(k3sDeployments).where(eq(k3sDeployments.applicationId, applicationId)),
+        ctx.db.select().from(appIntegrations).where(eq(appIntegrations.applicationId, applicationId)),
+        ctx.db.select().from(vercelProjects).where(eq(vercelProjects.applicationId, applicationId)),
+        ctx.db.select().from(expoProjects).where(eq(expoProjects.applicationId, applicationId)),
+        ctx.db.select().from(neonProjects).where(eq(neonProjects.applicationId, applicationId)),
+        ctx.db.select().from(tursoDatabases).where(eq(tursoDatabases.applicationId, applicationId)),
+        ctx.db.select().from(giteaRepositories).where(eq(giteaRepositories.applicationId, applicationId)),
+        ctx.db.select().from(githubRepositories).where(eq(githubRepositories.applicationId, applicationId)),
+      ]);
+
+      const SHARED_PROVIDERS = ['vercel', 'expo', 'github', 'gitea'];
+      const PER_ENV_PROVIDERS = ['clerk', 'stripe', 'turso', 'neon', 'supabase', 'database', 'redis', 'sentry', 'posthog'];
+
+      const productionDeployments = deployments.filter(d => 
+        !d.namespace.includes('-staging') && !d.namespace.includes('-beta') && !d.namespace.includes('-dev')
+      );
+      const stagingDeployments = deployments.filter(d => 
+        d.namespace.includes('-staging') || d.namespace.includes('-beta') || d.namespace.includes('-dev')
+      );
+
+      const productionIntegrations = integrations.filter(i => i.environment === 'production');
+      const stagingIntegrations = integrations.filter(i => i.environment === 'staging');
+      const sharedIntegrations = integrations.filter(i => !i.environment || i.environment === 'shared');
+
+      const formatIntegration = (i: typeof integrations[0]) => ({
+        id: i.id,
+        provider: i.provider,
+        name: i.name,
+        enabled: i.enabled,
+        detectedFromK8s: i.detectedFromK8s,
+        k8sNamespace: i.k8sNamespace,
+      });
+
+      const formatDeployment = (d: typeof deployments[0]) => ({
+        id: d.id,
+        name: d.name,
+        namespace: d.namespace,
+        image: d.image,
+        replicas: d.replicas,
+        readyReplicas: d.readyReplicas,
+        status: d.status,
+        ingressHost: d.ingressHost,
+      });
+
+      return {
+        application: {
+          id: app.id,
+          name: app.name,
+          slug: app.slug,
+          description: app.description,
+          repositoryUrl: app.repositoryUrl,
+          status: app.status,
+        },
+        resourceMapping: {
+          expectedNamespaces: {
+            production: app.slug,
+            staging: `${app.slug}-staging`,
+          },
+          expectedVercelProject: app.slug,
+          expectedExpoApp: app.slug,
+        },
+        environments: {
+          production: {
+            deployments: productionDeployments.map(formatDeployment),
+            integrations: productionIntegrations.map(formatIntegration),
+            integrationsByProvider: Object.fromEntries(
+              PER_ENV_PROVIDERS.map(p => [
+                p,
+                productionIntegrations.filter(i => i.provider === p).map(formatIntegration),
+              ]).filter(([, v]) => (v as unknown[]).length > 0)
+            ),
+          },
+          staging: {
+            deployments: stagingDeployments.map(formatDeployment),
+            integrations: stagingIntegrations.map(formatIntegration),
+            integrationsByProvider: Object.fromEntries(
+              PER_ENV_PROVIDERS.map(p => [
+                p,
+                stagingIntegrations.filter(i => i.provider === p).map(formatIntegration),
+              ]).filter(([, v]) => (v as unknown[]).length > 0)
+            ),
+          },
+        },
+        sharedResources: {
+          vercel: vercel.map(v => ({
+            id: v.id,
+            name: v.name,
+            vercelProjectId: v.vercelProjectId,
+            framework: v.framework,
+            productionUrl: v.productionUrl,
+          })),
+          expo: expo.map(e => ({
+            id: e.id,
+            name: e.name,
+            expoProjectId: e.expoProjectId,
+            slug: e.slug,
+          })),
+          repositories: {
+            gitea: gitea.map(g => ({
+              id: g.id,
+              name: g.name,
+              fullName: g.fullName,
+              cloneUrl: g.cloneUrl,
+              defaultBranch: g.defaultBranch,
+            })),
+            github: github.map(g => ({
+              id: g.id,
+              name: g.name,
+              fullName: g.fullName,
+              cloneUrl: g.cloneUrl,
+              defaultBranch: g.defaultBranch,
+            })),
+          },
+          databases: {
+            neon: neon.map(n => ({
+              id: n.id,
+              name: n.name,
+              neonProjectId: n.neonProjectId,
+            })),
+            turso: turso.map(t => ({
+              id: t.id,
+              name: t.name,
+              tursoDbId: t.tursoDbId,
+              group: t.group,
+            })),
+          },
+          integrations: sharedIntegrations.map(formatIntegration),
+        },
+        summary: {
+          totalDeployments: deployments.length,
+          totalIntegrations: integrations.length,
+          hasProduction: productionDeployments.length > 0,
+          hasStaging: stagingDeployments.length > 0,
+          hasVercel: vercel.length > 0,
+          hasExpo: expo.length > 0,
+          hasRepository: gitea.length > 0 || github.length > 0,
+        },
       };
     }),
 });

@@ -130,6 +130,7 @@ export class ControlPanelClient {
       syncK8sIntegrations: (input?: SyncK8sIntegrationsInput) => this.syncK8sIntegrationsRequest(input),
       discoverK8sDeployments: (input?: DiscoverK8sDeploymentsInput) => this.discoverK8sDeploymentsRequest(input),
       getAppIntegrationsByEnvironment: (appId: string) => this.query<AppIntegrationsByEnvironmentResult>("integrations.getAppIntegrationsByEnvironment", appId),
+      getApplicationConfig: (appId: string) => this.query<ApplicationConfigResult>("integrations.getApplicationConfig", appId),
     };
   }
 
@@ -940,4 +941,142 @@ export interface AppIntegrationsByEnvironmentResult {
   byEnvironment: Record<string, AppIntegrationByEnvironment[]>;
   totalIntegrations: number;
   environments: string[];
+}
+
+export interface ApplicationConfigResult {
+  application: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    repositoryUrl: string | null;
+    status: string;
+  };
+  resourceMapping: {
+    expectedNamespaces: {
+      production: string;
+      staging: string;
+    };
+    expectedVercelProject: string;
+    expectedExpoApp: string;
+  };
+  environments: {
+    production: {
+      deployments: Array<{
+        id: string;
+        name: string;
+        namespace: string;
+        image: string | null;
+        replicas: number | null;
+        readyReplicas: number | null;
+        status: string | null;
+        ingressHost: string | null;
+      }>;
+      integrations: Array<{
+        id: string;
+        provider: string;
+        name: string | null;
+        enabled: boolean;
+        detectedFromK8s: boolean | null;
+        k8sNamespace: string | null;
+      }>;
+      integrationsByProvider: Record<string, Array<{
+        id: string;
+        provider: string;
+        name: string | null;
+        enabled: boolean;
+        detectedFromK8s: boolean | null;
+        k8sNamespace: string | null;
+      }>>;
+    };
+    staging: {
+      deployments: Array<{
+        id: string;
+        name: string;
+        namespace: string;
+        image: string | null;
+        replicas: number | null;
+        readyReplicas: number | null;
+        status: string | null;
+        ingressHost: string | null;
+      }>;
+      integrations: Array<{
+        id: string;
+        provider: string;
+        name: string | null;
+        enabled: boolean;
+        detectedFromK8s: boolean | null;
+        k8sNamespace: string | null;
+      }>;
+      integrationsByProvider: Record<string, Array<{
+        id: string;
+        provider: string;
+        name: string | null;
+        enabled: boolean;
+        detectedFromK8s: boolean | null;
+        k8sNamespace: string | null;
+      }>>;
+    };
+  };
+  sharedResources: {
+    vercel: Array<{
+      id: string;
+      name: string;
+      vercelProjectId: string;
+      framework: string | null;
+      productionUrl: string | null;
+    }>;
+    expo: Array<{
+      id: string;
+      name: string;
+      expoProjectId: string;
+      slug: string | null;
+    }>;
+    repositories: {
+      gitea: Array<{
+        id: string;
+        name: string;
+        fullName: string;
+        cloneUrl: string | null;
+        defaultBranch: string | null;
+      }>;
+      github: Array<{
+        id: string;
+        name: string;
+        fullName: string;
+        cloneUrl: string | null;
+        defaultBranch: string | null;
+      }>;
+    };
+    databases: {
+      neon: Array<{
+        id: string;
+        name: string;
+        neonProjectId: string;
+      }>;
+      turso: Array<{
+        id: string;
+        name: string;
+        tursoDbId: string;
+        group: string | null;
+      }>;
+    };
+    integrations: Array<{
+      id: string;
+      provider: string;
+      name: string | null;
+      enabled: boolean;
+      detectedFromK8s: boolean | null;
+      k8sNamespace: string | null;
+    }>;
+  };
+  summary: {
+    totalDeployments: number;
+    totalIntegrations: number;
+    hasProduction: boolean;
+    hasStaging: boolean;
+    hasVercel: boolean;
+    hasExpo: boolean;
+    hasRepository: boolean;
+  };
 }
