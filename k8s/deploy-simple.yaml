@@ -143,6 +143,19 @@ spec:
               name: control-panel-secrets
               key: AZURE_AD_TENANT_ID
               optional: true
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: DATABASE_URL
+        - name: K3S_SA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: K3S_SA_TOKEN
+              optional: true
+        - name: K8S_API_URL
+          value: "https://5.78.106.236:6443"
         - name: NEON_DATABASE_URL
           valueFrom:
             secretKeyRef:

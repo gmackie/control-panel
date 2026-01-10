@@ -1,15 +1,24 @@
 #!/bin/bash
 
-# Script to update cluster management secrets from .env.local
+# Script to update cluster management secrets from env files
 
 echo "📋 Updating control panel secrets for production deployment..."
 
-# Load environment variables from .env.local
-if [ -f .env.local ]; then
-    export $(cat .env.local | grep -v '^#' | xargs)
-    echo "✅ Loaded environment variables from .env.local"
+# Load environment variables - try multiple locations
+ENV_FILE=""
+if [ -f "apps/web/.env.development.local" ]; then
+    ENV_FILE="apps/web/.env.development.local"
+elif [ -f "apps/web/.env.local" ]; then
+    ENV_FILE="apps/web/.env.local"
+elif [ -f ".env.local" ]; then
+    ENV_FILE=".env.local"
+fi
+
+if [ -n "$ENV_FILE" ]; then
+    export $(cat "$ENV_FILE" | grep -v '^#' | grep -v '^$' | xargs)
+    echo "✅ Loaded environment variables from $ENV_FILE"
 else
-    echo "❌ Error: .env.local file not found"
+    echo "❌ Error: No .env file found"
     exit 1
 fi
 
@@ -46,21 +55,21 @@ stringData:
   GITEA_TOKEN: "${GITEA_TOKEN:-}"
   K3S_SA_TOKEN: "${K3S_SA_TOKEN:-}"
   HETZNER_API_TOKEN: "${HETZNER_API_TOKEN:-}"
-  K8S_API_URL: "https://5.78.125.172:6443"
+  K8S_API_URL: "https://5.78.106.236:6443"
 EOF
 
 echo "📤 Copying patch file to k3s cluster..."
-scp /tmp/secret-patch.yaml root@5.78.125.172:/tmp/
+scp /tmp/secret-patch.yaml root@5.78.106.236:/tmp/
 
 echo "🔄 Patching secrets on k3s cluster..."
-ssh root@5.78.125.172 "/usr/local/bin/k3s kubectl patch secret control-panel-secrets -n control-panel --patch-file=/tmp/secret-patch.yaml"
+ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl patch secret control-panel-secrets -n control-panel --patch-file=/tmp/secret-patch.yaml"
 
 echo "🧹 Cleaning up temporary files..."
 rm -f /tmp/secret-patch.yaml
-ssh root@5.78.125.172 "rm -f /tmp/secret-patch.yaml"
+ssh root@5.78.106.236 "rm -f /tmp/secret-patch.yaml"
 
 echo "🔄 Restarting deployment to apply new secrets..."
-ssh root@5.78.125.172 "/usr/local/bin/k3s kubectl rollout restart deployment/control-panel -n control-panel"
+ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl rollout restart deployment/control-panel -n control-panel"
 
 echo "✅ Secrets updated and deployment restarted!"
 echo ""
@@ -69,4 +78,4 @@ echo "📋 Configured authentication providers:"
 [ -n "$AZURE_AD_CLIENT_ID" ] && echo "   ✓ Microsoft Entra ID (gmacko.com SSO)"
 echo ""
 echo "🔍 Check deployment status with:"
-echo "   ssh root@5.78.125.172 '/usr/local/bin/k3s kubectl get pods -n control-panel'"
+echo "   ssh root@5.78.106.236 '/usr/local/bin/k3s kubectl get pods -n control-panel'"

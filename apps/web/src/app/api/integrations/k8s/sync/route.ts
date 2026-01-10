@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getDbAsync } from '@/lib/db';
 import { applications, appIntegrations, k3sDeployments, eq, and } from '@repo/db';
 import { getK8sClient } from '@/lib/cluster/k8s-api-client';
+import { validateApiKey } from '@repo/api';
 
 const INTEGRATION_PREFIXES: Record<string, { name: string; provider: string }> = {
   CLERK_: { name: 'Clerk Auth', provider: 'clerk' },
@@ -73,11 +74,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not available' }, { status: 503 });
     }
 
+    const authHeader = request.headers.get('authorization');
+    const apiKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     const internalKey = request.headers.get('x-internal-key');
+    
     let isAuthorized = false;
     
     if (internalKey === process.env.NEXTAUTH_SECRET) {
       isAuthorized = true;
+    } else if (apiKey) {
+      const validation = await validateApiKey(db, apiKey);
+      isAuthorized = validation.valid;
     } else {
       const session = await getServerSession(authOptions);
       isAuthorized = !!session?.user;

@@ -307,9 +307,11 @@ spec:
               key: LINEAR_CLONE_API_KEY
               optional: true
         
-        # Build DATABASE_URL from components
         - name: DATABASE_URL
-          value: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: DATABASE_URL
         
         # Secrets encryption key for application secrets storage
         - name: SECRETS_ENCRYPTION_KEY

@@ -2,8 +2,8 @@
 
 # Build and deploy control panel to k3s
 
-echo "🚀 Building control panel image..."
-docker build -t control-panel:latest .
+echo "🚀 Building control panel image for amd64..."
+docker build --platform linux/amd64 -t control-panel:latest .
 
 echo "📦 Saving image to tar file..."
 docker save control-panel:latest -o control-panel.tar
