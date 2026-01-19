@@ -37,35 +37,8 @@ data:
   HARBOR_PROJECT: "library"
   GITEA_ORG: "gmac"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: control-panel-secrets
-  namespace: control-panel
-type: Opaque
-stringData:
-  # Placeholder values - update with ./update-cluster-secrets.sh
-  NEXTAUTH_SECRET: "placeholder-change-me-32-chars-min"
-  GITHUB_CLIENT_ID: "placeholder"
-  GITHUB_CLIENT_SECRET: "placeholder"
-  # Microsoft Entra ID (Azure AD) - for SSO with gmacko.com domain
-  AZURE_AD_CLIENT_ID: ""
-  AZURE_AD_CLIENT_SECRET: ""
-  AZURE_AD_TENANT_ID: ""
-  # Database
-  DATABASE_USER: "control_panel_user"
-  DATABASE_PASSWORD: "placeholder"
-  NEON_DATABASE_URL: ""
-  # Infrastructure
-  GITEA_TOKEN: "placeholder"
-  DRONE_TOKEN: ""
-  HARBOR_USERNAME: "admin"
-  HARBOR_PASSWORD: "placeholder"
-  ARGOCD_TOKEN: ""
-  WEBHOOK_SECRET: "placeholder"
-  GITHUB_TOKEN: ""
-  K3S_SA_TOKEN: "placeholder"
-  HETZNER_API_TOKEN: ""
+# NOTE: Secret removed from this file to prevent overwriting existing secrets.
+# Use ./update-cluster-secrets.sh or 03-secret.yaml for initial secret creation.
 ---
 apiVersion: v1
 kind: ServiceAccount
