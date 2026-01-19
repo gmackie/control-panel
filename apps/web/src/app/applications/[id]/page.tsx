@@ -53,8 +53,11 @@ import {
 import { SecretsList } from "@/components/applications/SecretsList";
 import { IntegrationsList } from "@/components/applications/IntegrationsList";
 import { ApplicationSettings } from "@/components/applications/ApplicationSettings";
+import { ProviderBadges } from "@/components/applications/ProviderBadges";
+import { DeploymentTrigger } from "@/components/applications/DeploymentTrigger";
 import { TaskBoard } from "@/components/tasks";
 import { ReleaseList } from "@/components/releases";
+import { EditableText } from "@/components/ui/editable-text";
 
 import { UnifiedApplication, ApplicationStatus } from "@/types/unified-app";
 
@@ -140,6 +143,31 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
       setActionMessage({ type: 'success', message: 'Rollback initiated!' });
       setTimeout(() => setActionMessage(null), 3000);
       refetch();
+    },
+    onError: (error: Error) => {
+      setActionMessage({ type: 'error', message: error.message });
+      setTimeout(() => setActionMessage(null), 5000);
+    },
+  });
+
+  // Update application mutation
+  const updateAppMutation = useMutation({
+    mutationFn: async (updates: { name?: string; description?: string }) => {
+      const response = await fetch(`/api/applications/${encodeURIComponent(params.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to update application");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["unified-app", params.id] });
+      setActionMessage({ type: 'success', message: 'Application updated!' });
+      setTimeout(() => setActionMessage(null), 3000);
     },
     onError: (error: Error) => {
       setActionMessage({ type: 'error', message: error.message });
@@ -260,7 +288,15 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold">{app.name}</h1>
+              <EditableText
+                value={app.name}
+                onSave={async (name) => {
+                  await updateAppMutation.mutateAsync({ name });
+                }}
+                as="h1"
+                className="text-3xl font-bold"
+                maxLength={100}
+              />
               {getStatusBadge(app.status)}
               {app.tags?.includes("typescript") && (
                 <Badge variant="secondary">TypeScript</Badge>
@@ -269,12 +305,39 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
             <p className="text-gray-400 mt-1">
               {app.repository?.fullName || app.slug}
             </p>
-            {app.description && (
-              <p className="text-gray-400 mt-2 max-w-2xl">{app.description}</p>
-            )}
+            <ProviderBadges
+              gitProvider={app.repository?.provider}
+              className="mt-2"
+            />
+            <EditableText
+              value={app.description || ""}
+              onSave={async (description) => {
+                await updateAppMutation.mutateAsync({ description });
+              }}
+              as="p"
+              className="text-gray-400 mt-2 max-w-2xl"
+              placeholder="Add a description..."
+              emptyText="Add a description..."
+              multiline
+              maxLength={500}
+            />
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <DeploymentTrigger
+            appId={params.id}
+            appName={app.name}
+            currentCommit={latestCommit?.sha}
+            variant="compact"
+            onDeploymentComplete={(success) => {
+              if (success) {
+                setActionMessage({ type: 'success', message: 'Deployment completed successfully!' });
+              } else {
+                setActionMessage({ type: 'error', message: 'Deployment failed. Check logs for details.' });
+              }
+              setTimeout(() => setActionMessage(null), 5000);
+            }}
+          />
           {app.repository?.url && (
             <a href={app.repository.url} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" size="sm">

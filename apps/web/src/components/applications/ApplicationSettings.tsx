@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,9 +35,14 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
   Download,
   Trash2,
+  Triangle,
+  Smartphone,
+  Database,
+  Github,
 } from "lucide-react";
 
 interface ApplicationSettingsProps {
@@ -65,10 +71,48 @@ interface K8sDeployment {
   image?: string;
 }
 
+interface VercelProject {
+  id: string;
+  name: string;
+  framework?: string;
+  productionUrl?: string;
+}
+
+interface ExpoProject {
+  id: string;
+  name: string;
+  slug?: string;
+  platform?: string;
+}
+
+interface NeonProject {
+  id: string;
+  name: string;
+  regionId?: string;
+}
+
+interface TursoDatabase {
+  id: string;
+  name: string;
+  group?: string;
+  primaryRegion?: string;
+  hostname?: string;
+}
+
+interface GitHubRepo {
+  id: string;
+  name: string;
+  full_name: string;
+  html_url: string;
+  clone_url: string;
+}
+
 interface AppConfig {
   id: string;
   name: string;
   slug: string;
+  vercelProjectId?: string;
+  expoProjectId?: string;
   repository?: {
     provider: string;
     url: string;
@@ -83,14 +127,27 @@ interface AppConfig {
     namespace: string;
     cluster: string;
   };
+  vercelProject?: VercelProject;
+  expoProject?: ExpoProject;
+  neonProject?: NeonProject;
+  tursoDatabase?: TursoDatabase;
+  githubRepo?: GitHubRepo;
 }
 
 export function ApplicationSettings({ applicationId }: ApplicationSettingsProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [showRepoDialog, setShowRepoDialog] = useState(false);
+  const [showGitHubDialog, setShowGitHubDialog] = useState(false);
   const [showRegistryDialog, setShowRegistryDialog] = useState(false);
   const [showDeploymentDialog, setShowDeploymentDialog] = useState(false);
+  const [showVercelDialog, setShowVercelDialog] = useState(false);
+  const [showExpoDialog, setShowExpoDialog] = useState(false);
+  const [showNeonDialog, setShowNeonDialog] = useState(false);
+  const [showTursoDialog, setShowTursoDialog] = useState(false);
   const [showExtractSecretsDialog, setShowExtractSecretsDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [extractingSecrets, setExtractingSecrets] = useState(false);
   const [extractResult, setExtractResult] = useState<{ success: boolean; message: string; secrets?: string[] } | null>(null);
 
@@ -133,6 +190,56 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
     enabled: showDeploymentDialog,
   });
 
+  const { data: vercelProjects, isLoading: loadingVercel } = useQuery<{ projects: VercelProject[] }>({
+    queryKey: ["vercel-projects"],
+    queryFn: async () => {
+      const response = await fetch("/api/vercel/projects");
+      if (!response.ok) throw new Error("Failed to fetch Vercel projects");
+      return response.json();
+    },
+    enabled: showVercelDialog,
+  });
+
+  const { data: expoProjects, isLoading: loadingExpo } = useQuery<{ projects: ExpoProject[] }>({
+    queryKey: ["expo-projects"],
+    queryFn: async () => {
+      const response = await fetch("/api/expo/projects");
+      if (!response.ok) throw new Error("Failed to fetch Expo projects");
+      return response.json();
+    },
+    enabled: showExpoDialog,
+  });
+
+  const { data: neonProjects, isLoading: loadingNeon } = useQuery<{ projects: NeonProject[] }>({
+    queryKey: ["neon-projects"],
+    queryFn: async () => {
+      const response = await fetch("/api/neon/projects");
+      if (!response.ok) throw new Error("Failed to fetch Neon projects");
+      return response.json();
+    },
+    enabled: showNeonDialog,
+  });
+
+  const { data: tursoDatabases, isLoading: loadingTurso } = useQuery<{ databases: TursoDatabase[] }>({
+    queryKey: ["turso-databases"],
+    queryFn: async () => {
+      const response = await fetch("/api/turso/databases");
+      if (!response.ok) throw new Error("Failed to fetch Turso databases");
+      return response.json();
+    },
+    enabled: showTursoDialog,
+  });
+
+  const { data: githubRepos, isLoading: loadingGitHub } = useQuery<{ repos: GitHubRepo[] }>({
+    queryKey: ["github-repos"],
+    queryFn: async () => {
+      const response = await fetch("/api/github/repos");
+      if (!response.ok) throw new Error("Failed to fetch GitHub repos");
+      return response.json();
+    },
+    enabled: showGitHubDialog,
+  });
+
   const updateAppMutation = useMutation({
     mutationFn: async (updates: Partial<AppConfig>) => {
       const response = await fetch(`/api/applications/${applicationId}`, {
@@ -147,10 +254,38 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
       queryClient.invalidateQueries({ queryKey: ["app-config", applicationId] });
       queryClient.invalidateQueries({ queryKey: ["unified-app", applicationId] });
       setShowRepoDialog(false);
+      setShowGitHubDialog(false);
       setShowRegistryDialog(false);
       setShowDeploymentDialog(false);
+      setShowVercelDialog(false);
+      setShowExpoDialog(false);
+      setShowNeonDialog(false);
+      setShowTursoDialog(false);
     },
   });
+
+  const deleteAppMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/applications/${applicationId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to delete application");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      router.push("/applications");
+    },
+  });
+
+  const handleDelete = () => {
+    if (deleteConfirmation === app?.name) {
+      deleteAppMutation.mutate();
+    }
+  };
 
   const handleLinkRepo = (repo: GiteaRepo) => {
     updateAppMutation.mutate({
@@ -361,6 +496,202 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               <p className="text-sm text-gray-500">No deployment linked</p>
             )}
           </div>
+
+          {/* Vercel Project */}
+          <div className="p-4 border border-gray-800 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Triangle className="h-5 w-5 text-white" />
+                <h3 className="font-medium">Vercel Project</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowVercelDialog(true)}
+              >
+                <Link2 className="h-4 w-4 mr-2" />
+                {app?.vercelProjectId ? "Change" : "Link"}
+              </Button>
+            </div>
+            {app?.vercelProject ? (
+              <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{app.vercelProject.name}</p>
+                  <p className="text-sm text-gray-400">
+                    {app.vercelProject.framework || "Unknown framework"} • {app.vercelProject.productionUrl || "No production URL"}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateAppMutation.mutate({ vercelProjectId: null } as any)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Unlink className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No Vercel project linked</p>
+            )}
+          </div>
+
+          {/* Expo Project */}
+          <div className="p-4 border border-gray-800 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-violet-500" />
+                <h3 className="font-medium">Expo Project</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowExpoDialog(true)}
+              >
+                <Link2 className="h-4 w-4 mr-2" />
+                {app?.expoProjectId ? "Change" : "Link"}
+              </Button>
+            </div>
+            {app?.expoProject ? (
+              <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{app.expoProject.name}</p>
+                  <p className="text-sm text-gray-400">
+                    {app.expoProject.slug || "No slug"} • {app.expoProject.platform || "All platforms"}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateAppMutation.mutate({ expoProjectId: null } as any)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Unlink className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No Expo project linked</p>
+            )}
+          </div>
+
+          {/* GitHub Repository */}
+          <div className="p-4 border border-gray-800 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Github className="h-5 w-5 text-gray-400" />
+                <h3 className="font-medium">GitHub Repository</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGitHubDialog(true)}
+              >
+                <Link2 className="h-4 w-4 mr-2" />
+                {app?.githubRepo ? "Change" : "Link"}
+              </Button>
+            </div>
+            {app?.githubRepo ? (
+              <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{app.githubRepo.full_name}</p>
+                  <a
+                    href={app.githubRepo.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:underline flex items-center gap-1"
+                  >
+                    {app.githubRepo.html_url}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateAppMutation.mutate({ githubRepo: null } as any)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Unlink className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No GitHub repository linked</p>
+            )}
+          </div>
+
+          {/* Neon Database */}
+          <div className="p-4 border border-gray-800 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-emerald-500" />
+                <h3 className="font-medium">Neon Database</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNeonDialog(true)}
+              >
+                <Link2 className="h-4 w-4 mr-2" />
+                {app?.neonProject ? "Change" : "Link"}
+              </Button>
+            </div>
+            {app?.neonProject ? (
+              <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{app.neonProject.name}</p>
+                  <p className="text-sm text-gray-400">
+                    Region: {app.neonProject.regionId || "Unknown"}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateAppMutation.mutate({ neonProject: null } as any)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Unlink className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No Neon database linked</p>
+            )}
+          </div>
+
+          {/* Turso Database */}
+          <div className="p-4 border border-gray-800 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-cyan-500" />
+                <h3 className="font-medium">Turso Database</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTursoDialog(true)}
+              >
+                <Link2 className="h-4 w-4 mr-2" />
+                {app?.tursoDatabase ? "Change" : "Link"}
+              </Button>
+            </div>
+            {app?.tursoDatabase ? (
+              <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{app.tursoDatabase.name}</p>
+                  <p className="text-sm text-gray-400">
+                    {app.tursoDatabase.group || "Default group"} • {app.tursoDatabase.primaryRegion || "Unknown region"}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateAppMutation.mutate({ tursoDatabase: null } as any)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Unlink className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No Turso database linked</p>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -429,7 +760,14 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 Permanently remove this application and all its data
               </p>
             </div>
-            <Button variant="outline" className="border-red-800 text-red-400 hover:bg-red-950">
+            <Button
+              variant="outline"
+              className="border-red-800 text-red-400 hover:bg-red-950"
+              onClick={() => {
+                setDeleteConfirmation("");
+                setShowDeleteDialog(true);
+              }}
+            >
               Delete
             </Button>
           </div>
@@ -596,6 +934,261 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 Import to Secrets
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Vercel Dialog */}
+      <Dialog open={showVercelDialog} onOpenChange={setShowVercelDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Link Vercel Project</DialogTitle>
+            <DialogDescription>
+              Select a Vercel project to link to this application
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 overflow-auto space-y-2 py-4">
+            {loadingVercel ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : vercelProjects?.projects?.length ? (
+              vercelProjects.projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => updateAppMutation.mutate({ vercelProjectId: project.id } as any)}
+                  className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-white hover:bg-gray-900/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{project.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {project.framework || "Unknown"} • {project.productionUrl || "No URL"}
+                      </p>
+                    </div>
+                    <Triangle className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No Vercel projects found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expo Dialog */}
+      <Dialog open={showExpoDialog} onOpenChange={setShowExpoDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Link Expo Project</DialogTitle>
+            <DialogDescription>
+              Select an Expo project to link to this application
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 overflow-auto space-y-2 py-4">
+            {loadingExpo ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : expoProjects?.projects?.length ? (
+              expoProjects.projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => updateAppMutation.mutate({ expoProjectId: project.id } as any)}
+                  className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-violet-500 hover:bg-violet-950/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{project.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {project.slug || "No slug"} • {project.platform || "All platforms"}
+                      </p>
+                    </div>
+                    <Smartphone className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No Expo projects found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* GitHub Dialog */}
+      <Dialog open={showGitHubDialog} onOpenChange={setShowGitHubDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Link GitHub Repository</DialogTitle>
+            <DialogDescription>
+              Select a GitHub repository to link to this application
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 overflow-auto space-y-2 py-4">
+            {loadingGitHub ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : githubRepos?.repos?.length ? (
+              githubRepos.repos.map((repo) => (
+                <button
+                  key={repo.id}
+                  onClick={() => updateAppMutation.mutate({ githubRepo: repo } as any)}
+                  className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-gray-500 hover:bg-gray-900/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{repo.full_name}</p>
+                      <p className="text-sm text-gray-400 truncate">{repo.html_url}</p>
+                    </div>
+                    <Github className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No GitHub repositories found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Neon Dialog */}
+      <Dialog open={showNeonDialog} onOpenChange={setShowNeonDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Link Neon Database</DialogTitle>
+            <DialogDescription>
+              Select a Neon PostgreSQL database to link to this application
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 overflow-auto space-y-2 py-4">
+            {loadingNeon ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : neonProjects?.projects?.length ? (
+              neonProjects.projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => updateAppMutation.mutate({ neonProject: project } as any)}
+                  className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-emerald-500 hover:bg-emerald-950/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{project.name}</p>
+                      <p className="text-sm text-gray-400">
+                        Region: {project.regionId || "Unknown"}
+                      </p>
+                    </div>
+                    <Database className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No Neon projects found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Turso Dialog */}
+      <Dialog open={showTursoDialog} onOpenChange={setShowTursoDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Link Turso Database</DialogTitle>
+            <DialogDescription>
+              Select a Turso database to link to this application
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-96 overflow-auto space-y-2 py-4">
+            {loadingTurso ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : tursoDatabases?.databases?.length ? (
+              tursoDatabases.databases.map((db) => (
+                <button
+                  key={db.id}
+                  onClick={() => updateAppMutation.mutate({ tursoDatabase: db } as any)}
+                  className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-cyan-500 hover:bg-cyan-950/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{db.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {db.group || "Default"} • {db.primaryRegion || "Unknown region"}
+                      </p>
+                    </div>
+                    <Database className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No Turso databases found</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Application
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2">
+              <p>
+                This will permanently delete <strong className="text-white">{app?.name}</strong> and all associated data:
+              </p>
+              <ul className="list-disc list-inside text-sm space-y-1 text-gray-400">
+                <li>Tasks and task comments</li>
+                <li>Releases and release assets</li>
+                <li>Integrations and configurations</li>
+                <li>Activity logs and notifications</li>
+              </ul>
+              <p className="text-yellow-500 text-sm">
+                Linked resources (K8s deployments, Vercel projects, databases) will NOT be deleted.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="delete-confirm" className="text-sm text-gray-400">
+              Type <strong className="text-white">{app?.name}</strong> to confirm
+            </Label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              placeholder={app?.name}
+              className="mt-2"
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={deleteAppMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteConfirmation !== app?.name || deleteAppMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteAppMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Application"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
