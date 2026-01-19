@@ -19,8 +19,9 @@ import {
   BarChart3,
   Activity,
 } from "lucide-react";
-import { INTEGRATION_TEMPLATES, Application } from "@/types/applications";
-import { AddIntegrationModal } from "./AddIntegrationModal";
+import { INTEGRATION_TEMPLATES, Application, ApplicationIntegration } from "@/types/applications";
+import { LinkIntegrationModal } from "./LinkIntegrationModal";
+import { IntegrationDetailSheet } from "./IntegrationDetailSheet";
 import Link from "next/link";
 
 interface IntegrationsListProps {
@@ -45,8 +46,9 @@ const INTEGRATION_HUB_MAP: Record<string, { tab: string; icon: React.ReactNode; 
 };
 
 export function IntegrationsList({ applicationId }: IntegrationsListProps) {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [selectedIntegration, setSelectedIntegration] = useState<ApplicationIntegration | null>(null);
+  const [showDetailSheet, setShowDetailSheet] = useState(false);
   const [healthChecks, setHealthChecks] = useState<Record<string, IntegrationHealth>>({});
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
 
@@ -97,7 +99,7 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
   const integrations = Object.entries(INTEGRATION_TEMPLATES);
 
   const isIntegrationConnected = (provider: string) => {
-    return application?.integrations.some(i => i.provider === provider && i.status === 'connected');
+    return application?.integrations?.some(i => i.provider === provider && i.status === 'connected') ?? false;
   };
 
   const getHealthStatus = (provider: string) => {
@@ -105,9 +107,9 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
     return healthChecks[normalizedProvider];
   };
 
-  const handleAddIntegration = (provider: string) => {
-    setSelectedProvider(provider);
-    setShowAddModal(true);
+  const handleViewIntegration = (integration: ApplicationIntegration) => {
+    setSelectedIntegration(integration);
+    setShowDetailSheet(true);
   };
 
   // Get quick stats for connected integrations
@@ -198,7 +200,6 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
           </div>
         </Card>
 
-        {/* All Available Integrations */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -207,6 +208,10 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
                 Connect third-party services to your application
               </p>
             </div>
+            <Button onClick={() => setShowLinkModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Link Integration
+            </Button>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -263,7 +268,17 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
                   <div className="flex gap-2">
                     {connected ? (
                       <>
-                        <Button variant="outline" size="sm" className="flex-1">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => {
+                            const appIntegration = application?.integrations?.find(i => i.provider === key);
+                            if (appIntegration) {
+                              handleViewIntegration(appIntegration);
+                            }
+                          }}
+                        >
                           <Settings className="h-3 w-3 mr-1" />
                           Configure
                         </Button>
@@ -280,7 +295,7 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
                         variant="outline" 
                         size="sm" 
                         className="w-full"
-                        onClick={() => handleAddIntegration(key)}
+                        onClick={() => setShowLinkModal(true)}
                       >
                         <Plus className="h-3 w-3 mr-1" />
                         Connect
@@ -294,21 +309,24 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
         </Card>
       </div>
 
-      {showAddModal && selectedProvider && (
-        <AddIntegrationModal
-          applicationId={applicationId}
-          provider={selectedProvider}
-          onClose={() => {
-            setShowAddModal(false);
-            setSelectedProvider(null);
-          }}
-          onSuccess={() => {
-            setShowAddModal(false);
-            setSelectedProvider(null);
-            checkHealthStatus(); // Refresh health after adding integration
-          }}
-        />
-      )}
+      <LinkIntegrationModal
+        applicationId={applicationId}
+        open={showLinkModal}
+        onOpenChange={setShowLinkModal}
+        onSuccess={() => {
+          checkHealthStatus();
+        }}
+      />
+
+      <IntegrationDetailSheet
+        applicationId={applicationId}
+        integration={selectedIntegration}
+        open={showDetailSheet}
+        onOpenChange={setShowDetailSheet}
+        onUnlinked={() => {
+          checkHealthStatus();
+        }}
+      />
     </>
   );
 }
