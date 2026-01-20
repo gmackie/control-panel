@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Users,
   BarChart3,
+  LayoutDashboard,
   CreditCard,
   Settings,
   ExternalLink,
@@ -61,6 +62,56 @@ import { EditableText } from "@/components/ui/editable-text";
 
 import { UnifiedApplication, ApplicationStatus } from "@/types/unified-app";
 
+type ObservabilityResponse = {
+  success: boolean;
+  data?: {
+    namespace?: string;
+    appLabel?: string;
+    grafana?: {
+      dashboardUrl?: string;
+      alertsUrl?: string;
+    };
+    loki?: {
+      exploreUrl?: string;
+      query?: string;
+    };
+    prometheus?: {
+      exploreUrl?: string;
+      labels?: string;
+      queries?: {
+        cpu?: string;
+        memory?: string;
+      };
+    };
+  };
+};
+
+type GrafanaAppResponse = {
+  success: boolean;
+  data?: {
+    environment: string;
+    namespace: string;
+    appLabel: string;
+    configured: {
+      enabled: boolean;
+      dashboardUid?: string;
+      dashboardSlug?: string;
+      dashboardUrl?: string;
+      updatedAt?: string;
+    };
+    dashboards: Array<{
+      uid: string;
+      slug: string;
+      title: string;
+      url: string;
+      tags: string[];
+    }>;
+    previews: {
+      panels: Array<{ id: number; title: string }>;
+    };
+  };
+};
+
 export default function ApplicationDetailsPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
   const queryClient = useQueryClient();
@@ -78,6 +129,55 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
   });
 
   const app = data?.data;
+
+  const { data: observabilityData } = useQuery<ObservabilityResponse>({
+    queryKey: ["app-observability", params.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/apps/${encodeURIComponent(params.id)}/observability`);
+      if (!response.ok) return { success: false };
+      return response.json();
+    },
+    enabled: Boolean(params.id),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const observability = observabilityData?.data;
+
+  const [grafanaPreviewError, setGrafanaPreviewError] = useState<string | null>(null);
+
+  const {
+    data: grafanaData,
+    isLoading: isGrafanaLoading,
+    refetch: refetchGrafana,
+  } = useQuery<GrafanaAppResponse>({
+    queryKey: ["app-grafana", params.id, "production"],
+    queryFn: async () => {
+      const response = await fetch(`/api/apps/${encodeURIComponent(params.id)}/grafana?environment=production`);
+      if (!response.ok) return { success: false };
+      return response.json();
+    },
+    enabled: Boolean(params.id),
+    staleTime: 60 * 1000,
+  });
+
+  const setupGrafanaMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/apps/${encodeURIComponent(params.id)}/grafana/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ environment: "production" }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || body?.error || "Failed to setup dashboard");
+      }
+      return response.json();
+    },
+    onSuccess: async () => {
+      setGrafanaPreviewError(null);
+      await queryClient.invalidateQueries({ queryKey: ["app-grafana", params.id, "production"] });
+    },
+  });
 
   // Trigger Build mutation
   const triggerBuildMutation = useMutation({
@@ -253,6 +353,7 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
     { id: "overview", label: "Overview", icon: Code },
     { id: "metrics", label: "Metrics", icon: Activity },
     { id: "logs", label: "Logs", icon: Code },
+    { id: "grafana", label: "Grafana", icon: LayoutDashboard },
     { id: "alerts", label: "Alerts", icon: AlertTriangle },
     { id: "tasks", label: "Tasks", icon: CheckSquare },
     { id: "releases", label: "Releases", icon: Tag },
@@ -547,6 +648,52 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
               )}
             </Card>
 
+            {/* Observability */}
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Observability
+              </h2>
+
+              <div className="flex flex-wrap gap-2">
+                {observability?.grafana?.dashboardUrl && (
+                  <Button asChild variant="outline" size="sm" className="w-full sm:w-auto justify-start">
+                    <a href={observability.grafana.dashboardUrl} target="_blank" rel="noopener noreferrer">
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Grafana Dashboard
+                      <ExternalLink className="h-4 w-4 ml-2" />
+                    </a>
+                  </Button>
+                )}
+
+                {observability?.loki?.exploreUrl && (
+                  <Button asChild variant="outline" size="sm" className="w-full sm:w-auto justify-start">
+                    <a href={observability.loki.exploreUrl} target="_blank" rel="noopener noreferrer">
+                      <Code className="h-4 w-4 mr-2" />
+                      Explore Logs (Loki)
+                      <ExternalLink className="h-4 w-4 ml-2" />
+                    </a>
+                  </Button>
+                )}
+
+                {observability?.prometheus?.exploreUrl && (
+                  <Button asChild variant="outline" size="sm" className="w-full sm:w-auto justify-start">
+                    <a href={observability.prometheus.exploreUrl} target="_blank" rel="noopener noreferrer">
+                      <Activity className="h-4 w-4 mr-2" />
+                      Explore Metrics (Prometheus)
+                      <ExternalLink className="h-4 w-4 ml-2" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+
+              {!observability?.grafana?.dashboardUrl &&
+                !observability?.loki?.exploreUrl &&
+                !observability?.prometheus?.exploreUrl && (
+                  <p className="text-sm text-gray-400 mt-3">No observability links available for this application.</p>
+                )}
+            </Card>
+
             {/* Quick Actions */}
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
@@ -651,6 +798,141 @@ export default function ApplicationDetailsPage(props: { params: Promise<{ id: st
         {/* Logs Tab */}
         <TabsContent value="logs">
           <LogsTab appId={params.id} />
+        </TabsContent>
+
+        {/* Grafana Tab */}
+        <TabsContent value="grafana" className="space-y-4">
+          <Card className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <LayoutDashboard className="h-5 w-5" />
+                  Grafana
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  Viewer-only previews rendered by control-panel (no Grafana login).
+                </p>
+              </div>
+              <div className="flex gap-2 items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchGrafana()}
+                  disabled={isGrafanaLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isGrafanaLoading ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setupGrafanaMutation.mutate()}
+                disabled={setupGrafanaMutation.isPending}
+              >
+                {setupGrafanaMutation.isPending ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                )}
+                Setup Dashboard
+              </Button>
+
+              {grafanaData?.data?.configured?.dashboardUrl && (
+                <a href={grafanaData.data.configured.dashboardUrl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Dashboard
+                  </Button>
+                </a>
+              )}
+            </div>
+
+            {setupGrafanaMutation.isError && (
+              <Alert className="mt-4 border-red-500/30 bg-red-500/5">
+                <AlertDescription className="text-red-400">
+                  {setupGrafanaMutation.error instanceof Error
+                    ? setupGrafanaMutation.error.message
+                    : "Failed to set up dashboard"}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {grafanaData?.success && grafanaData.data && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Namespace</span>
+                    <Badge variant="secondary">{grafanaData.data.namespace}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Configured</span>
+                    <Badge variant={grafanaData.data.configured.dashboardUid ? "default" : "secondary"}>
+                      {grafanaData.data.configured.dashboardUid ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {grafanaData.data.dashboards.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-400">Matching Dashboards</p>
+                    <div className="space-y-2">
+                      {grafanaData.data.dashboards.slice(0, 3).map((d) => (
+                        <a key={d.uid} href={d.url} target="_blank" rel="noopener noreferrer" className="block">
+                          <div className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900 transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium truncate">{d.title}</p>
+                              <ExternalLink className="h-4 w-4 text-gray-500" />
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Panel Previews</h3>
+
+            {grafanaPreviewError && (
+              <Alert className="mb-4 border-yellow-500/30 bg-yellow-500/5">
+                <AlertDescription className="text-yellow-300">
+                  {grafanaPreviewError}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {grafanaData?.data?.configured?.dashboardUid && grafanaData.data.configured.dashboardSlug ? (
+              <div className="grid grid-cols-1 gap-4">
+                {[1, 2, 3].map((panelId) => (
+                  <div key={panelId} className="bg-gray-900/30 rounded-lg border border-gray-800 overflow-hidden">
+                    <img
+                      src={`/api/apps/${encodeURIComponent(params.id)}/grafana/render?dashboardUid=${encodeURIComponent(
+                        grafanaData.data!.configured.dashboardUid!
+                      )}&dashboardSlug=${encodeURIComponent(
+                        grafanaData.data!.configured.dashboardSlug!
+                      )}&panelId=${panelId}&width=900&height=260&from=now-6h&to=now`}
+                      alt={`Grafana panel ${panelId}`}
+                      className="w-full h-auto"
+                      loading="lazy"
+                      onError={() =>
+                        setGrafanaPreviewError(
+                          "Panel preview failed to render. Grafana image renderer may not be installed/enabled."
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Set up a dashboard to see panel previews.</p>
+            )}
+          </Card>
         </TabsContent>
 
         {/* Alerts Tab */}
