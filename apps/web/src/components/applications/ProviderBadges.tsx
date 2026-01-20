@@ -3,7 +3,6 @@
 import { Badge } from "@/components/ui/badge";
 import { GitBranch, Cloud, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { GitProviderType, DeployProviderType, DbProviderType } from "@/types/applications";
 
 interface ProviderConfig {
   label: string;
@@ -64,9 +63,9 @@ export function ProviderBadge({ type, provider, showIcon = true, size = "sm" }: 
 }
 
 interface ProviderBadgesProps {
-  gitProvider?: GitProviderType | string;
-  deployProvider?: DeployProviderType | string;
-  dbProvider?: DbProviderType | string;
+  gitProvider?: string;
+  deployProvider?: string;
+  dbProvider?: string;
   showIcons?: boolean;
   size?: "sm" | "md";
   className?: string;
@@ -102,9 +101,9 @@ export function ProviderBadges({
 }
 
 interface ProviderStackProps {
-  gitProvider?: GitProviderType | string;
-  deployProvider?: DeployProviderType | string;
-  dbProvider?: DbProviderType | string;
+  gitProvider?: string;
+  deployProvider?: string;
+  dbProvider?: string;
 }
 
 export function ProviderStack({ gitProvider, deployProvider, dbProvider }: ProviderStackProps) {
