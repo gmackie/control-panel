@@ -61,60 +61,18 @@ echo -e "${GREEN}Using kubeconfig: $WORKING_CONFIG${NC}"
 NAMESPACE="control-panel"
 DOMAIN="control.gmac.io"
 
-# Your credentials
-GITHUB_CLIENT_ID="Ov23li75O1DdJVh7nKsU"
-GITHUB_CLIENT_SECRET="be5ebbb033c84283a381c1ad3f71a229da26649c"
-TURSO_DATABASE_URL="libsql://control-panel-gmackie.aws-us-west-2.turso.io"
-TURSO_AUTH_TOKEN="eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NTY3NzY1MTMsImlkIjoiZWMyMzg1ZmMtMzg3Zi00YWUwLThmMTUtZTQ3YmJmMDU1ZjYzIiwicmlkIjoiZjMzNzE3ZGMtOGRmOS00Njk3LTliNjAtYTc4ZjVhZjMwODlmIn0.NvKoS6ThyTgG2JQHyBitinzVBNoLF9qp0RDaKmLznBqxF1MK5preHNObKIL8NqYmdgwakaexerQ55k3BRD5BAg"
-
 echo -e "${YELLOW}Step 1: Creating namespace...${NC}"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f - --insecure-skip-tls-verify
 
-echo -e "${YELLOW}Step 2: Creating secrets...${NC}"
-cat <<EOF | kubectl apply -f - --insecure-skip-tls-verify
-apiVersion: v1
-kind: Secret
-metadata:
-  name: control-panel-secrets
-  namespace: $NAMESPACE
-type: Opaque
-stringData:
-  # NextAuth
-  NEXTAUTH_SECRET: "$(openssl rand -base64 32)"
-  
-  # Your GitHub OAuth
-  GITHUB_CLIENT_ID: "$GITHUB_CLIENT_ID"
-  GITHUB_CLIENT_SECRET: "$GITHUB_CLIENT_SECRET"
-  
-  # Your Turso Database
-  TURSO_DATABASE_URL: "$TURSO_DATABASE_URL"
-  TURSO_AUTH_TOKEN: "$TURSO_AUTH_TOKEN"
-  
-  # Required placeholders
-  DATABASE_USER: "not-used-with-turso"
-  DATABASE_PASSWORD: "not-used-with-turso"
-  DRONE_TOKEN: "placeholder"
-  GITEA_TOKEN: "placeholder"
-  HARBOR_USERNAME: "admin"
-  HARBOR_PASSWORD: "placeholder"
-  ARGOCD_TOKEN: "placeholder"
-  WEBHOOK_SECRET: "$(openssl rand -base64 32)"
-  GRAFANA_API_KEY: "placeholder"
-  PROMETHEUS_BEARER_TOKEN: "$(openssl rand -base64 32)"
-  HETZNER_API_TOKEN: "placeholder"
-  K3S_SA_TOKEN: "placeholder"
-  STRIPE_API_KEY: ""
-  CLERK_API_KEY: ""
-  SENDGRID_API_KEY: ""
-  ELEVENLABS_API_KEY: ""
-  OPENROUTER_API_KEY: ""
-  TWILIO_ACCOUNT_SID: ""
-  TWILIO_AUTH_TOKEN: ""
-  SUPABASE_URL: ""
-  SUPABASE_ANON_KEY: ""
-EOF
+echo -e "${YELLOW}Step 2: Checking secrets...${NC}"
+if ! kubectl get secret control-panel-secrets -n $NAMESPACE --insecure-skip-tls-verify >/dev/null 2>&1; then
+  echo -e "${RED}❌ Missing secret control-panel-secrets in namespace '$NAMESPACE'.${NC}"
+  echo -e "${YELLOW}This script will NOT create/update Secrets anymore.${NC}"
+  echo "Create/update secrets separately (e.g. run ./update-cluster-secrets.sh) and retry."
+  exit 1
+fi
 
-echo -e "${YELLOW}Step 3: Applying configurations...${NC}"
+echo -e "${YELLOW}Step 3: Applying configurations (no Secrets)...${NC}"
 kubectl apply -f k8s/01-namespace.yaml --insecure-skip-tls-verify
 kubectl apply -f k8s/02-configmap.yaml --insecure-skip-tls-verify
 kubectl apply -f k8s/integrations-config.yaml --insecure-skip-tls-verify 2>/dev/null || true
