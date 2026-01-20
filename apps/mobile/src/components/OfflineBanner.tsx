@@ -39,7 +39,7 @@ export function OfflineBanner() {
       <View style={styles.content}>
         <Ionicons name="cloud-offline" size={18} color="#fecaca" />
         <View style={styles.textContainer}>
-          <Text style={styles.title}>You're offline</Text>
+          <Text style={styles.title}>{"You're offline"}</Text>
           <Text style={styles.subtitle}>Last online {formatLastOnline()}</Text>
         </View>
         {actionQueue.length > 0 && (
