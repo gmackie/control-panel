@@ -5,6 +5,8 @@ import { K3sService } from "@/lib/k3s/k3s-service";
 import { LokiClient } from "@/lib/loki/client";
 import { resolveAppK8sSelector } from "@/lib/applications/resolve-app-k8s-selector";
 
+export const runtime = "nodejs";
+
 const k3sService = new K3sService();
 const loki = new LokiClient();
 
@@ -24,69 +26,78 @@ interface LogEntry {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { id } = await params;
-    const { searchParams } = new URL(request.url);
-
-    const level = searchParams.get("level") || undefined;
-    const podFilter = searchParams.get("pod") || undefined;
-    const limit = clampInt(searchParams.get("limit"), 200, 1, 1000);
-
-    const appId = decodeURIComponent(id);
-    const selector = await resolveAppK8sSelector(appId);
-    const appName = selector.appLabel;
-
-    // Best-effort namespace narrowing (keeps query fast when we can).
-    const namespaces = selector.namespaces ?? (await tryGetNamespacesForApp(appName));
-
-    const query = buildLogQL({
-      app: appName,
-      namespaces,
-      pod: podFilter,
-      level,
-    });
-
-    const endNs = String(BigInt(Date.now()) * 1_000_000n);
-    const startNs = String(BigInt(Date.now() - 30 * 60 * 1000) * 1_000_000n);
-
-    const lokiRes = await loki.queryRange({
-      query,
-      startNs,
-      endNs,
-      limit,
-      direction: "backward",
-    });
-
-    const entries = flattenLokiStreams(lokiRes)
-      .map(toLogEntry)
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-    const pods = Array.from(new Set(entries.map((e) => e.pod).filter((p): p is string => Boolean(p)))).sort();
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        logs: entries,
-        pods,
-        hasMore: false,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching app logs:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch logs",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const { id } = await params;
+  const { searchParams } = new URL(request.url);
+
+  const level = searchParams.get("level") || undefined;
+  const podFilter = searchParams.get("pod") || undefined;
+
+  const appId = decodeURIComponent(id);
+  const selector = await resolveAppK8sSelector(appId);
+  const appName = selector.appLabel;
+  const namespaces = selector.namespaces ?? (await tryGetNamespacesForApp(appName));
+
+  const query = buildLogQL({
+    app: appName,
+    namespaces,
+    pod: podFilter,
+    level,
+  });
+
+  const encoder = new TextEncoder();
+  let lastSeenNs = String(BigInt(Date.now() - 5 * 60 * 1000) * 1_000_000n);
+
+  const stream = new ReadableStream<Uint8Array>({
+    start: async (controller) => {
+      controller.enqueue(encoder.encode(`event: ready\ndata: {}\n\n`));
+
+      while (!request.signal.aborted) {
+        try {
+          const endNs = String(BigInt(Date.now()) * 1_000_000n);
+          const res = await loki.queryRange({
+            query,
+            startNs: bumpNs(lastSeenNs),
+            endNs,
+            limit: 200,
+            direction: "forward",
+          });
+
+          const rows = flattenLokiStreams(res)
+            .map(toLogEntry)
+            .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+          for (const entry of rows) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(entry)}\n\n`));
+            lastSeenNs = isoToNs(entry.timestamp);
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: msg })}\n\n`));
+        }
+
+        await sleep(2000, request.signal);
+      }
+
+      controller.close();
+    },
+    cancel: () => {
+      // request.signal should handle shutdown; this is just a safety net.
+    },
+  });
+
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
 
 async function tryGetNamespacesForApp(appName: string): Promise<string[] | undefined> {
@@ -109,7 +120,6 @@ function buildLogQL(args: {
 }): string {
   const matchers: string[] = [];
   matchers.push(`app=${quoteLabelValue(args.app)}`);
-
   if (args.namespaces && args.namespaces.length > 0) {
     matchers.push(`namespace=~${quoteLabelValue(args.namespaces.map(escapeRegex).join("|"))}`);
   }
@@ -125,18 +135,11 @@ function buildLogQL(args: {
 }
 
 function quoteLabelValue(value: string): string {
-  // Loki label values are double-quoted strings.
   return `"${value.replace(/\\/g, "\\\\").replace(/\"/g, '\\"')}"`;
 }
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function clampInt(value: string | null, defaultValue: number, min: number, max: number): number {
-  const n = value ? Number(value) : defaultValue;
-  if (!Number.isFinite(n)) return defaultValue;
-  return Math.min(max, Math.max(min, Math.trunc(n)));
 }
 
 function flattenLokiStreams(res: { data?: { result?: Array<{ stream: Record<string, string>; values: [string, string][] }> } }) {
@@ -211,4 +214,31 @@ function inferLevel(line: string): string {
 function nsToISOString(tsNs: string): string {
   const ms = BigInt(tsNs) / 1_000_000n;
   return new Date(Number(ms)).toISOString();
+}
+
+function isoToNs(iso: string): string {
+  return String(BigInt(new Date(iso).getTime()) * 1_000_000n);
+}
+
+function bumpNs(ns: string): string {
+  try {
+    return String(BigInt(ns) + 1n);
+  } catch {
+    return ns;
+  }
+}
+
+async function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        resolve();
+      },
+      { once: true }
+    );
+  });
 }

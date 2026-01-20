@@ -328,8 +328,17 @@ deploy_with_kubectl() {
     # Replace image tag in deployment
     sed -i "s|registry.gmac.io/gmac/control-panel:.*|${DOCKER_REGISTRY}/gmac/control-panel:${IMAGE_TAG}|g" "$temp_dir/04-deployment.yaml"
     
-    # Apply Kubernetes manifests
-    kubectl apply -f "$temp_dir/" -n "$KUBE_NAMESPACE"
+    # Apply Kubernetes manifests (never apply Secret manifests here)
+    rm -f "$temp_dir/03-secret.yaml" 2>/dev/null || true
+
+    kubectl apply -f "$temp_dir/01-namespace.yaml" -n "$KUBE_NAMESPACE" 2>/dev/null || true
+    kubectl apply -f "$temp_dir/02-configmap.yaml" -n "$KUBE_NAMESPACE"
+    kubectl apply -f "$temp_dir/07-rbac.yaml" -n "$KUBE_NAMESPACE" 2>/dev/null || true
+    kubectl apply -f "$temp_dir/04-deployment.yaml" -n "$KUBE_NAMESPACE"
+    kubectl apply -f "$temp_dir/05-service.yaml" -n "$KUBE_NAMESPACE"
+    kubectl apply -f "$temp_dir/06-ingress.yaml" -n "$KUBE_NAMESPACE" 2>/dev/null || true
+    kubectl apply -f "$temp_dir/prometheus-servicemonitor.yaml" -n "$KUBE_NAMESPACE" 2>/dev/null || true
+    kubectl apply -f "$temp_dir/grafana-dashboard.yaml" -n "$KUBE_NAMESPACE" 2>/dev/null || true
     
     # Wait for deployment to complete
     kubectl rollout status deployment/control-panel -n "$KUBE_NAMESPACE" --timeout=600s

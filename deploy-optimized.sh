@@ -3,7 +3,10 @@
 # Build and deploy control panel to k3s with compression
 
 echo "🚀 Building control panel image for amd64..."
-docker build --platform linux/amd64 -t control-panel:latest .
+docker build --platform linux/amd64 \
+  --build-arg NEXT_PUBLIC_AZURE_AD_CLIENT_ID="41e226f9-fb86-4a0e-bd65-cf3de772b6bc" \
+  --build-arg NEXT_PUBLIC_AZURE_AD_TENANT_ID="ad622e7f-42f1-462d-99a1-64af463becbe" \
+  -t control-panel:latest .
 
 echo "📦 Compressing image..."
 docker save control-panel:latest | gzip > control-panel.tar.gz
@@ -17,21 +20,20 @@ ssh root@5.78.106.236 "gunzip -c /tmp/control-panel.tar.gz | /usr/local/bin/k3s 
 echo "🎯 Copying manifests to server..."
 scp -r k8s/ root@5.78.106.236:/tmp/
 
-echo "🚀 Applying Kubernetes manifests (preserving existing secrets)..."
+echo "🚀 Applying Kubernetes manifests (secrets are managed separately)..."
 # Apply namespace first
 ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl apply -f /tmp/k8s/01-namespace.yaml 2>/dev/null || true"
 
-# Check if secrets already exist - only create if missing
 SECRET_EXISTS=$(ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl get secret control-panel-secrets -n control-panel -o name 2>/dev/null || echo ''")
 if [ -z "$SECRET_EXISTS" ]; then
-    echo "⚠️  No existing secrets found - creating from template (update values afterward!)"
-    ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl apply -f /tmp/k8s/03-secret.yaml"
-else
-    echo "✅ Existing secrets preserved (skipping 03-secret.yaml)"
+    echo "❌ control-panel-secrets is missing. Refusing to apply any Secret manifests during deploy."
+    echo "   Create/update secrets separately (e.g. run ./update-cluster-secrets.sh) and retry."
+    exit 1
 fi
+echo "✅ Existing secrets present (skipping 03-secret.yaml)"
 
 # Apply all other manifests except namespace and secrets
-ssh root@5.78.106.236 "for f in /tmp/k8s/*.yaml; do case \"\$f\" in */01-namespace.yaml|*/03-secret.yaml) ;; *) /usr/local/bin/k3s kubectl apply -f \"\$f\"; esac; done"
+ssh root@5.78.106.236 "for f in /tmp/k8s/*.yaml; do case \"\$f\" in */01-namespace.yaml|*/03-secret.yaml|*secret*.yaml) ;; *) /usr/local/bin/k3s kubectl apply -f \"\$f\"; esac; done"
 
 echo "🔄 Restarting deployment..."
 ssh root@5.78.106.236 "/usr/local/bin/k3s kubectl rollout restart deployment/control-panel -n control-panel"

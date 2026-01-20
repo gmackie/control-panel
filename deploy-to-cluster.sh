@@ -52,55 +52,13 @@ kubectl cluster-info | head -1
 echo -e "${YELLOW}Creating namespace...${NC}"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-# Create secrets from environment or use defaults
-echo -e "${YELLOW}Creating secrets...${NC}"
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Secret
-metadata:
-  name: control-panel-secrets
-  namespace: $NAMESPACE
-type: Opaque
-stringData:
-  # NextAuth secrets
-  NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-$(openssl rand -base64 32)}"
-  
-  # GitHub OAuth (required for authentication)
-  GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-your-github-client-id}"
-  GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-your-github-client-secret}"
-  
-  # Database (using Turso)
-  TURSO_DATABASE_URL: "${TURSO_DATABASE_URL:-libsql://your-database.turso.io}"
-  TURSO_AUTH_TOKEN: "${TURSO_AUTH_TOKEN:-your-turso-auth-token}"
-  
-  # Gitea Integration
-  GITEA_TOKEN: "${GITEA_TOKEN:-your-gitea-api-token}"
-  
-  # Harbor Integration  
-  HARBOR_USERNAME: "${HARBOR_USERNAME:-admin}"
-  HARBOR_PASSWORD: "${HARBOR_PASSWORD:-your-harbor-password}"
-  
-  # ArgoCD Integration
-  ARGOCD_TOKEN: "${ARGOCD_TOKEN:-your-argocd-token}"
-  
-  # Webhook Secret
-  WEBHOOK_SECRET: "${WEBHOOK_SECRET:-$(openssl rand -base64 32)}"
-  
-  # Monitoring
-  GRAFANA_API_KEY: "${GRAFANA_API_KEY:-your-grafana-api-key}"
-  PROMETHEUS_BEARER_TOKEN: "${PROMETHEUS_BEARER_TOKEN:-$(openssl rand -base64 32)}"
-  
-  # Hetzner (for cluster management)
-  HETZNER_API_TOKEN: "${HETZNER_API_TOKEN:-your-hetzner-api-token}"
-  K3S_SA_TOKEN: "${K3S_SA_TOKEN:-your-k3s-service-account-token}"
-  
-  # Optional integrations
-  STRIPE_API_KEY: "${STRIPE_API_KEY:-}"
-  CLERK_API_KEY: "${CLERK_API_KEY:-}"
-  SENDGRID_API_KEY: "${SENDGRID_API_KEY:-}"
-  ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
-  OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-EOF
+echo -e "${YELLOW}Checking secrets...${NC}"
+if ! kubectl get secret control-panel-secrets -n $NAMESPACE >/dev/null 2>&1; then
+    echo -e "${RED}❌ Missing secret control-panel-secrets in namespace '$NAMESPACE'.${NC}"
+    echo -e "${YELLOW}This deploy script will NOT create/update Secrets anymore.${NC}"
+    echo "Create/update secrets separately (e.g. run ./update-cluster-secrets.sh) and retry."
+    exit 1
+fi
 
 # Apply ConfigMaps
 echo -e "${YELLOW}Applying configurations...${NC}"

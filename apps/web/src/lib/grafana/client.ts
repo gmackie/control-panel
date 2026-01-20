@@ -101,6 +101,13 @@ export class GrafanaClient {
     return this.config.externalUrl || this.config.url;
   }
 
+  /**
+   * Internal URL used for server-side calls.
+   */
+  getInternalBaseUrl(): string {
+    return this.config.url;
+  }
+
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const url = `${this.config.url}${path}`;
     
@@ -260,5 +267,80 @@ export class GrafanaClient {
     }
     
     return null;
+  }
+
+  /**
+   * Create or update a dashboard (Grafana API).
+   */
+  async upsertDashboard(options: {
+    dashboard: any;
+    folderUid?: string;
+    message?: string;
+    overwrite?: boolean;
+  }): Promise<{ uid: string; url: string; slug?: string; title?: string }> {
+    const payload: Record<string, any> = {
+      dashboard: options.dashboard,
+      overwrite: options.overwrite ?? true,
+    };
+    if (options.folderUid) payload.folderUid = options.folderUid;
+    if (options.message) payload.message = options.message;
+
+    const res = await this.request<{ status: string; slug: string; uid: string; url: string; version: number }>(
+      "/api/dashboards/db",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return {
+      uid: res.uid,
+      url: `${this.getExternalBaseUrl().replace(/\/$/, "")}${res.url}`,
+      slug: res.slug,
+      title: options.dashboard?.title,
+    };
+  }
+
+  /**
+   * Render a single panel as PNG. Requires Grafana image renderer.
+   */
+  async renderPanelPng(options: {
+    dashboardUid: string;
+    dashboardSlug: string;
+    panelId: number;
+    from?: string;
+    to?: string;
+    width?: number;
+    height?: number;
+    theme?: "light" | "dark";
+  }): Promise<ArrayBuffer> {
+    const base = this.getInternalBaseUrl().replace(/\/$/, "");
+    const url = new URL(
+      `${base}/render/d-solo/${encodeURIComponent(options.dashboardUid)}/${encodeURIComponent(options.dashboardSlug)}`
+    );
+    url.searchParams.set("panelId", String(options.panelId));
+    if (options.from) url.searchParams.set("from", options.from);
+    if (options.to) url.searchParams.set("to", options.to);
+    if (options.width) url.searchParams.set("width", String(options.width));
+    if (options.height) url.searchParams.set("height", String(options.height));
+    if (options.theme) url.searchParams.set("theme", options.theme);
+
+    const headers: Record<string, string> = {};
+    if (this.config.apiKey) {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Grafana render error: ${response.status} ${response.statusText}${body ? ` - ${body}` : ""}`);
+    }
+
+    return await response.arrayBuffer();
   }
 }
