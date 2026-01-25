@@ -65,28 +65,42 @@ export function IntegrationsList({ applicationId }: IntegrationsListProps) {
   const checkHealthStatus = async () => {
     setIsCheckingHealth(true);
     const checks: Record<string, IntegrationHealth> = {};
-    
+
     const services = Object.keys(INTEGRATION_HUB_MAP);
-    
-    await Promise.all(
-      services.map(async (service) => {
-        try {
-          const res = await fetch(`/api/integrations/${service}?action=health`);
-          const data = await res.json();
-          checks[service] = {
-            healthy: data.healthy === true,
-            service,
-            error: data.error,
-          };
-        } catch (err) {
-          checks[service] = {
-            healthy: false,
-            service,
-            error: err instanceof Error ? err.message : "Connection failed",
-          };
-        }
-      })
-    );
+
+    try {
+      const res = await fetch("/api/integrations/health");
+      if (!res.ok) {
+        throw new Error(`Failed to fetch integration health (${res.status})`);
+      }
+
+      const data = await res.json();
+      const integrations: Array<any> = Array.isArray(data?.integrations) ? data.integrations : [];
+
+      for (const service of services) {
+        const integration = integrations.find((i) => i?.provider === service);
+        const status = integration?.status;
+        const healthy = status === "healthy";
+        const firstIncidentMessage =
+          Array.isArray(integration?.incidents) && integration.incidents.length > 0
+            ? integration.incidents[0]?.message
+            : undefined;
+
+        checks[service] = {
+          healthy,
+          service,
+          error: healthy ? undefined : firstIncidentMessage || (status ? `Status: ${status}` : "Not configured"),
+        };
+      }
+    } catch (err) {
+      for (const service of services) {
+        checks[service] = {
+          healthy: false,
+          service,
+          error: err instanceof Error ? err.message : "Connection failed",
+        };
+      }
+    }
     
     setHealthChecks(checks);
     setIsCheckingHealth(false);

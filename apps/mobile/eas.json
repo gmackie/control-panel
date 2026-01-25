@@ -17,9 +17,12 @@
       },
       "ios": {
         "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
-    "development-simulator": {
+    "simulator": {
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
@@ -30,22 +33,28 @@
         "simulator": true
       }
     },
-    "preview": {
-      "extends": "base",
-      "distribution": "internal",
-      "env": {
-        "APP_VARIANT": "development"
-      }
-    },
     "production": {
       "extends": "base",
+      "distribution": "store",
       "autoIncrement": true,
       "env": {
         "APP_VARIANT": "production"
+      },
+      "ios": {
+        "autoIncrement": "buildNumber"
+      },
+      "android": {
+        "autoIncrement": "versionCode",
+        "buildType": "app-bundle"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "mackieg@umich.edu",
+        "ascAppId": "6757094726"
+      }
+    }
   }
 }

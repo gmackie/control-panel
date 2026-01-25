@@ -28,7 +28,6 @@ export async function GET() {
         .from(applications)
         .orderBy(desc(applications.createdAt));
       
-      // Transform to match the expected Application format
       const applicationsList = apps.map(app => ({
         id: app.id,
         name: app.name,
@@ -36,6 +35,9 @@ export async function GET() {
         slug: app.slug,
         repositoryUrl: app.repositoryUrl,
         status: app.status,
+        gitProvider: app.gitProvider,
+        deployProvider: app.deployProvider,
+        dbProvider: app.dbProvider,
         apiKeys: [],
         secrets: [],
         integrations: [],

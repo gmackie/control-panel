@@ -1,0 +1,23 @@
+global:
+  defaultStorageClass: local-path
+
+mode: standalone
+
+auth:
+  rootUser: loki
+  # Leave empty to allow chart-managed secret generation.
+  rootPassword: ""
+  forcePassword: false
+
+defaultBuckets: "loki"
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 10Gi
+
+console:
+  enabled: false
+
+networkPolicy:
+  enabled: false

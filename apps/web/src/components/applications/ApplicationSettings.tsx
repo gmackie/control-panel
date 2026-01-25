@@ -111,27 +111,33 @@ interface AppConfig {
   id: string;
   name: string;
   slug: string;
-  vercelProjectId?: string;
-  expoProjectId?: string;
+  vercelProjectId?: string | null;
+  expoProjectId?: string | null;
+  repositoryUrl?: string | null;
+  repositoryPath?: string | null;
+  gitProvider?: string | null;
+  deployProvider?: string | null;
+  k8sNamespace?: string | null;
+  k8sDeploymentName?: string | null;
   repository?: {
     provider: string;
     url: string;
     fullName: string;
-  };
+  } | null;
   registry?: {
     name: string;
     project: string;
-  };
+  } | null;
   deployment?: {
     name: string;
     namespace: string;
     cluster: string;
-  };
+  } | null;
   vercelProject?: VercelProject;
   expoProject?: ExpoProject;
-  neonProject?: NeonProject;
-  tursoDatabase?: TursoDatabase;
-  githubRepo?: GitHubRepo;
+  neonProject?: NeonProject | null;
+  tursoDatabase?: TursoDatabase | null;
+  githubRepo?: GitHubRepo | null;
 }
 
 export function ApplicationSettings({ applicationId }: ApplicationSettingsProps) {
@@ -154,7 +160,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
   const { data: appData, isLoading: loadingApp } = useQuery<{ success: boolean; data: AppConfig }>({
     queryKey: ["app-config", applicationId],
     queryFn: async () => {
-      const response = await fetch(`/api/apps/${applicationId}`);
+      const response = await fetch(`/api/applications/${applicationId}`);
       if (!response.ok) throw new Error("Failed to fetch app config");
       return response.json();
     },
@@ -289,11 +295,9 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
 
   const handleLinkRepo = (repo: GiteaRepo) => {
     updateAppMutation.mutate({
-      repository: {
-        provider: "gitea",
-        url: repo.html_url,
-        fullName: repo.full_name,
-      },
+      repositoryUrl: repo.html_url,
+      repositoryPath: repo.full_name,
+      gitProvider: "gitea",
     });
   };
 
@@ -308,26 +312,34 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
 
   const handleLinkDeployment = (deployment: K8sDeployment) => {
     updateAppMutation.mutate({
-      deployment: {
-        name: deployment.name,
-        namespace: deployment.namespace,
-        cluster: "k3s-master-1",
-      },
+      k8sNamespace: deployment.namespace,
+      k8sDeploymentName: deployment.name,
+      deployProvider: "kubernetes",
     });
   };
 
   const handleUnlink = (resource: "repository" | "registry" | "deployment") => {
+    if (resource === "repository") {
+      updateAppMutation.mutate({ repositoryUrl: null, repositoryPath: null });
+      return;
+    }
+
+    if (resource === "deployment") {
+      updateAppMutation.mutate({ k8sNamespace: null, k8sDeploymentName: null });
+      return;
+    }
+
     updateAppMutation.mutate({ [resource]: null });
   };
 
   const handleExtractSecrets = async () => {
-    if (!appData?.data?.deployment) return;
+    if (!appData?.data?.k8sNamespace || !appData?.data?.k8sDeploymentName) return;
     
     setExtractingSecrets(true);
     setExtractResult(null);
     
     try {
-      const response = await fetch(`/api/k8s/deployments/${appData.data.deployment.namespace}/${appData.data.deployment.name}`, {
+      const response = await fetch(`/api/k8s/deployments/${appData.data.k8sNamespace}/${appData.data.k8sDeploymentName}`, {
         method: "GET",
       });
       
@@ -355,6 +367,35 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
   };
 
   const app = appData?.data;
+
+  const repositoryInfo =
+    app?.repository ??
+    (app?.repositoryUrl
+      ? {
+          provider: app.gitProvider || "github",
+          url: app.repositoryUrl,
+          fullName: app.repositoryPath || app.repositoryUrl,
+        }
+      : null);
+
+  const deploymentInfo =
+    app?.deployment ??
+    (app?.k8sNamespace && app?.k8sDeploymentName
+      ? {
+          name: app.k8sDeploymentName,
+          namespace: app.k8sNamespace,
+          cluster: "k3s-master-1",
+        }
+      : null);
+
+  const githubRepoInfo: { full_name: string; html_url: string } | null =
+    app?.githubRepo ??
+    (app?.gitProvider === "github" && app?.repositoryUrl
+      ? {
+          full_name: app.repositoryPath || app.repositoryUrl,
+          html_url: app.repositoryUrl,
+        }
+      : null);
 
   if (loadingApp) {
     return (
@@ -392,20 +433,20 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 onClick={() => setShowRepoDialog(true)}
               >
                 <Link2 className="h-4 w-4 mr-2" />
-                {app?.repository ? "Change" : "Link"}
+                {repositoryInfo ? "Change" : "Link"}
               </Button>
             </div>
-            {app?.repository ? (
+            {repositoryInfo ? (
               <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
                 <div>
-                  <p className="font-medium">{app.repository.fullName}</p>
+                  <p className="font-medium">{repositoryInfo.fullName}</p>
                   <a
-                    href={app.repository.url}
+                    href={repositoryInfo.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-400 hover:underline flex items-center gap-1"
                   >
-                    {app.repository.url}
+                    {repositoryInfo.url}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
@@ -472,15 +513,15 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 onClick={() => setShowDeploymentDialog(true)}
               >
                 <Link2 className="h-4 w-4 mr-2" />
-                {app?.deployment ? "Change" : "Link"}
+                {deploymentInfo ? "Change" : "Link"}
               </Button>
             </div>
-            {app?.deployment ? (
+            {deploymentInfo ? (
               <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
                 <div>
-                  <p className="font-medium">{app.deployment.name}</p>
+                  <p className="font-medium">{deploymentInfo.name}</p>
                   <p className="text-sm text-gray-400">
-                    Namespace: {app.deployment.namespace} • Cluster: {app.deployment.cluster}
+                    Namespace: {deploymentInfo.namespace} • Cluster: {deploymentInfo.cluster}
                   </p>
                 </div>
                 <Button
@@ -521,14 +562,14 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                     {app.vercelProject.framework || "Unknown framework"} • {app.vercelProject.productionUrl || "No production URL"}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => updateAppMutation.mutate({ vercelProjectId: null } as any)}
-                  className="text-red-400 hover:text-red-300"
-                >
-                  <Unlink className="h-4 w-4" />
-                </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => updateAppMutation.mutate({ vercelProjectId: null })}
+                className="text-red-400 hover:text-red-300"
+              >
+                <Unlink className="h-4 w-4" />
+              </Button>
               </div>
             ) : (
               <p className="text-sm text-gray-500">No Vercel project linked</p>
@@ -559,14 +600,14 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                     {app.expoProject.slug || "No slug"} • {app.expoProject.platform || "All platforms"}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => updateAppMutation.mutate({ expoProjectId: null } as any)}
-                  className="text-red-400 hover:text-red-300"
-                >
-                  <Unlink className="h-4 w-4" />
-                </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => updateAppMutation.mutate({ expoProjectId: null })}
+                className="text-red-400 hover:text-red-300"
+              >
+                <Unlink className="h-4 w-4" />
+              </Button>
               </div>
             ) : (
               <p className="text-sm text-gray-500">No Expo project linked</p>
@@ -586,27 +627,27 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 onClick={() => setShowGitHubDialog(true)}
               >
                 <Link2 className="h-4 w-4 mr-2" />
-                {app?.githubRepo ? "Change" : "Link"}
+                {githubRepoInfo ? "Change" : "Link"}
               </Button>
             </div>
-            {app?.githubRepo ? (
+            {githubRepoInfo ? (
               <div className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
                 <div>
-                  <p className="font-medium">{app.githubRepo.full_name}</p>
+                  <p className="font-medium">{githubRepoInfo.full_name}</p>
                   <a
-                    href={app.githubRepo.html_url}
+                    href={githubRepoInfo.html_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-400 hover:underline flex items-center gap-1"
                   >
-                    {app.githubRepo.html_url}
+                    {githubRepoInfo.html_url}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateAppMutation.mutate({ githubRepo: null } as any)}
+                  onClick={() => updateAppMutation.mutate({ repositoryUrl: null, repositoryPath: null })}
                   className="text-red-400 hover:text-red-300"
                 >
                   <Unlink className="h-4 w-4" />
@@ -644,7 +685,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateAppMutation.mutate({ neonProject: null } as any)}
+                  onClick={() => updateAppMutation.mutate({ neonProject: null })}
                   className="text-red-400 hover:text-red-300"
                 >
                   <Unlink className="h-4 w-4" />
@@ -682,7 +723,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateAppMutation.mutate({ tursoDatabase: null } as any)}
+                  onClick={() => updateAppMutation.mutate({ tursoDatabase: null })}
                   className="text-red-400 hover:text-red-300"
                 >
                   <Unlink className="h-4 w-4" />
@@ -706,7 +747,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
           </p>
         </div>
 
-        {app?.deployment ? (
+        {deploymentInfo ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <Button
@@ -729,7 +770,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
                 )}
               </Button>
               <p className="text-sm text-gray-400">
-                from {app.deployment.namespace}/{app.deployment.name}
+                from {deploymentInfo.namespace}/{deploymentInfo.name}
               </p>
             </div>
           </div>
@@ -956,7 +997,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               vercelProjects.projects.map((project) => (
                 <button
                   key={project.id}
-                  onClick={() => updateAppMutation.mutate({ vercelProjectId: project.id } as any)}
+                  onClick={() => updateAppMutation.mutate({ vercelProjectId: project.id })}
                   className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-white hover:bg-gray-900/50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -995,7 +1036,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               expoProjects.projects.map((project) => (
                 <button
                   key={project.id}
-                  onClick={() => updateAppMutation.mutate({ expoProjectId: project.id } as any)}
+                  onClick={() => updateAppMutation.mutate({ expoProjectId: project.id })}
                   className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-violet-500 hover:bg-violet-950/20 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -1034,7 +1075,13 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               githubRepos.repos.map((repo) => (
                 <button
                   key={repo.id}
-                  onClick={() => updateAppMutation.mutate({ githubRepo: repo } as any)}
+                  onClick={() =>
+                    updateAppMutation.mutate({
+                      repositoryUrl: repo.html_url,
+                      repositoryPath: repo.full_name,
+                      gitProvider: "github",
+                    })
+                  }
                   className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-gray-500 hover:bg-gray-900/50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -1071,7 +1118,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               neonProjects.projects.map((project) => (
                 <button
                   key={project.id}
-                  onClick={() => updateAppMutation.mutate({ neonProject: project } as any)}
+                  onClick={() => updateAppMutation.mutate({ neonProject: project })}
                   className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-emerald-500 hover:bg-emerald-950/20 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -1110,7 +1157,7 @@ export function ApplicationSettings({ applicationId }: ApplicationSettingsProps)
               tursoDatabases.databases.map((db) => (
                 <button
                   key={db.id}
-                  onClick={() => updateAppMutation.mutate({ tursoDatabase: db } as any)}
+                  onClick={() => updateAppMutation.mutate({ tursoDatabase: db })}
                   className="w-full p-3 text-left rounded-lg border border-gray-800 hover:border-cyan-500 hover:bg-cyan-950/20 transition-colors"
                 >
                   <div className="flex items-center justify-between">

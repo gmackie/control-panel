@@ -17,10 +17,15 @@ export const applications = pgTable("applications", {
   description: text("description"),
   repositoryUrl: text("repository_url"),
   repositoryPath: text("repository_path"),
-  localRepoPath: text("local_repo_path"), // Local filesystem path for LLM agent to read secrets
+  localRepoPath: text("local_repo_path"),
   appType: varchar("app_type", { length: 50 }).notNull().default("web"),
   platform: varchar("platform", { length: 50 }),
   productId: uuid("product_id"),
+  
+  gitProvider: varchar("git_provider", { length: 50 }).notNull().default("github"),
+  deployProvider: varchar("deploy_provider", { length: 50 }).notNull().default("vercel"),
+  dbProvider: varchar("db_provider", { length: 50 }).notNull().default("neon"),
+  
   k8sNamespace: varchar("k8s_namespace", { length: 255 }),
   k8sDeploymentName: varchar("k8s_deployment_name", { length: 255 }),
   vercelProjectId: text("vercel_project_id"),
@@ -31,6 +36,8 @@ export const applications = pgTable("applications", {
 }, (table) => ({
   productIdIdx: index("applications_product_id_idx").on(table.productId),
   appTypeIdx: index("applications_app_type_idx").on(table.appType),
+  gitProviderIdx: index("applications_git_provider_idx").on(table.gitProvider),
+  deployProviderIdx: index("applications_deploy_provider_idx").on(table.deployProvider),
 }));
 
 // ===================================

@@ -15,12 +15,14 @@ import {
   Download,
   LayoutDashboard,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { Application } from "@/types/applications";
 import { AppCreationWizard } from "@/components/applications/AppCreationWizard";
 import { ImportAppWizard } from "@/components/applications/ImportAppWizard";
 import { K8sImportWizard } from "@/components/applications/K8sImportWizard";
+import { ProviderBadges } from "@/components/applications/ProviderBadges";
 
 export default function ApplicationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -53,25 +55,32 @@ export default function ApplicationsPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Applications</h1>
-          <p className="text-gray-400">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Applications</h1>
+          <p className="text-gray-400 text-sm sm:text-base">
             Manage your applications, API keys, and secrets
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowK8sImportModal(true)}>
-            <Download className="h-4 w-4 mr-2" />
-            Import from K8s
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="sm:size-default" onClick={() => setShowK8sImportModal(true)}>
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import from K8s</span>
           </Button>
-          <Button variant="outline" onClick={() => setShowImportModal(true)}>
-            <Download className="h-4 w-4 mr-2" />
-            Import from Repo
+          <Button variant="outline" size="sm" className="sm:size-default" onClick={() => setShowImportModal(true)}>
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import from Repo</span>
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Application
+          <Link href="/applications/new">
+            <Button size="sm" className="sm:size-default">
+              <Sparkles className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Create from Template</span>
+              <span className="sm:hidden">New</span>
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" className="sm:size-default" onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Advanced</span>
           </Button>
         </div>
       </div>
@@ -108,8 +117,15 @@ export default function ApplicationsPage() {
               </div>
 
               {app.description && (
-                <p className="text-sm text-gray-400 mb-4 line-clamp-2">{app.description}</p>
+                <p className="text-sm text-gray-400 mb-3 line-clamp-2">{app.description}</p>
               )}
+
+              <ProviderBadges
+                gitProvider={app.gitProvider}
+                deployProvider={app.deployProvider}
+                dbProvider={app.dbProvider}
+                className="mb-4"
+              />
 
               <div className="space-y-3 flex-1">
                 <div className="flex items-center gap-2 text-sm">
@@ -132,20 +148,20 @@ export default function ApplicationsPage() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-800">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 pt-4 border-t border-gray-800">
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Clock className="h-3 w-3" />
                   <span>Created {new Date(app.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link href={`/applications/${app.id}/dashboard`}>
-                    <Button variant="outline" size="sm" className="h-7 px-2">
+                  <Link href={`/applications/${app.id}/dashboard`} className="flex-1 sm:flex-none">
+                    <Button variant="outline" size="sm" className="h-7 px-2 w-full sm:w-auto">
                       <LayoutDashboard className="h-3 w-3 mr-1" />
                       Dashboard
                     </Button>
                   </Link>
-                  <Link href={`/applications/${app.id}`}>
-                    <Button variant="ghost" size="sm" className="h-7 px-2">
+                  <Link href={`/applications/${app.id}`} className="flex-1 sm:flex-none">
+                    <Button variant="ghost" size="sm" className="h-7 px-2 w-full sm:w-auto">
                       Details
                       <ChevronRight className="h-3 w-3 ml-1" />
                     </Button>
@@ -160,12 +176,20 @@ export default function ApplicationsPage() {
           <Code className="h-12 w-12 text-gray-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">No applications yet</h3>
           <p className="text-gray-400 mb-6">
-            Create your first application to start managing API keys and secrets
+            Create your first application from a template with pre-configured integrations
           </p>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Your First Application
-          </Button>
+          <div className="flex justify-center gap-3">
+            <Link href="/applications/new">
+              <Button>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Create from Template
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Advanced Setup
+            </Button>
+          </div>
         </Card>
       )}
 

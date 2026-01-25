@@ -3,7 +3,6 @@ import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
-import { useScopeStore } from "../stores/scope";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -16,31 +15,15 @@ interface NotificationData {
   category?: string;
   severity?: string;
   status?: string;
-  siteId?: string;
-  siteName?: string;
-  siteSlug?: string;
 }
 
 export function useNotificationNavigation() {
   const navigation = useNavigation<NavigationProp>();
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
-  const setSiteScope = useScopeStore((state) => state.setSiteScope);
-  const sites = useScopeStore((state) => state.sites);
-
-  const setScopeFromNotification = useCallback(
-    (data: NotificationData) => {
-      if (data.siteId && sites.some((s) => s.id === data.siteId)) {
-        setSiteScope(data.siteId);
-      }
-    },
-    [sites, setSiteScope]
-  );
 
   const handleNotificationTap = useCallback(
     (data: NotificationData) => {
       if (!data) return;
-
-      setScopeFromNotification(data);
 
       switch (data.type) {
         case "alert":
@@ -69,12 +52,6 @@ export function useNotificationNavigation() {
           }
           break;
 
-        case "site":
-        case "site_health":
-        case "site_alert":
-          navigation.navigate("Main");
-          break;
-
         default:
           if (data.notificationId) {
             navigation.navigate("NotificationDetail", { id: data.notificationId });
@@ -85,7 +62,7 @@ export function useNotificationNavigation() {
           }
       }
     },
-    [navigation, setScopeFromNotification]
+    [navigation]
   );
 
   const checkInitialNotification = useCallback(async () => {

@@ -192,6 +192,14 @@ export async function PATCH(request: NextRequest, props: Params) {
       updateData.repositoryUrl = body.repositoryUrl;
     }
 
+    if (body.repositoryPath !== undefined) {
+      updateData.repositoryPath = body.repositoryPath;
+    }
+
+    if (body.localRepoPath !== undefined) {
+      updateData.localRepoPath = body.localRepoPath;
+    }
+
     if (body.status !== undefined) {
       updateData.status = body.status;
     }

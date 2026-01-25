@@ -1,0 +1,35 @@
+fullnameOverride: promtail-master
+
+# Pin this promtail instance to the master node.
+nodeSelector:
+  kubernetes.io/hostname: k3s-master-1
+
+initContainer:
+  - name: init-inotify
+    image: docker.io/busybox:1.36
+    imagePullPolicy: IfNotPresent
+    command:
+      - sh
+      - -c
+      - sysctl -w fs.inotify.max_user_instances=1024 fs.inotify.max_user_watches=524288
+    securityContext:
+      privileged: true
+
+config:
+  clients:
+    - url: http://loki-gateway/loki/api/v1/push
+
+  snippets:
+    extraRelabelConfigs:
+      - action: keep
+        source_labels:
+          - __meta_kubernetes_pod_phase
+        regex: Running
+      - action: keep
+        source_labels:
+          - __meta_kubernetes_pod_node_name
+        regex: k3s-master-1
+      - action: keep
+        source_labels:
+          - __meta_kubernetes_namespace
+        regex: ^(auth-system|control-panel|production|staging|playpath|playpath-staging|classcheck|classcheck-staging|linear-clone|linear-clone-staging|escape-puzzles-ui|veritas|test-app|poker-trainer|habit|habit-staging|twitch-ingest|demo-app|hello-world|npm-registry|test-deploy|ingress-nginx)$

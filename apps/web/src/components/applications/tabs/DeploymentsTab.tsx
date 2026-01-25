@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
-  Rocket, 
   CheckCircle, 
   XCircle, 
   AlertTriangle,
@@ -18,39 +16,19 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { DeploymentInfo } from "@/types/unified-app";
+import { DeploymentTrigger } from "../DeploymentTrigger";
 
 interface DeploymentsTabProps {
   appId: string;
 }
 
 export function DeploymentsTab({ appId }: DeploymentsTabProps) {
-  const [deployingTo, setDeployingTo] = useState<string | null>(null);
-
   const { data, isLoading, error, refetch } = useQuery<{ success: boolean; data: DeploymentInfo[] }>({
     queryKey: ["app-deployments", appId],
     queryFn: async () => {
       const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/deployments`);
       if (!response.ok) throw new Error("Failed to fetch deployments");
       return response.json();
-    },
-  });
-
-  const deployMutation = useMutation({
-    mutationFn: async (environment: string) => {
-      const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/deployments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ environment }),
-      });
-      if (!response.ok) throw new Error("Failed to trigger deployment");
-      return response.json();
-    },
-    onSuccess: () => {
-      setDeployingTo(null);
-      refetch();
-    },
-    onError: () => {
-      setDeployingTo(null);
     },
   });
 
@@ -110,14 +88,11 @@ export function DeploymentsTab({ appId }: DeploymentsTabProps) {
         return <Badge variant="error">Production</Badge>;
       case "staging":
         return <Badge variant="default" className="bg-yellow-600">Staging</Badge>;
+      case "development":
+        return <Badge variant="default" className="bg-blue-600">Development</Badge>;
       default:
         return <Badge variant="secondary">{env}</Badge>;
     }
-  };
-
-  const handleDeploy = (environment: string) => {
-    setDeployingTo(environment);
-    deployMutation.mutate(environment);
   };
 
   return (
@@ -125,31 +100,11 @@ export function DeploymentsTab({ appId }: DeploymentsTabProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Deployments</h3>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => handleDeploy("staging")}
-            disabled={!!deployingTo}
-          >
-            {deployingTo === "staging" ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Rocket className="h-4 w-4 mr-2" />
-            )}
-            Deploy to Staging
-          </Button>
-          <Button 
-            size="sm" 
-            onClick={() => handleDeploy("production")}
-            disabled={!!deployingTo}
-          >
-            {deployingTo === "production" ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Rocket className="h-4 w-4 mr-2" />
-            )}
-            Deploy to Production
-          </Button>
+          <DeploymentTrigger
+            appId={appId}
+            variant="compact"
+            onDeploymentComplete={() => refetch()}
+          />
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4" />
           </Button>

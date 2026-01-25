@@ -2,6 +2,24 @@
 
 React Native / Expo mobile companion app for the GMAC.IO Control Panel.
 
+## App Icons
+
+To update the app icons, replace the following files in `assets/`:
+
+| File | Size | Purpose |
+|------|------|---------|
+| `icon.png` | 1024x1024 | Main app icon (iOS & Android) |
+| `adaptive-icon.png` | 1024x1024 | Android adaptive icon foreground |
+| `splash.png` | 2048x2048 | Splash screen |
+| `notification-icon.png` | 96x96 | Push notification icon (should be simple, monochrome for Android) |
+| `favicon.png` | 48x48 | Web favicon |
+
+**Requirements:**
+- PNG format with transparency where appropriate
+- `icon.png` should have no transparency (use solid background)
+- `adaptive-icon.png` should be the foreground only - background color set in `app.config.js`
+- `notification-icon.png` should be simple silhouette for Android compatibility
+
 ## Features
 
 - Real-time dashboard with system health overview
@@ -98,18 +116,45 @@ The app registers for push tokens on startup and receives notifications for:
 - Deployment status changes
 - Service health changes
 
-## Building for Release
+## Build Profiles
+
+| Profile | Type | Distribution | Use Case |
+|---------|------|--------------|----------|
+| `development` | Dev Client | Internal (Ad-hoc) | Developer devices with hot reload |
+| `simulator` | Dev Client | Internal | iOS Simulator |
+| `production` | Release | Store | TestFlight / App Store |
+
+### Development Build
+
+For developer devices with Expo dev client:
 
 ```bash
-# Build for iOS TestFlight
-npx eas build --platform ios --profile production
+# iOS - requires device UDIDs registered
+npx eas build --profile development --platform ios
 
-# Build for Android Play Store
-npx eas build --platform android --profile production
+# Android APK
+npx eas build --profile development --platform android
 
-# Submit to stores
-npx eas submit --platform ios
-npx eas submit --platform android
+# After installing, run the dev server
+pnpm start --dev-client
+```
+
+### Simulator Build
+
+```bash
+npx eas build --profile simulator --platform ios
+```
+
+### Production Build (TestFlight)
+
+```bash
+# Build and submit to TestFlight
+npx eas build --profile production --platform ios
+npx eas submit --profile production --platform ios
+
+# Android Play Store
+npx eas build --profile production --platform android
+npx eas submit --profile production --platform android
 ```
 
 ## Environment

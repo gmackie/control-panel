@@ -1,23 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "control-panel": {
-      "type": "local",
-      "command": ["node", "packages/mcp-server/dist/index.js"],
-      "environment": {
-        "CONTROL_PANEL_URL": "https://control.gmac.io",
-        "CONTROL_PANEL_API_KEY": "cp_0xj-_MRFiwbzXYufjBGPKtDuN4oZ5LP-WqNihF903Ig"
-      },
-      "enabled": true
-    },
-    "tasks-gmac": {
-      "type": "local",
-      "command": ["node", "/Volumes/dev/linear-clone/apps/mcp/dist/index.js"],
-      "environment": {
-        "TASKS_API_URL": "https://tasks.gmac.io",
-        "TASKS_API_KEY": "lc_605e8450b3a4158d7b4825df69e922d0617b88b45c45a06b9899454c371d24c0"
-      },
-      "enabled": true
-    }
   }
 }

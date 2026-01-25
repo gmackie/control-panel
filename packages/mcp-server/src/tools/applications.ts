@@ -6,7 +6,7 @@ import { executeTool, NotFoundError } from "../tool-wrapper.js";
 export function registerApplicationsTools(server: McpServer, ctx: McpContext): void {
   server.tool(
     "list_applications",
-    "List all applications with their status and basic metadata",
+    "List all applications with their status, providers, and basic metadata",
     {},
     async () => {
       return executeTool("list_applications", async () => {
@@ -20,6 +20,9 @@ export function registerApplicationsTools(server: McpServer, ctx: McpContext): v
             status: app.status,
             description: app.description,
             repositoryUrl: app.repositoryUrl,
+            gitProvider: app.gitProvider,
+            deployProvider: app.deployProvider,
+            dbProvider: app.dbProvider,
             createdAt: app.createdAt,
             updatedAt: app.updatedAt,
           })),
@@ -87,12 +90,15 @@ export function registerApplicationsTools(server: McpServer, ctx: McpContext): v
 
   server.tool(
     "create_application",
-    "Create a new application",
+    "Create a new application with configurable providers for git, deployment, and database",
     {
       name: z.string().describe("Application name"),
       slug: z.string().describe("URL-friendly slug"),
       description: z.string().optional().describe("Application description"),
       repositoryUrl: z.string().optional().describe("Git repository URL"),
+      gitProvider: z.enum(["github", "gitea", "gitlab"]).optional().describe("Git provider (default: github)"),
+      deployProvider: z.enum(["vercel", "kubernetes", "railway", "flyio"]).optional().describe("Deployment provider (default: vercel)"),
+      dbProvider: z.enum(["neon", "turso", "supabase", "planetscale"]).optional().describe("Database provider (default: neon)"),
     },
     async (args) => {
       return executeTool("create_application", async () => {
@@ -101,12 +107,18 @@ export function registerApplicationsTools(server: McpServer, ctx: McpContext): v
           slug: args.slug,
           description: args.description,
           repositoryUrl: args.repositoryUrl,
+          gitProvider: args.gitProvider,
+          deployProvider: args.deployProvider,
+          dbProvider: args.dbProvider,
         });
         return {
           id: app.id,
           name: app.name,
           slug: app.slug,
           status: app.status,
+          gitProvider: app.gitProvider,
+          deployProvider: app.deployProvider,
+          dbProvider: app.dbProvider,
           createdAt: app.createdAt,
         };
       });

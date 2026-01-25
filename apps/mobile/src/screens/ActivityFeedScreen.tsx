@@ -12,30 +12,24 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
-import { ScopeBar } from "../components/ScopeBar";
-import { useCurrentScope, useScopeStore } from "../stores/scope";
 import { trpc } from "../lib/trpc";
+import { useTheme } from "../hooks/useTheme";
 
-type ActivityType = "pipeline" | "notification" | "deployment" | "alert";
-type FilterType = "all" | "pipelines" | "notifications" | "deployments";
+type ActivityType = "deployment" | "commit" | "alert" | "build" | "notification";
+type FilterType = "all" | "deployments" | "commits" | "alerts" | "builds";
 
 interface ActivityItem {
   id: string;
   type: ActivityType;
   title: string;
-  subtitle: string;
+  description?: string;
   timestamp: Date;
-  status: "success" | "running" | "failed" | "pending" | "info" | "warning" | "critical";
-  siteId?: string;
-  siteName?: string;
-  metadata?: {
-    commitSha?: string;
-    author?: string;
-    repository?: string;
-    category?: string;
-    severity?: string;
-    isUnread?: boolean;
-  };
+  severity: string;
+  appId?: string;
+  appName?: string;
+  environment?: string;
+  actorName?: string;
+  actorAvatar?: string;
 }
 
 interface ActivitySection {
@@ -43,50 +37,43 @@ interface ActivitySection {
   data: ActivityItem[];
 }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-
-function ActivityItemCard({ item, onPress }: { item: ActivityItem; onPress: () => void }) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
+function ActivityItemCard({
+  item,
+  onPress,
+  colors,
+}: {
+  item: ActivityItem;
+  onPress: () => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
       case "success":
         return "#22c55e";
-      case "running":
+      case "info":
         return "#3b82f6";
-      case "failed":
-      case "critical":
-        return "#ef4444";
       case "warning":
         return "#f59e0b";
-      case "pending":
-        return "#6b7280";
+      case "error":
+      case "critical":
+        return "#ef4444";
       default:
-        return "#3b82f6";
+        return colors.textMuted;
     }
   };
 
   const getTypeIcon = (type: ActivityType): React.ComponentProps<typeof Ionicons>["name"] => {
     switch (type) {
-      case "pipeline":
-        return "git-commit";
       case "deployment":
         return "rocket";
-      case "notification":
-        return "notifications";
+      case "commit":
+        return "git-commit";
       case "alert":
         return "alert-circle";
-    }
-  };
-
-  const getTypeLabel = (type: ActivityType) => {
-    switch (type) {
-      case "pipeline":
-        return "Pipeline";
-      case "deployment":
-        return "Deploy";
-      case "notification":
-        return "Notification";
-      case "alert":
-        return "Alert";
+      case "build":
+        return "construct";
+      default:
+        return "notifications";
     }
   };
 
@@ -96,59 +83,61 @@ function ActivityItemCard({ item, onPress }: { item: ActivityItem; onPress: () =
     const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return `${Math.floor(diffMins / 1440)}d ago`;
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h`;
+    return `${Math.floor(diffMins / 1440)}d`;
   };
 
-  const statusColor = getStatusColor(item.status);
-  const isUnread = item.metadata?.isUnread;
+  const severityColor = getSeverityColor(item.severity);
 
   return (
     <TouchableOpacity
-      style={[styles.activityCard, isUnread && styles.unreadCard]}
+      style={[styles.activityCard, { backgroundColor: colors.card }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.typeIndicator, { backgroundColor: statusColor }]} />
+      <View style={[styles.typeIndicator, { backgroundColor: severityColor }]} />
 
-      <View style={[styles.iconContainer, { backgroundColor: statusColor + "20" }]}>
-        <Ionicons name={getTypeIcon(item.type)} size={20} color={statusColor} />
+      <View style={[styles.iconContainer, { backgroundColor: severityColor + "20" }]}>
+        <Ionicons name={getTypeIcon(item.type)} size={18} color={severityColor} />
       </View>
 
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeText}>{getTypeLabel(item.type)}</Text>
-          </View>
-          <Text style={styles.timestamp}>{formatTimeAgo(item.timestamp)}</Text>
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text style={[styles.timestamp, { color: colors.textMuted }]}>
+            {formatTimeAgo(item.timestamp)}
+          </Text>
         </View>
 
-        <Text style={styles.title} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {item.subtitle}
-        </Text>
-
-        {item.metadata?.commitSha && (
-          <View style={styles.metaRow}>
-            <Text style={styles.commitSha}>{item.metadata.commitSha.substring(0, 7)}</Text>
-            {item.metadata.author && (
-              <Text style={styles.author}>by {item.metadata.author}</Text>
-            )}
-          </View>
+        {item.description && (
+          <Text style={[styles.description, { color: colors.textMuted }]} numberOfLines={1}>
+            {item.description}
+          </Text>
         )}
 
-        {item.siteName && (
-          <View style={styles.siteTag}>
-            <Ionicons name="business" size={10} color="#64748b" />
-            <Text style={styles.siteText}>{item.siteName}</Text>
-          </View>
-        )}
+        <View style={styles.metaRow}>
+          {item.appName && (
+            <View style={[styles.appTag, { backgroundColor: colors.background }]}>
+              <Text style={[styles.appText, { color: colors.textMuted }]}>{item.appName}</Text>
+            </View>
+          )}
+          {item.environment && (
+            <View style={[styles.envTag, { backgroundColor: colors.background }]}>
+              <Text style={[styles.envText, { color: colors.textMuted }]}>{item.environment}</Text>
+            </View>
+          )}
+          {item.actorName && (
+            <Text style={[styles.actor, { color: colors.textMuted }]}>
+              by {item.actorName}
+            </Text>
+          )}
+        </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={16} color="#475569" />
+      <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
     </TouchableOpacity>
   );
 }
@@ -157,120 +146,66 @@ function FilterChip({
   label,
   active,
   onPress,
-  count,
+  colors,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
-  count?: number;
+  colors: ReturnType<typeof useTheme>["colors"];
 }) {
   return (
     <TouchableOpacity
-      style={[styles.filterChip, active && styles.filterChipActive]}
+      style={[
+        styles.filterChip,
+        { backgroundColor: active ? colors.primary : colors.card },
+      ]}
       onPress={onPress}
     >
-      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+      <Text
+        style={[
+          styles.filterChipText,
+          { color: active ? "#fff" : colors.textMuted },
+        ]}
+      >
         {label}
       </Text>
-      {count !== undefined && count > 0 && (
-        <View style={[styles.filterCount, active && styles.filterCountActive]}>
-          <Text style={styles.filterCountText}>{count > 99 ? "99+" : count}</Text>
-        </View>
-      )}
     </TouchableOpacity>
   );
 }
 
 export function ActivityFeedScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isGlobal, siteId } = useCurrentScope();
-  const sites = useScopeStore((state) => state.sites);
+  const { colors, isDark } = useTheme();
 
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
-  const [pipelinesData, setPipelinesData] = useState<ActivityItem[]>([]);
-  const [pipelinesLoading, setPipelinesLoading] = useState(true);
 
-  const notificationsQuery = trpc.notifications.list.useQuery({ limit: 30 });
-  const statsQuery = trpc.notifications.stats.useQuery();
-
-  const fetchPipelines = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/pipeline?action=journeys&limit=20`);
-      if (!response.ok) return;
-      const data = await response.json();
-
-      const items: ActivityItem[] = (data.journeys || []).map((j: any) => ({
-        id: `pipeline-${j.commit.sha}`,
-        type: "pipeline" as const,
-        title: j.commit.message,
-        subtitle: j.commit.repository,
-        timestamp: new Date(j.commit.timestamp),
-        status: j.status,
-        metadata: {
-          commitSha: j.commit.sha,
-          author: j.commit.author,
-          repository: j.commit.repository,
-        },
-      }));
-
-      setPipelinesData(items);
-    } catch (error) {
-      console.error("Error fetching pipelines:", error);
-    } finally {
-      setPipelinesLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    fetchPipelines();
-  }, [fetchPipelines]);
+  const activityQuery = trpc.activity.recent.useQuery({
+    limit: 50,
+    type: filter,
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchPipelines(), notificationsQuery.refetch(), statsQuery.refetch()]);
+    await activityQuery.refetch();
     setRefreshing(false);
-  }, [fetchPipelines, notificationsQuery, statsQuery]);
+  }, [activityQuery]);
 
-  const notificationItems: ActivityItem[] = useMemo(() => {
-    return (notificationsQuery.data?.notifications || []).map((n) => ({
-      id: `notification-${n.id}`,
-      type: n.category === "deployment" ? "deployment" : "notification" as ActivityType,
-      title: n.title,
-      subtitle: n.message,
-      timestamp: n.createdAt,
-      status: n.severity === "critical" ? "critical" : n.severity === "warning" ? "warning" : "info",
-      siteId: undefined,
-      siteName: n.appName || undefined,
-      metadata: {
-        category: n.category,
-        severity: n.severity,
-        isUnread: n.status === "new",
-      },
+  const activities: ActivityItem[] = useMemo(() => {
+    return (activityQuery.data ?? []).map((event) => ({
+      id: event.id,
+      type: mapCategoryToType(event.category),
+      title: event.title,
+      description: event.description ?? undefined,
+      timestamp: new Date(event.timestamp),
+      severity: event.severity,
+      appId: event.appId ?? undefined,
+      appName: event.appName ?? undefined,
+      environment: event.environment ?? undefined,
+      actorName: event.actorName ?? undefined,
+      actorAvatar: event.actorAvatar ?? undefined,
     }));
-  }, [notificationsQuery.data]);
-
-  const allActivities = useMemo(() => {
-    let items: ActivityItem[] = [];
-
-    if (filter === "all" || filter === "pipelines") {
-      items = [...items, ...pipelinesData];
-    }
-    if (filter === "all" || filter === "notifications") {
-      items = [...items, ...notificationItems.filter((i) => i.type === "notification")];
-    }
-    if (filter === "all" || filter === "deployments") {
-      items = [...items, ...notificationItems.filter((i) => i.type === "deployment")];
-    }
-
-    if (!isGlobal && siteId) {
-      items = items.filter((item) => !item.siteId || item.siteId === siteId);
-    }
-
-    items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-    return items;
-  }, [filter, pipelinesData, notificationItems, isGlobal, siteId]);
+  }, [activityQuery.data]);
 
   const sections: ActivitySection[] = useMemo(() => {
     const now = new Date();
@@ -283,7 +218,7 @@ export function ActivityFeedScreen() {
     const thisWeekItems: ActivityItem[] = [];
     const olderItems: ActivityItem[] = [];
 
-    allActivities.forEach((item) => {
+    activities.forEach((item) => {
       if (item.timestamp >= today) {
         todayItems.push(item);
       } else if (item.timestamp >= yesterday) {
@@ -302,75 +237,85 @@ export function ActivityFeedScreen() {
     if (olderItems.length > 0) result.push({ title: "Older", data: olderItems });
 
     return result;
-  }, [allActivities]);
+  }, [activities]);
 
   const handleItemPress = (item: ActivityItem) => {
-    if (item.type === "notification" || item.type === "deployment") {
-      const notificationId = item.id.replace("notification-", "");
-      navigation.navigate("NotificationDetail", { id: notificationId });
+    if (item.appId) {
+      navigation.navigate("ApplicationDetail", { id: item.appId });
+    } else if (item.type === "alert") {
+      navigation.navigate("AlertDetail", { id: item.id });
     }
   };
 
-  const unreadCount = statsQuery.data?.unread ?? 0;
-  const isLoading = pipelinesLoading || notificationsQuery.isLoading;
+  const isLoading = activityQuery.isLoading;
 
   return (
-    <View style={styles.container}>
-      <ScopeBar />
-
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.filterRow}>
         <FilterChip
           label="All"
           active={filter === "all"}
           onPress={() => setFilter("all")}
+          colors={colors}
         />
         <FilterChip
-          label="Pipelines"
-          active={filter === "pipelines"}
-          onPress={() => setFilter("pipelines")}
-          count={pipelinesData.length}
-        />
-        <FilterChip
-          label="Notifications"
-          active={filter === "notifications"}
-          onPress={() => setFilter("notifications")}
-          count={unreadCount}
-        />
-        <FilterChip
-          label="Deploys"
+          label="Deployments"
           active={filter === "deployments"}
           onPress={() => setFilter("deployments")}
+          colors={colors}
+        />
+        <FilterChip
+          label="Commits"
+          active={filter === "commits"}
+          onPress={() => setFilter("commits")}
+          colors={colors}
+        />
+        <FilterChip
+          label="Alerts"
+          active={filter === "alerts"}
+          onPress={() => setFilter("alerts")}
+          colors={colors}
         />
       </View>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>Loading activity...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+            Loading activity...
+          </Text>
         </View>
       ) : (
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <ActivityItemCard item={item} onPress={() => handleItemPress(item)} />
+            <ActivityItemCard
+              item={item}
+              onPress={() => handleItemPress(item)}
+              colors={colors}
+            />
           )}
           renderSectionHeader={({ section: { title } }) => (
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{title}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
             </View>
           )}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3b82f6" />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.text}
+            />
           }
           contentContainerStyle={styles.listContent}
           stickySectionHeadersEnabled={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="time-outline" size={48} color="#475569" />
-              <Text style={styles.emptyTitle}>No activity yet</Text>
-              <Text style={styles.emptyText}>
-                Pipeline runs and notifications will appear here
+              <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No activity yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                Deployments, commits, and alerts will appear here
               </Text>
             </View>
           }
@@ -380,10 +325,29 @@ export function ActivityFeedScreen() {
   );
 }
 
+function mapCategoryToType(category: string): ActivityType {
+  switch (category) {
+    case "deployment":
+    case "deploy":
+      return "deployment";
+    case "commit":
+    case "push":
+      return "commit";
+    case "alert":
+    case "notification":
+      return "alert";
+    case "build":
+    case "ci":
+    case "workflow":
+      return "build";
+    default:
+      return "notification";
+  }
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f172a",
   },
   filterRow: {
     flexDirection: "row",
@@ -392,143 +356,98 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#1e293b",
-    gap: 6,
-  },
-  filterChipActive: {
-    backgroundColor: "#3b82f6",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
   },
   filterChipText: {
     fontSize: 13,
-    fontWeight: "500",
-    color: "#94a3b8",
-  },
-  filterChipTextActive: {
-    color: "#fff",
-  },
-  filterCount: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  filterCountActive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  filterCountText: {
-    fontSize: 11,
     fontWeight: "600",
-    color: "#fff",
   },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 100,
   },
   sectionHeader: {
-    paddingVertical: 12,
-    paddingTop: 20,
+    paddingVertical: 10,
+    paddingTop: 18,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#64748b",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   activityCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
+    borderRadius: 10,
     marginBottom: 8,
     overflow: "hidden",
-  },
-  unreadCard: {
-    borderWidth: 1,
-    borderColor: "#3b82f6",
   },
   typeIndicator: {
     width: 3,
     height: "100%",
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 12,
+    marginLeft: 10,
   },
   contentContainer: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
-  },
-  typeBadge: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  typeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-  },
-  timestamp: {
-    fontSize: 11,
-    color: "#64748b",
+    marginBottom: 2,
   },
   title: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#fff",
-    marginBottom: 2,
+    flex: 1,
+    marginRight: 8,
   },
-  subtitle: {
+  timestamp: {
+    fontSize: 11,
+  },
+  description: {
     fontSize: 12,
-    color: "#94a3b8",
+    marginBottom: 4,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 6,
-    gap: 8,
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
   },
-  commitSha: {
-    fontSize: 11,
-    fontFamily: "monospace",
-    color: "#60a5fa",
-    backgroundColor: "#1e3a5f",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
+  appTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  author: {
-    fontSize: 11,
-    color: "#64748b",
-  },
-  siteTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 4,
-  },
-  siteText: {
+  appText: {
     fontSize: 10,
-    color: "#64748b",
+    fontWeight: "500",
+  },
+  envTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  envText: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  actor: {
+    fontSize: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -538,7 +457,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: "#94a3b8",
   },
   emptyContainer: {
     alignItems: "center",
@@ -548,13 +466,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#fff",
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: "#64748b",
     textAlign: "center",
   },
 });

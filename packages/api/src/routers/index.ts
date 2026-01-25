@@ -12,6 +12,7 @@ import { clustersRouter } from "./clusters";
 import { deploymentsRouter } from "./deployments";
 import { infrastructureRouter } from "./infrastructure";
 import { monitoringRouter } from "./monitoring";
+import { pipelinesRouter } from "./pipelines";
 import { resourcesRouter } from "./resources";
 import { aiDevRouter } from "./ai-dev";
 import { notionRouter } from "./notion";
@@ -21,6 +22,7 @@ import { syncRouter } from "./sync";
 import { webhooksRouter } from "./webhooks";
 import { apiKeysRouter } from "./api-keys";
 import { integrationsRouter } from "./integrations";
+import { templatesRouter } from "./templates";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -30,6 +32,7 @@ export const appRouter = router({
   deployments: deploymentsRouter,
   infrastructure: infrastructureRouter,
   monitoring: monitoringRouter,
+  pipelines: pipelinesRouter,
   resources: resourcesRouter,
   aiDev: aiDevRouter,
   notion: notionRouter,
@@ -39,6 +42,7 @@ export const appRouter = router({
   webhooks: webhooksRouter,
   apiKeys: apiKeysRouter,
   integrations: integrationsRouter,
+  templates: templatesRouter,
 });
 
 export type AppRouter = typeof appRouter;

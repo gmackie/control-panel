@@ -13,8 +13,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
-import { ScopeBar } from "../components/ScopeBar";
-import { useCurrentScope } from "../stores/scope";
 import { useBiometricAuth } from "../hooks/useBiometricAuth";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
@@ -192,7 +190,6 @@ function FilterChip({
 
 export function IssuesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isGlobal, siteId } = useCurrentScope();
   const { authenticate } = useBiometricAuth();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -369,7 +366,6 @@ export function IssuesScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScopeBar />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>Loading issues...</Text>
@@ -380,8 +376,6 @@ export function IssuesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScopeBar />
-
       <View style={styles.filterRow}>
         <FilterChip
           label="All"

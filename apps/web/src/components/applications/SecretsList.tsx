@@ -48,7 +48,11 @@ import {
   CheckCircle,
   Loader2,
   AlertCircle,
+  Upload,
+  Download,
+  FileText,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Secret {
   id: string;
@@ -72,15 +76,19 @@ export function SecretsList({ applicationId }: SecretsListProps) {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
   const [copiedSecretId, setCopiedSecretId] = useState<string | null>(null);
 
-  // Form state for create/edit
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
   const [secretEnvironment, setSecretEnvironment] = useState("all");
   const [secretDescription, setSecretDescription] = useState("");
   const [showSecretValue, setShowSecretValue] = useState(false);
+  
+  const [importContent, setImportContent] = useState("");
+  const [importEnvironment, setImportEnvironment] = useState("all");
+  const [importPreview, setImportPreview] = useState<Array<{ name: string; value: string }>>([]);
 
   const { data: secretsResponse, isLoading, error } = useQuery<{ success: boolean; data: Secret[]; count: number }>({
     queryKey: ["secrets", applicationId],
@@ -199,6 +207,78 @@ export function SecretsList({ applicationId }: SecretsListProps) {
     setTimeout(() => setCopiedSecretId(null), 2000);
   };
 
+  const parseEnvContent = (content: string): Array<{ name: string; value: string }> => {
+    const lines = content.split('\n');
+    const result: Array<{ name: string; value: string }> = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      const match = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (match) {
+        let value = match[2];
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        result.push({ name: match[1], value });
+      }
+    }
+    return result;
+  };
+
+  const handleImportChange = (content: string) => {
+    setImportContent(content);
+    setImportPreview(parseEnvContent(content));
+  };
+
+  const importMutation = useMutation({
+    mutationFn: async (entries: Array<{ name: string; value: string }>) => {
+      const results = await Promise.all(
+        entries.map(async (entry) => {
+          const response = await fetch(`/api/apps/${applicationId}/secrets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: entry.name,
+              value: entry.value,
+              environment: importEnvironment,
+            }),
+          });
+          return response.json();
+        })
+      );
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        throw new Error(`Failed to import ${failed.length} secrets`);
+      }
+      return results;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["secrets", applicationId] });
+      setImportContent("");
+      setImportPreview([]);
+      setShowImportModal(false);
+    },
+  });
+
+  const exportAsEnv = () => {
+    const envContent = secrets
+      .map(s => `${s.name}=${s.maskedValue.includes('•') ? '# (hidden)' : s.maskedValue}`)
+      .join('\n');
+    
+    const blob = new Blob([envContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${applicationId}.env`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const getEnvironmentColor = (env: string) => {
     switch (env) {
       case "production":
@@ -241,15 +321,27 @@ export function SecretsList({ applicationId }: SecretsListProps) {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold">Secrets</h2>
+            <h2 className="text-xl font-semibold">Secrets & Environment Variables</h2>
             <p className="text-sm text-gray-400 mt-1">
               Securely store API keys, tokens, and other sensitive data
             </p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Secret
-          </Button>
+          <div className="flex gap-2">
+            {secrets.length > 0 && (
+              <Button variant="outline" onClick={exportAsEnv} title="Export as .env">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setShowImportModal(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Secret
+            </Button>
+          </div>
         </div>
 
         {secrets.length > 0 ? (
@@ -531,6 +623,95 @@ export function SecretsList({ applicationId }: SecretsListProps) {
               </p>
             )}
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Import from .env
+            </DialogTitle>
+            <DialogDescription>
+              Paste your .env file contents to bulk import secrets. Existing secrets with the same name will be updated.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="env-content">Environment File Contents</Label>
+              <Textarea
+                id="env-content"
+                placeholder="DATABASE_URL=postgres://...&#10;API_KEY=sk_live_...&#10;SECRET_TOKEN=..."
+                value={importContent}
+                onChange={(e) => handleImportChange(e.target.value)}
+                className="font-mono text-sm min-h-[200px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="import-environment">Target Environment</Label>
+              <Select value={importEnvironment} onValueChange={setImportEnvironment}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Environments</SelectItem>
+                  <SelectItem value="production">Production</SelectItem>
+                  <SelectItem value="staging">Staging</SelectItem>
+                  <SelectItem value="development">Development</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {importPreview.length > 0 && (
+              <div className="space-y-2">
+                <Label>Preview ({importPreview.length} secrets found)</Label>
+                <div className="max-h-[150px] overflow-y-auto border border-gray-800 rounded-lg p-2">
+                  {importPreview.map((entry, idx) => (
+                    <div key={idx} className="flex items-center justify-between py-1 px-2 hover:bg-gray-900 rounded text-sm">
+                      <code className="text-blue-400">{entry.name}</code>
+                      <code className="text-gray-500 text-xs truncate max-w-[200px]">
+                        {entry.value.length > 20 ? `${entry.value.slice(0, 20)}...` : entry.value}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => { 
+                setImportContent(""); 
+                setImportPreview([]); 
+                setShowImportModal(false); 
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => importMutation.mutate(importPreview)}
+              disabled={importMutation.isPending || importPreview.length === 0}
+            >
+              {importMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import {importPreview.length} Secrets
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+          {importMutation.isError && (
+            <p className="text-sm text-red-500 mt-2">
+              {(importMutation.error as Error).message}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </>

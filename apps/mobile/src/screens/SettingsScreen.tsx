@@ -15,7 +15,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { trpc } from "../lib/trpc";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useBiometricAuth } from "../hooks/useBiometricAuth";
-import { useSettingsStore } from "../stores/settings";
+import { useSettingsStore, ThemePreference, ApiEnvironment, API_URLS, useDemoMode } from "../stores/settings";
+import { useTheme } from "../hooks/useTheme";
 import { useOfflineStore } from "../stores/offline";
 import { useAuthStore } from "../stores/auth";
 
@@ -101,6 +102,9 @@ export function SettingsScreen() {
   const setBiometricEnabled = useSettingsStore((s) => s.setBiometricEnabled);
   const hapticEnabled = useSettingsStore((s) => s.hapticFeedbackEnabled);
   const setHapticEnabled = useSettingsStore((s) => s.setHapticFeedbackEnabled);
+  const themePreference = useSettingsStore((s) => s.themePreference);
+  const setThemePreference = useSettingsStore((s) => s.setThemePreference);
+  const { isDark } = useTheme();
   const clearOfflineCache = useOfflineStore((s) => s.clearCache);
   const offlineQueueLength = useOfflineStore((s) => s.actionQueue.length);
   
@@ -111,6 +115,53 @@ export function SettingsScreen() {
   
   const [apiKeyModalVisible, setApiKeyModalVisible] = React.useState(false);
   const [apiKeyInput, setApiKeyInput] = React.useState("");
+
+  const apiEnvironment = useSettingsStore((s) => s.apiEnvironment);
+  const setApiEnvironment = useSettingsStore((s) => s.setApiEnvironment);
+  const demoMode = useDemoMode();
+  const setDemoMode = useSettingsStore((s) => s.setDemoMode);
+
+  const themeLabels: Record<ThemePreference, string> = {
+    system: "System",
+    light: "Light",
+    dark: "Dark",
+  };
+
+  const envLabels: Record<ApiEnvironment, string> = {
+    production: "Production",
+    local: "Local Dev",
+  };
+
+  const handleThemePress = () => {
+    Alert.alert(
+      "Appearance",
+      "Choose your preferred theme",
+      [
+        { text: "System", onPress: () => setThemePreference("system") },
+        { text: "Light", onPress: () => setThemePreference("light") },
+        { text: "Dark", onPress: () => setThemePreference("dark") },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  };
+
+  const handleEnvironmentPress = () => {
+    Alert.alert(
+      "API Environment",
+      "Choose which backend to connect to",
+      [
+        {
+          text: `Production (${API_URLS.production})`,
+          onPress: () => setApiEnvironment("production"),
+        },
+        {
+          text: `Local Dev (${API_URLS.local})`,
+          onPress: () => setApiEnvironment("local"),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  };
 
   const preferencesQuery = trpc.notifications.getPreferences?.useQuery?.();
   const updatePreferencesMutation = trpc.notifications.updatePreferences?.useMutation?.();
@@ -400,6 +451,15 @@ export function SettingsScreen() {
 
       <SettingSection title="API Connection">
         <SettingRow
+          icon="server"
+          iconColor="#8b5cf6"
+          label="Environment"
+          description={API_URLS[apiEnvironment]}
+          rightText={envLabels[apiEnvironment]}
+          onPress={handleEnvironmentPress}
+          showChevron
+        />
+        <SettingRow
           icon="key"
           iconColor={isAuthenticated ? "#22c55e" : "#f59e0b"}
           label="API Key"
@@ -421,6 +481,18 @@ export function SettingsScreen() {
             showChevron
           />
         )}
+      </SettingSection>
+
+      <SettingSection title="Appearance">
+        <SettingRow
+          icon={isDark ? "moon" : "sunny"}
+          iconColor="#f59e0b"
+          label="Theme"
+          description={`Currently: ${isDark ? "Dark" : "Light"}`}
+          rightText={themeLabels[themePreference]}
+          onPress={handleThemePress}
+          showChevron
+        />
       </SettingSection>
 
       <SettingSection title="App">
@@ -449,6 +521,17 @@ export function SettingsScreen() {
           iconColor="#64748b"
           label="Version"
           rightText="1.0.0"
+        />
+      </SettingSection>
+
+      <SettingSection title="Developer">
+        <SettingRow
+          icon="flask"
+          iconColor="#a855f7"
+          label="Demo Mode"
+          description="Show sample data for demonstration purposes"
+          value={demoMode}
+          onValueChange={setDemoMode}
         />
       </SettingSection>
 

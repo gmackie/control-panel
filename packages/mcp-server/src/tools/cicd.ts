@@ -137,12 +137,13 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
 
   server.tool(
     "list_deployments",
-    "List deployments with optional filtering",
+    "List deployments with optional filtering. When projectId is provided along with appId, fetches real deployments from the configured provider (Vercel, K8s, etc.).",
     {
       limit: z.number().optional().describe("Maximum number of deployments to return"),
       environment: z.enum(["development", "staging", "production"]).optional().describe("Filter by environment"),
       status: z.enum(["pending", "running", "succeeded", "failed", "cancelled"]).optional().describe("Filter by status"),
       appId: z.string().optional().describe("Filter by application ID"),
+      projectId: z.string().optional().describe("Provider project ID (e.g., Vercel project ID) - enables provider-based deployment listing"),
     },
     async (args) => {
       return executeTool("list_deployments", async () => {
@@ -151,6 +152,7 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
           environment: args.environment,
           status: args.status,
           appId: args.appId,
+          projectId: args.projectId,
         });
         return {
           count: deployments.length,
@@ -162,13 +164,17 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
 
   server.tool(
     "get_deployment",
-    "Get details of a specific deployment",
+    "Get details of a specific deployment. When appId is provided, fetches from the configured provider (Vercel, K8s, etc.).",
     {
       deploymentId: z.string().describe("Deployment ID"),
+      appId: z.string().optional().describe("Application ID - enables provider-based deployment lookup"),
     },
     async (args) => {
       return executeTool("get_deployment", async () => {
-        const deployment = await ctx.api.deployments.byId(args.deploymentId);
+        const deployment = await ctx.api.deployments.byId({
+          deploymentId: args.deploymentId,
+          appId: args.appId,
+        });
         if (!deployment) {
           throw new NotFoundError(`Deployment not found: ${args.deploymentId}`);
         }
@@ -194,12 +200,13 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
 
   server.tool(
     "trigger_deployment",
-    "Trigger a new deployment for an application",
+    "Trigger a new deployment for an application. When projectId is provided, triggers deployment via the configured provider (Vercel, K8s, etc.).",
     {
       appId: z.string().describe("Application ID"),
       environment: z.enum(["development", "staging", "production"]).describe("Target environment"),
       imageTag: z.string().optional().describe("Specific image tag to deploy"),
       commitSha: z.string().optional().describe("Specific commit SHA to deploy"),
+      projectId: z.string().optional().describe("Provider project ID (e.g., Vercel project ID) - enables provider-based deployment"),
     },
     async (args) => {
       return executeTool("trigger_deployment", async () => {
@@ -208,6 +215,7 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
           environment: args.environment,
           imageTag: args.imageTag,
           commitSha: args.commitSha,
+          projectId: args.projectId,
         });
       });
     }
@@ -215,16 +223,20 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
 
   server.tool(
     "rollback_deployment",
-    "Rollback a deployment to a previous version",
+    "Rollback a deployment to a previous version. When appId and projectId are provided, performs rollback via the configured provider (Vercel, K8s, etc.).",
     {
       deploymentId: z.string().describe("Deployment ID to rollback from"),
       targetVersion: z.string().optional().describe("Specific version to rollback to"),
+      appId: z.string().optional().describe("Application ID - enables provider-based rollback"),
+      projectId: z.string().optional().describe("Provider project ID - enables provider-based rollback"),
     },
     async (args) => {
       return executeTool("rollback_deployment", async () => {
         return await ctx.api.deployments.rollback({
           deploymentId: args.deploymentId,
           targetVersion: args.targetVersion,
+          appId: args.appId,
+          projectId: args.projectId,
         });
       });
     }
@@ -232,13 +244,17 @@ export function registerCicdTools(server: McpServer, ctx: McpContext): void {
 
   server.tool(
     "cancel_deployment",
-    "Cancel a running deployment",
+    "Cancel a running deployment. When appId is provided, cancels via the configured provider (Vercel, K8s, etc.).",
     {
       deploymentId: z.string().describe("Deployment ID to cancel"),
+      appId: z.string().optional().describe("Application ID - enables provider-based cancellation"),
     },
     async (args) => {
       return executeTool("cancel_deployment", async () => {
-        return await ctx.api.deployments.cancel(args.deploymentId);
+        return await ctx.api.deployments.cancel({
+          deploymentId: args.deploymentId,
+          appId: args.appId,
+        });
       });
     }
   );

@@ -138,7 +138,10 @@ export const applicationsRouter = router({
           id: app.id,
           name: app.name,
           slug: app.slug,
+          description: app.description,
+          repositoryUrl: app.repositoryUrl,
           status,
+          appStatus: app.status,
           alertCounts: { critical: criticalCount, warning: warningCount },
           latestAlert: latestNotification ? {
             message: latestNotification.message,
@@ -146,6 +149,10 @@ export const applicationsRouter = router({
             timestamp: latestNotification.createdAt,
           } : null,
           lastActivity: latestNotification?.createdAt ?? app.updatedAt,
+          gitProvider: app.gitProvider,
+          deployProvider: app.deployProvider,
+          dbProvider: app.dbProvider,
+          isDeploying: app.status === 'deploying',
         };
       }).sort((a, b) => {
         // Sort by status severity (critical > warning > healthy)
@@ -164,6 +171,9 @@ export const applicationsRouter = router({
       slug: z.string().min(1),
       description: z.string().optional(),
       repositoryUrl: z.string().optional(),
+      gitProvider: z.enum(["github", "gitea", "gitlab"]).optional().default("github"),
+      deployProvider: z.enum(["vercel", "kubernetes", "railway", "flyio"]).optional().default("vercel"),
+      dbProvider: z.enum(["neon", "turso", "supabase", "planetscale"]).optional().default("neon"),
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.db) {
@@ -177,6 +187,9 @@ export const applicationsRouter = router({
         slug: input.slug,
         description: input.description || null,
         repositoryUrl: input.repositoryUrl || null,
+        gitProvider: input.gitProvider,
+        deployProvider: input.deployProvider,
+        dbProvider: input.dbProvider,
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -193,6 +206,9 @@ export const applicationsRouter = router({
       repositoryUrl: z.string().optional(),
       localRepoPath: z.string().optional(),
       status: z.string().optional(),
+      gitProvider: z.enum(["github", "gitea", "gitlab"]).optional(),
+      deployProvider: z.enum(["vercel", "kubernetes", "railway", "flyio"]).optional(),
+      dbProvider: z.enum(["neon", "turso", "supabase", "planetscale"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.db) {
@@ -215,6 +231,9 @@ export const applicationsRouter = router({
       if (input.repositoryUrl !== undefined) updateData.repositoryUrl = input.repositoryUrl;
       if (input.localRepoPath !== undefined) updateData.localRepoPath = input.localRepoPath;
       if (input.status !== undefined) updateData.status = input.status;
+      if (input.gitProvider !== undefined) updateData.gitProvider = input.gitProvider;
+      if (input.deployProvider !== undefined) updateData.deployProvider = input.deployProvider;
+      if (input.dbProvider !== undefined) updateData.dbProvider = input.dbProvider;
 
       const [updated] = await ctx.db
         .update(applications)

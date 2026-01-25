@@ -1,8 +1,16 @@
+export type GitProviderType = 'github' | 'gitea' | 'gitlab';
+export type DeployProviderType = 'vercel' | 'kubernetes' | 'railway' | 'flyio';
+export type DbProviderType = 'neon' | 'turso' | 'supabase' | 'planetscale';
+
 export interface Application {
   id: string;
   name: string;
   description?: string;
-  slug: string; // URL-friendly identifier
+  slug: string;
+  repositoryUrl?: string;
+  gitProvider?: GitProviderType;
+  deployProvider?: DeployProviderType;
+  dbProvider?: DbProviderType;
   apiKeys: ApiKey[];
   secrets: ApplicationSecret[];
   integrations: ApplicationIntegration[];

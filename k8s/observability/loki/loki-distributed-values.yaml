@@ -1,0 +1,155 @@
+fullnameOverride: loki
+
+loki:
+  # Override the default filesystem storage with S3-compatible MinIO.
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: boltdb-shipper
+        object_store: s3
+        schema: v11
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  storageConfig:
+    boltdb_shipper:
+      shared_store: s3
+      active_index_directory: /var/loki/index
+      cache_location: /var/loki/cache
+      cache_ttl: 168h
+    s3:
+      endpoint: http://loki-minio:9000
+      region: us-east-1
+      bucketnames: loki
+      s3forcepathstyle: true
+      insecure: true
+
+  # Keep the chart's templated config but switch compactor shared_store.
+  config: |
+    auth_enabled: false
+
+    server:
+      {{- toYaml .Values.loki.server | nindent 6 }}
+
+    common:
+      compactor_address: http://{{ include "loki.compactorFullname" . }}:3100
+
+    distributor:
+      ring:
+        kvstore:
+          store: memberlist
+
+    memberlist:
+      cluster_label: "{{ .Release.Name }}.{{ .Release.Namespace }}"
+      join_members:
+        - {{ include "loki.fullname" . }}-memberlist
+
+    ingester_client:
+      grpc_client_config:
+        grpc_compression: gzip
+
+    ingester:
+      lifecycler:
+        ring:
+          kvstore:
+            store: memberlist
+          replication_factor: 1
+      chunk_idle_period: 30m
+      chunk_block_size: 262144
+      chunk_encoding: snappy
+      chunk_retain_period: 1m
+      max_transfer_retries: 0
+      wal:
+        dir: /var/loki/wal
+
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      max_cache_freshness_per_query: 10m
+      split_queries_by_interval: 15m
+
+    schema_config:
+    {{- toYaml .Values.loki.schemaConfig | nindent 2 }}
+
+    storage_config:
+    {{- toYaml .Values.loki.storageConfig | nindent 2 }}
+
+    runtime_config:
+      file: /var/{{ include "loki.name" . }}-runtime/runtime.yaml
+
+    chunk_store_config:
+      max_look_back_period: 0s
+
+    table_manager:
+      retention_deletes_enabled: false
+      retention_period: 0s
+
+    query_range:
+      align_queries_with_step: true
+      max_retries: 5
+      cache_results: true
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            ttl: 24h
+
+    frontend_worker:
+      {{- if .Values.queryScheduler.enabled }}
+      scheduler_address: {{ include "loki.querySchedulerFullname" . }}:9095
+      {{- else }}
+      frontend_address: {{ include "loki.queryFrontendFullname" . }}-headless:9095
+      {{- end }}
+
+    frontend:
+      log_queries_longer_than: 5s
+      compress_responses: true
+      {{- if .Values.queryScheduler.enabled }}
+      scheduler_address: {{ include "loki.querySchedulerFullname" . }}:9095
+      {{- end }}
+      tail_proxy_url: http://{{ include "loki.querierFullname" . }}:3100
+
+    compactor:
+      shared_store: s3
+      working_directory: /var/loki/compactor
+
+gateway:
+  enabled: true
+
+compactor:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 10Gi
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3
+
+ingester:
+  persistence:
+    enabled: true
+    storageClass: local-path
+    claims:
+      - name: data
+        size: 20Gi
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3
+
+distributor:
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3
+
+querier:
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3
+
+queryFrontend:
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3

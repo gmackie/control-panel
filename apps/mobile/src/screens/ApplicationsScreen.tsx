@@ -12,80 +12,19 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { trpc } from "../lib/trpc";
-import { ScopeBar } from "../components/ScopeBar";
-import { useScopeStore, useCurrentScope } from "../stores/scope";
+import { useTheme } from "../hooks/useTheme";
 import type { RootStackParamList } from "../../App";
+import { AppGridTile } from "../components/dashboard";
 
-interface ApplicationItemProps {
-  name: string;
-  slug: string;
-  status: string;
-  repositoryUrl?: string | null;
-  onPress: () => void;
-}
-
-function ApplicationItem({
-  name,
-  slug,
-  status,
-  repositoryUrl,
-  onPress,
-}: ApplicationItemProps) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-      case "healthy":
-        return "#22c55e";
-      case "degraded":
-      case "warning":
-        return "#f59e0b";
-      case "inactive":
-      case "error":
-        return "#ef4444";
-      default:
-        return "#6b7280";
-    }
-  };
-
-  return (
-    <TouchableOpacity style={styles.appItem} onPress={onPress}>
-      <View style={styles.appIcon}>
-        <Ionicons name="cube" size={24} color="#3b82f6" />
-      </View>
-      <View style={styles.appInfo}>
-        <Text style={styles.appName}>{name}</Text>
-        <Text style={styles.appSlug}>{slug}</Text>
-        {repositoryUrl && (
-          <View style={styles.repoRow}>
-            <Ionicons name="git-branch" size={12} color="#64748b" />
-            <Text style={styles.repoText} numberOfLines={1}>
-              {repositoryUrl.replace("https://", "")}
-            </Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.statusContainer}>
-        <View
-          style={[styles.statusDot, { backgroundColor: getStatusColor(status) }]}
-        />
-        <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-          {status}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#64748b" />
-    </TouchableOpacity>
-  );
-}
+type HealthStatus = "critical" | "warning" | "healthy";
 
 export function ApplicationsScreen() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { colors, isDark } = useTheme();
 
-  const { isGlobal, siteId } = useCurrentScope();
-  const { lastUpdated, setSiteScope } = useScopeStore();
-
-  const applicationsQuery = trpc.applications.list.useQuery();
+  const applicationsQuery = trpc.applications.listWithHealth.useQuery();
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -94,88 +33,101 @@ export function ApplicationsScreen() {
   }, [applicationsQuery]);
 
   const applications = applicationsQuery.data ?? [];
-  const filteredApps = applications.filter((app) => {
-    const matchesSearch =
-      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.slug.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredApps = applications.filter((app) =>
+    app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    app.slug.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-    if (!isGlobal && siteId) {
-      return matchesSearch && app.id === siteId;
-    }
-    return matchesSearch;
-  });
+  const healthyCount = applications.filter((a) => a.status === "healthy").length;
+  const warningCount = applications.filter((a) => a.status === "warning").length;
+  const criticalCount = applications.filter((a) => a.status === "critical").length;
+  const deployingCount = applications.filter((a) => a.isDeploying).length;
 
   const handleAppPress = (appId: string) => {
-    setSiteScope(appId);
     navigation.navigate("ApplicationDetail", { id: appId });
   };
 
-  return (
-    <View style={styles.container}>
-      <ScopeBar lastUpdated={lastUpdated} />
+  const renderGridItem = ({ item, index }: { item: typeof applications[0]; index: number }) => {
+    const isLeft = index % 2 === 0;
+    return (
+      <View style={[styles.gridItem, isLeft ? styles.gridItemLeft : styles.gridItemRight]}>
+        <AppGridTile
+          name={item.name}
+          status={item.status as HealthStatus}
+          isDeploying={item.isDeploying}
+          gitProvider={item.gitProvider ?? undefined}
+          deployProvider={item.deployProvider ?? undefined}
+          onPress={() => handleAppPress(item.id)}
+        />
+      </View>
+    );
+  };
 
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#64748b" />
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
+        <Ionicons name="search" size={20} color={colors.textMuted} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search applications..."
-          placeholderTextColor="#64748b"
+          placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery("")}>
-            <Ionicons name="close-circle" size={20} color="#64748b" />
+            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
+      <View style={[styles.statsRow, { backgroundColor: colors.card }]}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{applications.length}</Text>
-          <Text style={styles.statLabel}>Total</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{applications.length}</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: "#22c55e" }]}>
-            {applications.filter((a) => a.status === "active").length}
-          </Text>
-          <Text style={styles.statLabel}>Active</Text>
+          <Text style={[styles.statValue, { color: "#22c55e" }]}>{healthyCount}</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Healthy</Text>
         </View>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: "#f59e0b" }]}>
-            {applications.filter((a) => a.status === "deploying").length}
-          </Text>
-          <Text style={styles.statLabel}>Deploying</Text>
-        </View>
+        {warningCount > 0 && (
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: "#f59e0b" }]}>{warningCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Warning</Text>
+          </View>
+        )}
+        {criticalCount > 0 && (
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: "#ef4444" }]}>{criticalCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Critical</Text>
+          </View>
+        )}
+        {deployingCount > 0 && (
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: "#3b82f6" }]}>{deployingCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Deploying</Text>
+          </View>
+        )}
       </View>
 
-      {/* Applications List */}
       <FlatList
         data={filteredApps}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ApplicationItem
-            name={item.name}
-            slug={item.slug}
-            status={item.status}
-            repositoryUrl={item.repositoryUrl}
-            onPress={() => handleAppPress(item.id)}
-          />
-        )}
+        numColumns={2}
+        renderItem={renderGridItem}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#fff"
+            tintColor={colors.text}
           />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={styles.gridContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={48} color="#64748b" />
-            <Text style={styles.emptyTitle}>No Applications</Text>
-            <Text style={styles.emptyText}>
+            <Ionicons name="cube-outline" size={48} color={colors.textMuted} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Applications</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
               {searchQuery
                 ? "No applications match your search"
                 : "Add your first application to get started"}
@@ -183,11 +135,6 @@ export function ApplicationsScreen() {
           </View>
         }
       />
-
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -195,12 +142,10 @@ export function ApplicationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f172a",
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
     margin: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -208,123 +153,55 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: "#fff",
     fontSize: 16,
     marginLeft: 12,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingVertical: 16,
+    paddingVertical: 14,
     marginHorizontal: 16,
-    backgroundColor: "#1e293b",
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   statItem: {
     alignItems: "center",
   },
   statValue: {
-    color: "#fff",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
   },
   statLabel: {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  appItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  appIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#1e3a5f",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  appInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  appName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  appSlug: {
-    color: "#64748b",
-    fontSize: 14,
+    fontSize: 11,
     marginTop: 2,
   },
-  repoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
+  gridContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 100,
   },
-  repoText: {
-    color: "#64748b",
-    fontSize: 12,
-    marginLeft: 4,
+  gridItem: {
     flex: 1,
+    maxWidth: "50%",
   },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 8,
+  gridItemLeft: {
+    paddingRight: 0,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "500",
-    textTransform: "capitalize",
+  gridItemRight: {
+    paddingLeft: 0,
   },
   emptyState: {
     alignItems: "center",
     paddingVertical: 48,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: "#fff",
     fontSize: 18,
     fontWeight: "600",
     marginTop: 16,
   },
   emptyText: {
-    color: "#64748b",
     fontSize: 14,
     marginTop: 8,
     textAlign: "center",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#3b82f6",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });

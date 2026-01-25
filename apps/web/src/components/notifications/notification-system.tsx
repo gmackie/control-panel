@@ -21,6 +21,7 @@ import {
   Clock
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 
 export interface Notification {
   id: string
@@ -192,6 +193,7 @@ function NotificationItem({
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const { authenticated } = useAuth()
 
   const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {
@@ -229,6 +231,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   // Connect to SSE for real-time notifications
   useEffect(() => {
+    if (!authenticated) return
+
     const eventSource = new EventSource('/api/stream/metrics?types=alert,deployment,health&interval=10000')
     
     eventSource.onmessage = (event) => {
@@ -301,7 +305,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
 
     return () => eventSource.close()
-  }, [])
+  }, [authenticated])
 
   // Add some demo notifications on mount
   useEffect(() => {

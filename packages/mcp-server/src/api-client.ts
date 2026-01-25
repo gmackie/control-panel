@@ -233,11 +233,11 @@ export class ControlPanelClient {
   get deployments() {
     return {
       list: (input?: DeploymentsInput) => this.query<Deployment[]>("deployments.list", input),
-      byId: (id: string) => this.query<Deployment>("deployments.byId", id),
+      byId: (input: string | DeploymentByIdInput) => this.query<Deployment>("deployments.byId", input),
       stats: (input?: StatsInput) => this.query<DeploymentStats>("deployments.stats", input),
       trigger: (input: TriggerDeploymentInput) => this.mutate<TriggerResult>("deployments.trigger", input),
       rollback: (input: RollbackInput) => this.mutate<RollbackResult>("deployments.rollback", input),
-      cancel: (id: string) => this.mutate<ActionResult>("deployments.cancel", id),
+      cancel: (input: string | CancelDeploymentInput) => this.mutate<ActionResult>("deployments.cancel", input),
     };
   }
 
@@ -317,6 +317,9 @@ export interface Application {
   repositoryUrl?: string | null;
   localRepoPath?: string | null;
   status: string;
+  gitProvider: string;
+  deployProvider: string;
+  dbProvider: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -336,6 +339,9 @@ export interface CreateApplicationInput {
   slug: string;
   description?: string;
   repositoryUrl?: string;
+  gitProvider?: "github" | "gitea" | "gitlab";
+  deployProvider?: "vercel" | "kubernetes" | "railway" | "flyio";
+  dbProvider?: "neon" | "turso" | "supabase" | "planetscale";
 }
 
 export interface UpdateApplicationInput {
@@ -595,6 +601,7 @@ export interface DeploymentsInput {
   environment?: "development" | "staging" | "production";
   status?: "pending" | "running" | "succeeded" | "failed" | "cancelled";
   appId?: string;
+  projectId?: string;
 }
 
 export interface StatsInput {
@@ -617,6 +624,7 @@ export interface TriggerDeploymentInput {
   environment: "development" | "staging" | "production";
   imageTag?: string;
   commitSha?: string;
+  projectId?: string;
 }
 
 export interface TriggerResult {
@@ -627,6 +635,18 @@ export interface TriggerResult {
 export interface RollbackInput {
   deploymentId: string;
   targetVersion?: string;
+  appId?: string;
+  projectId?: string;
+}
+
+export interface DeploymentByIdInput {
+  deploymentId: string;
+  appId?: string;
+}
+
+export interface CancelDeploymentInput {
+  deploymentId: string;
+  appId?: string;
 }
 
 export interface RollbackResult {

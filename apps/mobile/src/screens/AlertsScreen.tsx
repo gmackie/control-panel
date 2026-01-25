@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   SectionList,
   TouchableOpacity,
   RefreshControl,
@@ -17,8 +16,8 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
 import { trpc } from "../lib/trpc";
-import { ScopeBar } from "../components/ScopeBar";
-import { useCurrentScope, useScopeStore } from "../stores/scope";
+import { useTheme } from "../hooks/useTheme";
+import { useDemoMode } from "../stores/settings";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -238,19 +237,19 @@ interface AlertSection {
 
 export function AlertsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { colors, isDark } = useTheme();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<
     "all" | "firing" | "acknowledged" | "critical"
   >("all");
-  const [groupBySite, setGroupBySite] = React.useState(true);
-
-  const { isGlobal, siteId } = useCurrentScope();
-  const { lastUpdated } = useScopeStore();
+  const [groupBySeverity, setGroupBySeverity] = React.useState(true);
+  const demoMode = useDemoMode();
 
   const alertsQuery = trpc.monitoring.alerts.useQuery({
     status: filter === "firing" || filter === "acknowledged" ? filter : undefined,
     severity: filter === "critical" ? "critical" : undefined,
     limit: 50,
+    demoMode,
   });
   const statsQuery = trpc.monitoring.alertStats.useQuery();
   const acknowledgeMutation = trpc.monitoring.acknowledgeAlert.useMutation();
@@ -271,7 +270,7 @@ export function AlertsScreen() {
   const stats = statsQuery.data;
 
   const groupedAlerts = React.useMemo((): AlertSection[] => {
-    if (!groupBySite || !isGlobal) {
+    if (!groupBySeverity) {
       return [
         {
           title: "All Alerts",
@@ -282,27 +281,38 @@ export function AlertsScreen() {
       ];
     }
 
-    const groups: Record<string, AlertSection> = {};
-    alerts.forEach((alert) => {
-      const source = alert.source || "Unknown";
-      if (!groups[source]) {
-        groups[source] = {
-          title: source,
-          siteId: source,
-          criticalCount: 0,
-          warningCount: 0,
-          data: [],
-        };
-      }
-      groups[source].data.push(alert);
-      if (alert.severity === "critical") groups[source].criticalCount++;
-      if (alert.severity === "warning") groups[source].warningCount++;
-    });
+    const criticalAlerts = alerts.filter((a) => a.severity === "critical");
+    const warningAlerts = alerts.filter((a) => a.severity === "warning");
+    const infoAlerts = alerts.filter((a) => a.severity === "info");
 
-    return Object.values(groups).sort(
-      (a, b) => b.criticalCount - a.criticalCount || b.data.length - a.data.length
-    );
-  }, [alerts, groupBySite, isGlobal]);
+    const sections: AlertSection[] = [];
+    if (criticalAlerts.length > 0) {
+      sections.push({
+        title: "Critical",
+        criticalCount: criticalAlerts.length,
+        warningCount: 0,
+        data: criticalAlerts,
+      });
+    }
+    if (warningAlerts.length > 0) {
+      sections.push({
+        title: "Warning",
+        criticalCount: 0,
+        warningCount: warningAlerts.length,
+        data: warningAlerts,
+      });
+    }
+    if (infoAlerts.length > 0) {
+      sections.push({
+        title: "Info",
+        criticalCount: 0,
+        warningCount: 0,
+        data: infoAlerts,
+      });
+    }
+
+    return sections;
+  }, [alerts, groupBySeverity]);
 
   const renderSectionHeader = ({ section }: { section: AlertSection }) => (
     <View style={styles.sectionHeader}>
@@ -325,10 +335,8 @@ export function AlertsScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <ScopeBar lastUpdated={lastUpdated} />
-
-      <View style={styles.statsContainer}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.statsContainer, { backgroundColor: colors.card }]}>
         <View style={styles.statItem}>
           <Ionicons name="flame" size={24} color="#ef4444" />
           <Text style={[styles.statValue, { color: "#ef4444" }]}>
@@ -373,18 +381,20 @@ export function AlertsScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        {isGlobal && (
-          <TouchableOpacity
-            style={[styles.groupToggle, groupBySite && styles.groupToggleActive]}
-            onPress={() => setGroupBySite(!groupBySite)}
-          >
-            <Ionicons
-              name="layers"
-              size={16}
-              color={groupBySite ? "#fff" : "#64748b"}
-            />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.groupToggle,
+            { backgroundColor: colors.card },
+            groupBySeverity && styles.groupToggleActive,
+          ]}
+          onPress={() => setGroupBySeverity(!groupBySeverity)}
+        >
+          <Ionicons
+            name="layers"
+            size={16}
+            color={groupBySeverity ? "#fff" : colors.textMuted}
+          />
+        </TouchableOpacity>
       </View>
 
       <SectionList
@@ -403,12 +413,12 @@ export function AlertsScreen() {
             onAcknowledge={() => handleAcknowledge(item.id)}
           />
         )}
-        renderSectionHeader={groupBySite && isGlobal ? renderSectionHeader : () => null}
+        renderSectionHeader={groupBySeverity ? renderSectionHeader : () => null}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#fff"
+            tintColor={colors.text}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -416,8 +426,8 @@ export function AlertsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="shield-checkmark" size={48} color="#22c55e" />
-            <Text style={styles.emptyTitle}>All Clear</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>All Clear</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
               No alerts matching your filter
             </Text>
           </View>

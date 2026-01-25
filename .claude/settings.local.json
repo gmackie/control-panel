@@ -62,7 +62,15 @@
       "Bash(ssh root@5.78.125.172 \"/usr/local/bin/k3s ctr images ls | grep control-panel\")",
       "Bash(docker buildx build:*)",
       "Bash(ssh:*)",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(DATABASE_URL='postgresql://neondb_owner:npg_6MwdsE0oGAHr@ep-hidden-hall-a4g4agqa-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' pnpm run db:migrate:*)",
+      "Bash(pnpm --filter @repo/web exec tsc --noEmit)",
+      "Bash(KUBECONFIG=~/.kube/config-hetzner kubectl get pods:*)",
+      "Bash(KUBECONFIG=~/.kube/config-hetzner kubectl rollout restart:*)",
+      "Bash(KUBECONFIG=~/.kube/config-hetzner kubectl rollout status:*)",
+      "Bash(KUBECONFIG=~/.kube/config-hetzner kubectl get:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "additionalDirectories": [

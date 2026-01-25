@@ -41,8 +41,11 @@ export function DialogContent({ children, className, ...props }: DialogContentPr
   return (
     <div
       className={cn(
-        'relative bg-card border border-border rounded-lg shadow-2xl',
-        'w-full max-w-lg p-6',
+        'relative bg-card border border-border shadow-2xl',
+        // Mobile: full-screen with no border-radius
+        'w-full h-full sm:h-auto sm:max-h-[85vh] overflow-y-auto',
+        'sm:max-w-lg sm:rounded-lg sm:mx-4',
+        'p-4 sm:p-6',
         'animate-in fade-in-0 zoom-in-95 duration-200',
         className
       )}

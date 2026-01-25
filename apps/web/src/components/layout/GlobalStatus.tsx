@@ -51,8 +51,8 @@ export function GlobalStatus() {
         fetch("/api/resources/k8s?resource=nodes").then(r => r.json()),
         // Integration health
         fetch("/api/integrations/health").then(r => r.json()),
-        // Database health
-        fetch("/api/health/database").then(r => r.json()).catch(() => ({ healthy: true })),
+        // Core system health (includes database)
+        fetch("/api/health").then(r => r.json()),
       ]);
 
       const services: ServiceHealth[] = [];
@@ -103,15 +103,28 @@ export function GlobalStatus() {
       // Process database
       const dbResult = results[2];
       if (dbResult.status === "fulfilled") {
-        const db = dbResult.value;
-        services.push({
-          name: "Database",
-          status: db.healthy !== false ? "healthy" : "unhealthy",
-          latency: db.latency,
-          message: db.healthy !== false ? "Connected" : "Connection error",
-        });
-        
-        if (db.healthy === false) overallHealthy = false;
+        const systemHealth = dbResult.value;
+        const dbCheck = Array.isArray(systemHealth?.checks)
+          ? systemHealth.checks.find((c: any) => c?.service === "database")
+          : undefined;
+
+        if (dbCheck) {
+          const isHealthy = dbCheck.status === "healthy";
+          services.push({
+            name: "Database",
+            status: isHealthy ? "healthy" : "unhealthy",
+            latency: dbCheck.latencyMs,
+            message: isHealthy ? "Connected" : (dbCheck.message || "Connection error"),
+          });
+
+          if (!isHealthy) overallHealthy = false;
+        } else {
+          services.push({
+            name: "Database",
+            status: "unknown",
+            message: "Unable to fetch status",
+          });
+        }
       }
 
       // Add Gitea status (check via API)

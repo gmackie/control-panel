@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
-import { pushSubscriptions, eq, and } from "@repo/db";
+import { pushSubscriptions, notifications, eq, and, or, desc, inArray } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -170,24 +170,90 @@ const mockServices: ServiceHealth[] = [
 export const monitoringRouter = router({
   /**
    * Get active alerts
+   * When demoMode is true, returns mock data for demonstration
+   * When demoMode is false (default), returns real alerts from notifications table
    */
   alerts: publicProcedure
     .input(z.object({
       status: z.enum(["firing", "resolved", "acknowledged"]).optional(),
       severity: z.enum(["critical", "warning", "info"]).optional(),
+      appId: z.string().uuid().optional(),
       limit: z.number().min(1).max(100).default(50),
+      demoMode: z.boolean().optional().default(false),
     }).optional())
-    .query(async ({ input }) => {
-      let alerts = [...mockAlerts];
+    .query(async ({ ctx, input }) => {
+      // Return mock data in demo mode
+      if (input?.demoMode) {
+        let alerts = [...mockAlerts];
+        
+        if (input?.status) {
+          alerts = alerts.filter((a) => a.status === input.status);
+        }
+        if (input?.severity) {
+          alerts = alerts.filter((a) => a.severity === input.severity);
+        }
+        if (input?.appId) {
+          alerts = alerts.filter((a) => a.labels?.appId === input.appId);
+        }
+        
+        return alerts.slice(0, input?.limit ?? 50);
+      }
+      
+      // Return real data from notifications table
+      if (!ctx.db) {
+        // Fallback to mock data if no database
+        return mockAlerts.slice(0, input?.limit ?? 50);
+      }
+      
+      const conditions = [
+        // Only get alerts (critical/warning severity)
+        or(
+          eq(notifications.severity, "critical"),
+          eq(notifications.severity, "warning")
+        ),
+      ];
+      
+      if (input?.appId) {
+        conditions.push(eq(notifications.appId, input.appId));
+      }
+      
+      if (input?.severity) {
+        conditions.push(eq(notifications.severity, input.severity));
+      }
       
       if (input?.status) {
-        alerts = alerts.filter((a) => a.status === input.status);
-      }
-      if (input?.severity) {
-        alerts = alerts.filter((a) => a.severity === input.severity);
+        // Map alert status to notification status
+        const statusMap: Record<string, string[]> = {
+          firing: ["new"],
+          acknowledged: ["seen", "acknowledged"],
+          resolved: ["resolved"],
+        };
+        const notificationStatuses = statusMap[input.status] || ["new"];
+        conditions.push(inArray(notifications.status, notificationStatuses));
       }
       
-      return alerts.slice(0, input?.limit ?? 50);
+      const dbAlerts = await ctx.db
+        .select()
+        .from(notifications)
+        .where(and(...conditions))
+        .orderBy(desc(notifications.createdAt))
+        .limit(input?.limit ?? 50);
+      
+      // Map notifications to Alert format
+      return dbAlerts.map((n): Alert => ({
+        id: n.id,
+        name: n.title,
+        severity: n.severity as "critical" | "warning" | "info",
+        status: n.status === "new" ? "firing" : n.status === "resolved" ? "resolved" : "acknowledged",
+        source: n.source,
+        message: n.message,
+        labels: n.appId ? { appId: n.appId, appName: n.appName || "" } : {},
+        annotations: {},
+        startsAt: n.createdAt.toISOString(),
+        endsAt: n.resolvedAt?.toISOString(),
+        acknowledgedBy: n.acknowledgedBy || undefined,
+        acknowledgedAt: n.acknowledgedAt?.toISOString(),
+      }));
     }),
 
   /**

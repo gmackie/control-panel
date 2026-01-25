@@ -6,16 +6,23 @@
 
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc";
-import { activityEvents, desc, gte, sql } from "@repo/db";
+import { activityEvents, desc, gte, eq, and, sql, inArray } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 
+const ACTIVITY_TYPE_CATEGORIES: Record<string, string[]> = {
+  all: [],
+  deployments: ["deployment", "deploy"],
+  commits: ["commit", "push"],
+  alerts: ["alert", "notification"],
+  builds: ["build", "ci", "workflow"],
+};
+
 export const activityRouter = router({
-  /**
-   * Get recent activity events
-   */
   recent: publicProcedure
     .input(z.object({
       limit: z.number().min(1).max(100).default(20),
+      appId: z.string().uuid().optional(),
+      type: z.enum(["all", "deployments", "commits", "alerts", "builds"]).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       if (!ctx.db) {
@@ -23,16 +30,32 @@ export const activityRouter = router({
       }
 
       const limit = input?.limit ?? 20;
+      const conditions = [];
 
-      const results = await ctx.db
+      if (input?.appId) {
+        conditions.push(eq(activityEvents.appId, input.appId));
+      }
+
+      if (input?.type && input.type !== "all") {
+        const categories = ACTIVITY_TYPE_CATEGORIES[input.type] || [];
+        if (categories.length > 0) {
+          conditions.push(inArray(activityEvents.category, categories));
+        }
+      }
+
+      const query = ctx.db
         .select()
         .from(activityEvents)
         .orderBy(desc(activityEvents.timestamp))
         .limit(limit);
 
+      const results = conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
       return results.map((event) => ({
         ...event,
-        timestamp: event.timestamp, // Already a Date in PostgreSQL
+        timestamp: event.timestamp,
         links: event.links ? JSON.parse(event.links) : undefined,
         metadata: event.metadata ? JSON.parse(event.metadata) : undefined,
       }));

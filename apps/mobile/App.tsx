@@ -1,6 +1,7 @@
 import React from "react";
+import { TouchableOpacity } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -8,17 +9,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
-import { SiteSwitcher } from "./src/components/ScopeBar";
-import { QuickActionsFAB } from "./src/components/QuickActionsFAB";
 import { OfflineBanner } from "./src/components/OfflineBanner";
 import { TRPCProvider } from "./src/lib/trpc";
 import { initNetworkListener } from "./src/stores/offline";
 import { useNotificationNavigation } from "./src/hooks/useNotificationNavigation";
-import { OverviewScreen } from "./src/screens/OverviewScreen";
+import { useTheme } from "./src/hooks/useTheme";
+import { DashboardScreen } from "./src/screens/DashboardScreen";
 import { AlertsScreen } from "./src/screens/AlertsScreen";
 import { ApplicationsScreen } from "./src/screens/ApplicationsScreen";
-import { MoreScreen } from "./src/screens/MoreScreen";
-// Stack screens accessed from More menu
 import { ActivityFeedScreen } from "./src/screens/ActivityFeedScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ApplicationDetailScreen } from "./src/screens/ApplicationDetailScreen";
@@ -27,27 +25,14 @@ import { NotificationDetailScreen } from "./src/screens/NotificationDetailScreen
 import { IssueDetailScreen } from "./src/screens/IssueDetailScreen";
 import { AISessionsListScreen } from "./src/screens/AISessionsListScreen";
 import { AISessionDetailScreen } from "./src/screens/AISessionDetailScreen";
-
-// Dark theme for the app
-const DarkTheme = {
-  ...DefaultTheme,
-  dark: true,
-  colors: {
-    ...DefaultTheme.colors,
-    primary: "#3b82f6",
-    background: "#0f172a",
-    card: "#1e293b",
-    text: "#fff",
-    border: "#334155",
-    notification: "#ef4444",
-  },
-};
+import { LoginScreen } from "./src/screens/LoginScreen";
+import { useAuthStore } from "./src/stores/auth";
 
 export type RootTabParamList = {
-  Overview: undefined;
-  Attention: undefined;
+  Dashboard: undefined;
   Apps: undefined;
-  More: undefined;
+  Activity: undefined;
+  Alerts: undefined;
 };
 
 export type RootStackParamList = {
@@ -55,13 +40,10 @@ export type RootStackParamList = {
   ApplicationDetail: { id: string };
   NotificationDetail: { id: string };
   AlertDetail: { id: string };
-  Alerts: undefined;
   IssueDetail: { issueId: string };
   AISessionsList: undefined;
   AISessionDetail: { sessionId: string };
-  PipelinesStack: undefined;
-  NotificationsStack: undefined;
-  SettingsStack: undefined;
+  Settings: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -73,24 +55,26 @@ function NotificationHandler() {
 }
 
 function MainTabs() {
+  const { colors, isDark } = useTheme();
+
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: React.ComponentProps<typeof Ionicons>["name"];
 
           switch (route.name) {
-            case "Overview":
+            case "Dashboard":
               iconName = focused ? "home" : "home-outline";
-              break;
-            case "Attention":
-              iconName = focused ? "alert-circle" : "alert-circle-outline";
               break;
             case "Apps":
               iconName = focused ? "cube" : "cube-outline";
               break;
-            case "More":
-              iconName = focused ? "menu" : "menu-outline";
+            case "Activity":
+              iconName = focused ? "pulse" : "pulse-outline";
+              break;
+            case "Alerts":
+              iconName = focused ? "alert-circle" : "alert-circle-outline";
               break;
             default:
               iconName = "help-circle-outline";
@@ -98,11 +82,11 @@ function MainTabs() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: "#3b82f6",
-        tabBarInactiveTintColor: "#64748b",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: isDark ? "#64748b" : "#94a3b8",
         tabBarStyle: {
-          backgroundColor: "#1e293b",
-          borderTopColor: "#334155",
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
           height: 88,
           paddingBottom: 28,
           paddingTop: 8,
@@ -112,28 +96,28 @@ function MainTabs() {
           fontWeight: "500",
         },
         headerStyle: {
-          backgroundColor: "#1e293b",
+          backgroundColor: colors.card,
         },
-        headerTintColor: "#fff",
+        headerTintColor: colors.text,
         headerTitleStyle: {
           fontWeight: "600",
         },
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Settings" as never)}
+            style={{ marginRight: 16 }}
+          >
+            <Ionicons name="settings-outline" size={24} color={colors.text} />
+          </TouchableOpacity>
+        ),
       })}
     >
       <Tab.Screen
-        name="Overview"
-        component={OverviewScreen}
+        name="Dashboard"
+        component={DashboardScreen}
         options={{
-          title: "Overview",
-          headerTitle: "Sites",
-        }}
-      />
-      <Tab.Screen
-        name="Attention"
-        component={AlertsScreen}
-        options={{
-          title: "Attention",
-          headerTitle: "Needs Attention",
+          title: "Dashboard",
+          headerTitle: "Control Panel",
         }}
       />
       <Tab.Screen
@@ -145,14 +129,88 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="More"
-        component={MoreScreen}
+        name="Activity"
+        component={ActivityFeedScreen}
         options={{
-          title: "More",
-          headerTitle: "More",
+          title: "Activity",
+          headerTitle: "Activity",
+        }}
+      />
+      <Tab.Screen
+        name="Alerts"
+        component={AlertsScreen}
+        options={{
+          title: "Alerts",
+          headerTitle: "Alerts",
         }}
       />
     </Tab.Navigator>
+  );
+}
+
+function AppContent() {
+  const { theme, isDark, colors } = useTheme();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <StatusBar style={isDark ? "light" : "dark"} />
+        <LoginScreen />
+      </>
+    );
+  }
+
+  return (
+    <NavigationContainer theme={theme}>
+      <NotificationHandler />
+      <OfflineBanner />
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          headerStyle: { backgroundColor: colors.card },
+          headerTintColor: colors.text,
+        }}
+      >
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="ApplicationDetail"
+          component={ApplicationDetailScreen}
+          options={{ headerShown: true, headerTitle: "Application" }}
+        />
+        <Stack.Screen
+          name="AlertDetail"
+          component={AlertDetailScreen}
+          options={{ headerShown: true, headerTitle: "Alert" }}
+        />
+        <Stack.Screen
+          name="NotificationDetail"
+          component={NotificationDetailScreen}
+          options={{ headerShown: true, headerTitle: "Notification" }}
+        />
+        <Stack.Screen
+          name="IssueDetail"
+          component={IssueDetailScreen}
+          options={{ headerShown: true, headerTitle: "Issue Details" }}
+        />
+        <Stack.Screen
+          name="AISessionsList"
+          component={AISessionsListScreen}
+          options={{ headerShown: true, headerTitle: "AI Sessions" }}
+        />
+        <Stack.Screen
+          name="AISessionDetail"
+          component={AISessionDetailScreen}
+          options={{ headerShown: true, headerTitle: "AI Fix Session" }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ headerShown: true, headerTitle: "Settings" }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
@@ -167,120 +225,7 @@ export default function App() {
       <ErrorBoundary>
         <SafeAreaProvider>
           <TRPCProvider>
-            <NavigationContainer theme={DarkTheme}>
-              <NotificationHandler />
-              <OfflineBanner />
-              <StatusBar style="light" />
-              <Stack.Navigator
-                screenOptions={{
-                  headerShown: false,
-                }}
-              >
-                <Stack.Screen name="Main" component={MainTabs} />
-                <Stack.Screen
-                  name="ApplicationDetail"
-                  component={ApplicationDetailScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Application",
-                  }}
-                />
-                <Stack.Screen
-                  name="AlertDetail"
-                  component={AlertDetailScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Alert",
-                  }}
-                />
-                <Stack.Screen
-                  name="NotificationDetail"
-                  component={NotificationDetailScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Notification",
-                  }}
-                />
-                <Stack.Screen
-                  name="IssueDetail"
-                  component={IssueDetailScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Issue Details",
-                  }}
-                />
-                <Stack.Screen
-                  name="AISessionsList"
-                  component={AISessionsListScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "AI Sessions",
-                  }}
-                />
-                <Stack.Screen
-                  name="AISessionDetail"
-                  component={AISessionDetailScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "AI Fix Session",
-                  }}
-                />
-                <Stack.Screen
-                  name="Alerts"
-                  component={AlertsScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Alerts",
-                  }}
-                />
-                <Stack.Screen
-                  name="PipelinesStack"
-                  component={ActivityFeedScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Pipelines",
-                  }}
-                />
-                <Stack.Screen
-                  name="NotificationsStack"
-                  component={ActivityFeedScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Notifications",
-                  }}
-                />
-                <Stack.Screen
-                  name="SettingsStack"
-                  component={SettingsScreen}
-                  options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: "#1e293b" },
-                    headerTintColor: "#fff",
-                    headerTitle: "Settings",
-                  }}
-                />
-              </Stack.Navigator>
-              <SiteSwitcher />
-              <QuickActionsFAB />
-            </NavigationContainer>
+            <AppContent />
           </TRPCProvider>
         </SafeAreaProvider>
       </ErrorBoundary>

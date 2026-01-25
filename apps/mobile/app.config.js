@@ -68,6 +68,7 @@ const config = {
       eas: {
         projectId: PROJECT_ID,
       },
+      APP_VARIANT: process.env.APP_VARIANT || 'production',
     },
     owner: 'gmacko',
     runtimeVersion: {
