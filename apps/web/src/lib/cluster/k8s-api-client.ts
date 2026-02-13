@@ -75,15 +75,36 @@ export interface K8sNode {
     name: string;
     labels?: Record<string, string>;
   };
+  spec: {
+    podCIDR?: string;
+    taints?: Array<{
+      key: string;
+      value?: string;
+      effect: string;
+    }>;
+  };
   status: {
     conditions?: Array<{
       type: string;
       status: string;
+      lastHeartbeatTime?: string;
+      lastTransitionTime?: string;
+      reason?: string;
+      message?: string;
     }>;
     addresses?: Array<{
       type: string;
       address: string;
     }>;
+    capacity?: Record<string, string>;
+    allocatable?: Record<string, string>;
+    nodeInfo?: {
+      kernelVersion: string;
+      osImage: string;
+      containerRuntimeVersion: string;
+      kubeletVersion: string;
+      architecture: string;
+    };
   };
 }
 
@@ -155,6 +176,9 @@ export interface K8sPod {
         running?: { startedAt: string };
         waiting?: { reason: string; message?: string };
         terminated?: { exitCode: number; reason: string };
+      };
+      lastState?: {
+        terminated?: { exitCode: number; reason: string; finishedAt?: string };
       };
       image: string;
     }>;
