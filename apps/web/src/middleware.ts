@@ -1,8 +1,12 @@
 import { withAuth } from "next-auth/middleware"
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 
-export default withAuth(
-  function middleware(req) {
+const authBypassEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.AUTH_BYPASS === '1' || process.env.AUTH_BYPASS === 'true')
+
+const authMiddleware = withAuth(
+  function middleware(_req: NextRequest) {
     return NextResponse.next()
   },
   {
@@ -15,6 +19,12 @@ export default withAuth(
     }
   }
 )
+
+export default authBypassEnabled
+  ? function middleware(_req: NextRequest) {
+      return NextResponse.next()
+    }
+  : authMiddleware
 
 // Protect all routes except public ones
 export const config = {

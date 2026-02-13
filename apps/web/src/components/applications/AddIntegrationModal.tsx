@@ -23,32 +23,11 @@ export function AddIntegrationModal({
 }: AddIntegrationModalProps) {
   const queryClient = useQueryClient();
   const integration = INTEGRATION_TEMPLATES[provider as keyof typeof INTEGRATION_TEMPLATES];
-  const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [step, setStep] = useState<'configure' | 'verify' | 'complete'>('configure');
 
   const addIntegrationMutation = useMutation({
     mutationFn: async () => {
-      // First, create the secrets
-      const secretPromises = Object.entries(secrets).map(([key, value]) =>
-        fetch(`/api/applications/${applicationId}/secrets`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            key,
-            value,
-            category: integration.requiredSecrets.find(s => s.key === key)?.category ||
-                     ('optionalSecrets' in integration ? integration.optionalSecrets?.find(s => s.key === key)?.category : undefined) ||
-                     'api',
-            provider: integration.provider,
-            description: integration.requiredSecrets.find(s => s.key === key)?.description ||
-                        ('optionalSecrets' in integration ? integration.optionalSecrets?.find(s => s.key === key)?.description : undefined),
-          }),
-        })
-      );
-
-      await Promise.all(secretPromises);
-
-      // Then create the integration
       const response = await fetch(`/api/applications/${applicationId}/integrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,7 +36,7 @@ export function AddIntegrationModal({
           name: integration.name,
           enabled: true,
           config: {},
-          secrets: Object.keys(secrets),
+          credentials,
         }),
       });
 
@@ -69,8 +48,7 @@ export function AddIntegrationModal({
     },
     onSuccess: () => {
       setStep('complete');
-      queryClient.invalidateQueries({ queryKey: ["application", applicationId] });
-      queryClient.invalidateQueries({ queryKey: ["secrets", applicationId] });
+      queryClient.invalidateQueries({ queryKey: ["application", applicationId, "integrations"] });
       setTimeout(onSuccess, 2000);
     },
   });
@@ -82,7 +60,7 @@ export function AddIntegrationModal({
   };
 
   const allRequiredSecrets = integration.requiredSecrets.every(
-    secret => secrets[secret.key]
+    secret => credentials[secret.key]
   );
 
   if (!integration) {
@@ -118,8 +96,8 @@ export function AddIntegrationModal({
                       </label>
                       <input
                         type="text"
-                        value={secrets[secret.key] || ''}
-                        onChange={(e) => setSecrets({ ...secrets, [secret.key]: e.target.value })}
+                        value={credentials[secret.key] || ''}
+                        onChange={(e) => setCredentials({ ...credentials, [secret.key]: e.target.value })}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-md focus:border-blue-500 focus:outline-none font-mono text-sm"
                         placeholder={`Enter ${secret.key}`}
                         required
@@ -141,13 +119,13 @@ export function AddIntegrationModal({
                         <label className="block text-sm font-medium mb-2">
                           {secret.key}
                         </label>
-                        <input
-                          type="text"
-                          value={secrets[secret.key] || ''}
-                          onChange={(e) => setSecrets({ ...secrets, [secret.key]: e.target.value })}
-                          className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-md focus:border-blue-500 focus:outline-none font-mono text-sm"
-                          placeholder={`Enter ${secret.key} (optional)`}
-                        />
+                      <input
+                        type="text"
+                        value={credentials[secret.key] || ''}
+                        onChange={(e) => setCredentials({ ...credentials, [secret.key]: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-md focus:border-blue-500 focus:outline-none font-mono text-sm"
+                        placeholder={`Enter ${secret.key} (optional)`}
+                      />
                         {secret.description && (
                           <p className="text-xs text-gray-400 mt-1">{secret.description}</p>
                         )}

@@ -7,6 +7,7 @@ export interface Application {
   name: string;
   description?: string;
   slug: string;
+  productId?: string | null;
   repositoryUrl?: string;
   gitProvider?: GitProviderType;
   deployProvider?: DeployProviderType;

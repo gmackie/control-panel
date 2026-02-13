@@ -4,6 +4,10 @@ import { authOptions } from '@/lib/auth';
 import { getDbAsync } from '@/lib/db';
 import { appIntegrations, applications, eq, and } from '@repo/db';
 
+const authBypassEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.AUTH_BYPASS === '1' || process.env.AUTH_BYPASS === 'true')
+
 interface Params {
   params: Promise<{ id: string }>;
 }
@@ -13,7 +17,30 @@ function safeJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-const APP_PROVIDERS = ['stripe', 'clerk', 'supabase', 'sentry', 'posthog', 'sendgrid', 'resend', 'twilio', 'openrouter', 'elevenlabs', 'upstash', 'planetscale', 'aws'] as const;
+const APP_PROVIDERS = ['aws', 'clerk', 'elevenlabs', 'neon', 'openrouter', 'planetscale', 'posthog', 'resend', 'sendgrid', 'sentry', 'stripe', 'supabase', 'twilio', 'turso', 'upstash'] as const;
+
+type UiIntegration = {
+  id: string;
+  provider: string;
+  name: string;
+  enabled: boolean;
+  configured: boolean;
+  status: 'connected' | 'error' | 'not_configured';
+  config: Record<string, unknown> | null;
+  secrets: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const devIntegrationStore: Map<string, Map<string, UiIntegration>> = new Map();
+
+function getDevStore(appId: string): Map<string, UiIntegration> {
+  const existing = devIntegrationStore.get(appId);
+  if (existing) return existing;
+  const created = new Map<string, UiIntegration>();
+  devIntegrationStore.set(appId, created);
+  return created;
+}
 
 function transformIntegrationForUI(integration: typeof appIntegrations.$inferSelect) {
   const config = integration.config ? JSON.parse(integration.config) : null;
@@ -40,12 +67,28 @@ function transformIntegrationForUI(integration: typeof appIntegrations.$inferSel
   };
 }
 
-export async function GET(request: NextRequest, props: Params) {
+function safeParseObject(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+export async function GET(_request: NextRequest, props: Params) {
   const params = await props.params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authBypassEnabled) {
+      const store = getDevStore(params.id);
+      return NextResponse.json(safeJson(Array.from(store.values())));
     }
 
     const db = await getDbAsync();
@@ -83,9 +126,53 @@ export async function GET(request: NextRequest, props: Params) {
 export async function POST(request: NextRequest, props: Params) {
   const params = await props.params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authBypassEnabled) {
+      const body = await request.json();
+      const { provider, name, enabled, config, credentials } = body;
+
+      if (!provider || !APP_PROVIDERS.includes(provider)) {
+        return NextResponse.json(
+          { error: `Invalid provider. Supported: ${APP_PROVIDERS.join(', ')}` },
+          { status: 400 }
+        );
+      }
+
+      const store = getDevStore(params.id);
+      const existing = store.get(provider);
+      const now = new Date().toISOString();
+      const nextConfig = {
+        ...(existing?.config ?? {}),
+        ...(config && typeof config === 'object' ? (config as Record<string, unknown>) : {}),
+      };
+      const nextCredentials = {
+        ...(existing ? Object.fromEntries((existing.secrets ?? []).map((k) => [k, '***'])) : {}),
+        ...(credentials && typeof credentials === 'object' ? (credentials as Record<string, unknown>) : {}),
+      };
+      const secrets = Object.keys(nextCredentials);
+      const configured = secrets.length > 0;
+      const isEnabled = enabled ?? existing?.enabled ?? true;
+      const status: UiIntegration['status'] = configured ? (isEnabled ? 'connected' : 'error') : 'not_configured';
+
+      const saved: UiIntegration = {
+        id: existing?.id ?? `dev-${params.id}-${provider}`,
+        provider,
+        name: name ?? existing?.name ?? provider.charAt(0).toUpperCase() + provider.slice(1),
+        enabled: isEnabled,
+        configured,
+        status,
+        config: Object.keys(nextConfig).length > 0 ? nextConfig : null,
+        secrets,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+
+      store.set(provider, saved);
+      return NextResponse.json(safeJson(saved), { status: existing ? 200 : 201 });
     }
 
     const db = await getDbAsync();
@@ -123,13 +210,24 @@ export async function POST(request: NextRequest, props: Params) {
       .limit(1);
 
     if (existing.length > 0) {
+      const existingConfig = safeParseObject(existing[0].config);
+      const existingCredentials = safeParseObject(existing[0].credentials);
+
+      const mergedConfig = config
+        ? { ...existingConfig, ...(config as Record<string, unknown>) }
+        : existingConfig;
+
+      const mergedCredentials = credentials
+        ? { ...existingCredentials, ...(credentials as Record<string, unknown>) }
+        : existingCredentials;
+
       const [updated] = await db
         .update(appIntegrations)
         .set({
           name: name ?? existing[0].name,
           enabled: enabled ?? existing[0].enabled,
-          config: config ? JSON.stringify(config) : existing[0].config,
-          credentials: credentials ? JSON.stringify(credentials) : existing[0].credentials,
+          config: config ? JSON.stringify(mergedConfig) : existing[0].config,
+          credentials: credentials ? JSON.stringify(mergedCredentials) : existing[0].credentials,
           updatedAt: new Date(),
         })
         .where(eq(appIntegrations.id, existing[0].id))
@@ -160,9 +258,32 @@ export async function POST(request: NextRequest, props: Params) {
 export async function DELETE(request: NextRequest, props: Params) {
   const params = await props.params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authBypassEnabled) {
+      const { searchParams } = new URL(request.url);
+      const provider = searchParams.get('provider');
+      const integrationId = searchParams.get('id');
+
+      if (!provider && !integrationId) {
+        return NextResponse.json(
+          { error: 'Either provider or id query param is required' },
+          { status: 400 }
+        );
+      }
+
+      const store = getDevStore(params.id);
+      if (provider) store.delete(provider);
+      if (integrationId) {
+        for (const [p, v] of store.entries()) {
+          if (v.id === integrationId) store.delete(p);
+        }
+      }
+
+      return NextResponse.json({ success: true });
     }
 
     const db = await getDbAsync();

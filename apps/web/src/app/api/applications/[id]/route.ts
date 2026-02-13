@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDbAsync } from "@/lib/db";
+import { findDevFixtureApplication } from "@/lib/dev-fixtures";
 import {
   applications,
   tasks,
@@ -20,6 +21,10 @@ interface Params {
   params: Promise<{ id: string }>;
 }
 
+const authBypassEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.AUTH_BYPASS === '1' || process.env.AUTH_BYPASS === 'true')
+
 /**
  * GET /api/applications/[id]
  * Fetch a single application by ID or slug
@@ -27,9 +32,39 @@ interface Params {
 export async function GET(_request: NextRequest, props: Params) {
   const params = await props.params;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const appId = decodeURIComponent(params.id);
+
+    if (authBypassEnabled) {
+      const fixture = findDevFixtureApplication(appId);
+      if (!fixture) {
+        return NextResponse.json(
+          { success: false, error: "Application not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: fixture.id,
+          name: fixture.name,
+          slug: fixture.slug,
+          description: fixture.description,
+          repositoryUrl: fixture.repositoryUrl ?? null,
+          status: fixture.status ?? 'active',
+          productId: fixture.productId ?? null,
+          gitProvider: fixture.gitProvider ?? null,
+          deployProvider: fixture.deployProvider ?? null,
+          dbProvider: fixture.dbProvider ?? null,
+          createdAt: fixture.createdAt ?? new Date().toISOString(),
+          updatedAt: fixture.updatedAt ?? new Date().toISOString(),
+        },
+      });
     }
 
     const db = await getDbAsync();
@@ -39,8 +74,6 @@ export async function GET(_request: NextRequest, props: Params) {
         { status: 503 }
       );
     }
-
-    const appId = decodeURIComponent(params.id);
 
     // Try to find by ID first, then by slug
     let [application] = await db

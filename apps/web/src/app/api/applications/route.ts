@@ -3,8 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { createApplication, getApplications } from '@/lib/applications/manager';
 import { getDbAsync } from '@/lib/db';
-import { applications, desc } from '@repo/db';
-import { CreateApplicationRequest } from '@/types/applications';
+import { devFixtureApplications } from '@/lib/dev-fixtures';
+import { appIntegrations, applications, desc, k3sDeployments, inArray } from '@repo/db';
+
+const authBypassEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.AUTH_BYPASS === '1' || process.env.AUTH_BYPASS === 'true')
 
 function safeJson<T>(value: T): T {
   // Remove undefined values to satisfy undici/NextResponse.json serializer
@@ -12,49 +16,161 @@ function safeJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function safeParseJson(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function inferEnvironmentForList(deployments: { namespace: string | null }[]): 'development' | 'staging' | 'production' {
+  let hasProduction = false;
+  let hasStaging = false;
+
+  for (const dep of deployments) {
+    const ns = dep.namespace ?? '';
+    if (!ns) continue;
+    const isStaging =
+      ns === 'staging' ||
+      ns.includes('-staging') ||
+      ns.includes('-beta') ||
+      ns.includes('-dev');
+    const isDevelopment = ns === 'development';
+
+    if (isDevelopment) continue;
+    if (isStaging) {
+      hasStaging = true;
+    } else {
+      hasProduction = true;
+    }
+  }
+
+  if (hasProduction) return 'production';
+  if (hasStaging) return 'staging';
+  return 'development';
+}
+
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const db = await getDbAsync();
     
     if (db) {
-      // Use Neon database
-      const apps = await db
-        .select()
-        .from(applications)
-        .orderBy(desc(applications.createdAt));
-      
-      const applicationsList = apps.map(app => ({
-        id: app.id,
-        name: app.name,
-        description: app.description || '',
-        slug: app.slug,
-        repositoryUrl: app.repositoryUrl,
-        status: app.status,
-        gitProvider: app.gitProvider,
-        deployProvider: app.deployProvider,
-        dbProvider: app.dbProvider,
-        apiKeys: [],
-        secrets: [],
-        integrations: [],
-        settings: {
-          environment: 'development',
-          features: {},
-          autoDeployEnabled: false,
-        },
-        createdAt: app.createdAt.toISOString(),
-        updatedAt: app.updatedAt.toISOString(),
-        ownerId: 'gmackie',
-      }));
-      return NextResponse.json(safeJson(applicationsList));
+      try {
+        // Use Neon database
+        const apps = await db
+          .select()
+          .from(applications)
+          .orderBy(desc(applications.createdAt));
+
+        const appIds = apps.map((app) => app.id);
+        const [integrations, deployments] = appIds.length
+          ? await Promise.all([
+              db.select().from(appIntegrations).where(inArray(appIntegrations.applicationId, appIds)),
+              db.select().from(k3sDeployments).where(inArray(k3sDeployments.applicationId, appIds)),
+            ])
+          : [[], []];
+
+        const integrationsByAppId = new Map<string, typeof integrations>();
+        for (const integration of integrations) {
+          const existing = integrationsByAppId.get(integration.applicationId) ?? [];
+          existing.push(integration);
+          integrationsByAppId.set(integration.applicationId, existing);
+        }
+
+        const deploymentsByAppId = new Map<string, typeof deployments>();
+        for (const dep of deployments) {
+          if (!dep.applicationId) continue;
+          const existing = deploymentsByAppId.get(dep.applicationId) ?? [];
+          existing.push(dep);
+          deploymentsByAppId.set(dep.applicationId, existing);
+        }
+
+        const applicationsList = apps.map((app) => {
+          const appIntegrationsList = integrationsByAppId.get(app.id) ?? [];
+          const appDeploymentsList = deploymentsByAppId.get(app.id) ?? [];
+
+          const env = inferEnvironmentForList(appDeploymentsList.map((d) => ({ namespace: d.namespace })));
+
+          return {
+            id: app.id,
+            name: app.name,
+            description: app.description || '',
+            slug: app.slug,
+            productId: app.productId,
+            repositoryUrl: app.repositoryUrl,
+            status: app.status,
+            gitProvider: app.gitProvider,
+            deployProvider: app.deployProvider,
+            dbProvider: app.dbProvider,
+            apiKeys: [],
+            secrets: [],
+            integrations: appIntegrationsList.map((integration) => ({
+              id: integration.id,
+              provider: integration.provider,
+              name: integration.name,
+              enabled: integration.enabled,
+              config: safeParseJson(integration.config),
+              secrets: [],
+              status: integration.enabled ? 'connected' : 'disconnected',
+              lastSyncAt: integration.updatedAt?.toISOString(),
+            })),
+            settings: {
+              environment: env,
+              features: {},
+              autoDeployEnabled: false,
+            },
+            createdAt: app.createdAt.toISOString(),
+            updatedAt: app.updatedAt.toISOString(),
+            ownerId: 'gmackie',
+          };
+        });
+        return NextResponse.json(safeJson(applicationsList));
+      } catch (err) {
+        // Common local-dev case: DB configured but migrations not applied.
+        if (authBypassEnabled) {
+          const fallback = devFixtureApplications.map((app) => ({
+            id: app.id,
+            name: app.name,
+            description: app.description,
+            slug: app.slug,
+            productId: app.productId ?? null,
+            repositoryUrl: app.repositoryUrl ?? null,
+            status: app.status ?? 'active',
+            gitProvider: app.gitProvider ?? null,
+            deployProvider: app.deployProvider ?? null,
+            dbProvider: app.dbProvider ?? null,
+            apiKeys: [],
+            secrets: [],
+            integrations: [],
+            settings: {
+              environment: 'development',
+              features: {},
+              autoDeployEnabled: false,
+            },
+            createdAt: app.createdAt ?? new Date().toISOString(),
+            updatedAt: app.updatedAt ?? new Date().toISOString(),
+            ownerId: 'local-dev',
+          }));
+          return NextResponse.json(safeJson(fallback));
+        }
+        throw err;
+      }
     }
     
     // Fallback to in-memory (legacy behavior)
-    const appList = await getApplications((session.user as { login?: string }).login || session.user.email!);
+    const userId = authBypassEnabled
+      ? 'local-dev'
+      : (session!.user as { login?: string }).login || session!.user.email!;
+    const appList = await getApplications(userId);
     return NextResponse.json(safeJson(appList));
   } catch (error) {
     console.error('Error fetching applications:', error);

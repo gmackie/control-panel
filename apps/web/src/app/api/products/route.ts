@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getDbAsync } from '@/lib/db';
+import { devFixtureApplications, devFixtureProducts } from '@/lib/dev-fixtures';
 import { products, applications, desc, eq } from '@repo/db';
+
+const authBypassEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.AUTH_BYPASS === '1' || process.env.AUTH_BYPASS === 'true')
 
 function safeJson<T>(value: T): T {
   if (value === undefined || value === null) return value;
@@ -15,8 +20,8 @@ function safeJson<T>(value: T): T {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -29,11 +34,31 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const includeApps = searchParams.get('includeApps') === 'true';
 
-    // Fetch all products
-    const productList = await db
-      .select()
-      .from(products)
-      .orderBy(desc(products.createdAt));
+    let productList;
+    try {
+      // Fetch all products
+      productList = await db
+        .select()
+        .from(products)
+        .orderBy(desc(products.createdAt));
+    } catch (err) {
+      if (authBypassEnabled) {
+        const fixtureProducts = devFixtureProducts.map((p) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          description: p.description ?? null,
+          icon: p.icon ?? null,
+          color: p.color ?? null,
+          status: (p.status ?? 'active') as 'active',
+          createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+        }));
+        productList = fixtureProducts;
+      } else {
+        throw err;
+      }
+    }
 
     if (!includeApps) {
       return NextResponse.json(safeJson(productList));
@@ -42,10 +67,19 @@ export async function GET(request: NextRequest) {
     // Fetch products with their applications
     const productsWithApps = await Promise.all(
       productList.map(async (product) => {
-        const apps = await db
-          .select()
-          .from(applications)
-          .where(eq(applications.productId, product.id));
+        let apps;
+        try {
+          apps = await db
+            .select()
+            .from(applications)
+            .where(eq(applications.productId, product.id));
+        } catch (err) {
+          if (authBypassEnabled) {
+            apps = devFixtureApplications.filter((a) => a.productId === product.id);
+          } else {
+            throw err;
+          }
+        }
 
         return {
           ...product,
@@ -71,8 +105,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const session = authBypassEnabled ? null : await getServerSession(authOptions);
+    if (!authBypassEnabled && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
