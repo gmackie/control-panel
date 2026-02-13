@@ -7,6 +7,15 @@
 
 import { getK8sClient } from '@/lib/cluster/k8s-api-client';
 
+// Kubernetes resource names: lowercase alphanumeric, hyphens, dots; max 253 chars
+const K8S_NAME_RE = /^[a-z0-9][a-z0-9.\-]{0,251}[a-z0-9]$/;
+
+function validateK8sName(name: string): void {
+  if (!K8S_NAME_RE.test(name)) {
+    throw new Error(`Invalid Kubernetes resource name: ${name}`);
+  }
+}
+
 export interface PrometheusRuleGroup {
   name: string;
   interval?: string;
@@ -66,6 +75,7 @@ export class PrometheusRuleClient {
    * Get a specific PrometheusRule by name
    */
   async getRule(name: string): Promise<PrometheusRuleResource> {
+    validateK8sName(name);
     const client = getK8sClient();
     if (!client) {
       throw new Error('K8s client not available - K3S_SA_TOKEN not configured');
@@ -104,6 +114,7 @@ export class PrometheusRuleClient {
    * Update an existing PrometheusRule resource
    */
   async updateRule(name: string, rule: PrometheusRuleResource): Promise<PrometheusRuleResource> {
+    validateK8sName(name);
     const client = getK8sClient();
     if (!client) {
       throw new Error('K8s client not available - K3S_SA_TOKEN not configured');
@@ -131,6 +142,7 @@ export class PrometheusRuleClient {
    * Delete a PrometheusRule resource
    */
   async deleteRule(name: string): Promise<void> {
+    validateK8sName(name);
     const client = getK8sClient();
     if (!client) {
       throw new Error('K8s client not available - K3S_SA_TOKEN not configured');

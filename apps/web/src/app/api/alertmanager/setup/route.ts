@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/check-auth';
 import { alertManagerClient } from '@/lib/prometheus/alertmanager-client';
 
 const RECEIVER_NAME = 'control-panel-webhook';
@@ -11,6 +12,9 @@ const RECEIVER_NAME = 'control-panel-webhook';
  * so other routes still fire.
  */
 export async function POST() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const config = await alertManagerClient.getConfig();
 

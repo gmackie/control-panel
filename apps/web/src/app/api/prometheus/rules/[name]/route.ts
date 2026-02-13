@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/check-auth';
 import { prometheusRuleClient } from '@/lib/prometheus/prometheus-client';
 
 interface Params {
@@ -12,6 +13,9 @@ interface Params {
  * Get a specific PrometheusRule CRD by name
  */
 export async function GET(_request: NextRequest, props: Params) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   const { name } = await props.params;
   try {
     const rule = await prometheusRuleClient.getRule(name);
@@ -29,6 +33,9 @@ export async function GET(_request: NextRequest, props: Params) {
  * Update an existing PrometheusRule CRD
  */
 export async function PUT(request: NextRequest, props: Params) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   const { name } = await props.params;
   try {
     const body = await request.json();
@@ -55,6 +62,9 @@ export async function PUT(request: NextRequest, props: Params) {
  * Delete a PrometheusRule CRD
  */
 export async function DELETE(_request: NextRequest, props: Params) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   const { name } = await props.params;
   try {
     await prometheusRuleClient.deleteRule(name);

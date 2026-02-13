@@ -115,7 +115,11 @@ export function ClusterHealthBanner() {
       {health.issues.total > 0 && (
         <div className="mt-2 space-y-1">
           {[...health.issues.nodes, ...health.issues.pods]
-            .sort((a, b) => (a.severity === 'critical' ? -1 : 1))
+            .sort((a, b) => {
+              if (a.severity === 'critical' && b.severity !== 'critical') return -1;
+              if (a.severity !== 'critical' && b.severity === 'critical') return 1;
+              return 0;
+            })
             .slice(0, 5)
             .map(issue => (
               <div key={issue.id} className="text-xs opacity-90 flex items-center gap-1.5">

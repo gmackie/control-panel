@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/check-auth';
 import { prometheusRuleClient } from '@/lib/prometheus/prometheus-client';
 
 /**
@@ -6,6 +7,9 @@ import { prometheusRuleClient } from '@/lib/prometheus/prometheus-client';
  * List all PrometheusRule CRDs in the monitoring namespace
  */
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const rules = await prometheusRuleClient.listRules();
     return NextResponse.json(rules);
@@ -23,6 +27,9 @@ export async function GET() {
  * Create a new PrometheusRule CRD
  */
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const body = await request.json();
 

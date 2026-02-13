@@ -68,10 +68,23 @@ export class ClusterHealthWatcher extends EventEmitter {
   private activeNodeIssues = new Map<string, NodeHealthIssue>();
   private snapshots: ClusterHealthSnapshot[] = [];
 
+  constructor() {
+    super();
+    // Support up to 50 concurrent SSE connections (5 listeners each)
+    this.setMaxListeners(50);
+  }
+
   // ------ Public API ------
 
   async start(): Promise<void> {
     if (this.running) return;
+
+    const client = getK8sClient();
+    if (!client) {
+      console.warn("[ClusterHealthWatcher] K8s client unavailable, cannot start");
+      return;
+    }
+
     this.running = true;
 
     // Run an initial poll immediately

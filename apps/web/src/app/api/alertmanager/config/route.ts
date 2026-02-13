@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/check-auth';
 import { alertManagerClient } from '@/lib/prometheus/alertmanager-client';
 
 /**
@@ -6,6 +7,9 @@ import { alertManagerClient } from '@/lib/prometheus/alertmanager-client';
  * Return the current AlertManager configuration
  */
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const config = await alertManagerClient.getConfig();
     return NextResponse.json(config);
@@ -23,6 +27,9 @@ export async function GET() {
  * Update AlertManager configuration and auto-reload
  */
 export async function PUT(request: NextRequest) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const body = await request.json();
 

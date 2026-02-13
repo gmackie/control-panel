@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/check-auth';
 import { alertManagerClient } from '@/lib/prometheus/alertmanager-client';
 
 /**
@@ -6,6 +7,9 @@ import { alertManagerClient } from '@/lib/prometheus/alertmanager-client';
  * Trigger an AlertManager configuration reload
  */
 export async function POST() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     await alertManagerClient.reload();
     return NextResponse.json({ success: true });

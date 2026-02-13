@@ -30,44 +30,13 @@ export async function GET(request: NextRequest) {
     const writer = stream.writable.getWriter();
     const encoder = new TextEncoder();
 
-    // Helper to write an SSE frame
-    const sendEvent = async (event: string, data: unknown) => {
-      try {
-        await writer.write(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-        );
-      } catch {
-        // Connection likely closed; swallow write errors
-      }
-    };
-
-    // Send the latest snapshot immediately so the client has initial state
-    const latest = watcher.getLatestSnapshot();
-    if (latest) {
-      await sendEvent("snapshot", latest);
-    }
-
     // ---- Event listeners ----
 
-    const onSnapshot = (snapshot: unknown) => {
-      sendEvent("snapshot", snapshot);
-    };
-
-    const onPodIssue = (issue: unknown) => {
-      sendEvent("podIssue", issue);
-    };
-
-    const onNodeIssue = (issue: unknown) => {
-      sendEvent("nodeIssue", issue);
-    };
-
-    const onPodIssueResolved = (issue: unknown) => {
-      sendEvent("podIssueResolved", issue);
-    };
-
-    const onNodeIssueResolved = (issue: unknown) => {
-      sendEvent("nodeIssueResolved", issue);
-    };
+    const onSnapshot = (snapshot: unknown) => sendEvent("snapshot", snapshot);
+    const onPodIssue = (issue: unknown) => sendEvent("podIssue", issue);
+    const onNodeIssue = (issue: unknown) => sendEvent("nodeIssue", issue);
+    const onPodIssueResolved = (issue: unknown) => sendEvent("podIssueResolved", issue);
+    const onNodeIssueResolved = (issue: unknown) => sendEvent("nodeIssueResolved", issue);
 
     watcher.on("snapshot", onSnapshot);
     watcher.on("podIssue", onPodIssue);
@@ -81,13 +50,16 @@ export async function GET(request: NextRequest) {
       try {
         await writer.write(encoder.encode("event: keepalive\ndata: {}\n\n"));
       } catch {
-        clearInterval(keepAlive);
+        cleanup();
       }
     }, 30_000);
 
-    // ---- Cleanup on disconnect ----
+    // ---- Cleanup (shared by abort + write failure) ----
 
-    request.signal.addEventListener("abort", () => {
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
       watcher.off("snapshot", onSnapshot);
       watcher.off("podIssue", onPodIssue);
       watcher.off("nodeIssue", onNodeIssue);
@@ -95,7 +67,25 @@ export async function GET(request: NextRequest) {
       watcher.off("nodeIssueResolved", onNodeIssueResolved);
       clearInterval(keepAlive);
       writer.close().catch(() => {});
-    });
+    };
+
+    const sendEvent = async (event: string, data: unknown) => {
+      try {
+        await writer.write(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        );
+      } catch {
+        cleanup();
+      }
+    };
+
+    request.signal.addEventListener("abort", cleanup);
+
+    // Send the latest snapshot immediately so the client has initial state
+    const latest = watcher.getLatestSnapshot();
+    if (latest) {
+      await sendEvent("snapshot", latest);
+    }
 
     return new NextResponse(stream.readable, {
       headers: {
