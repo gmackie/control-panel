@@ -75,15 +75,36 @@ export interface K8sNode {
     name: string;
     labels?: Record<string, string>;
   };
+  spec: {
+    podCIDR?: string;
+    taints?: Array<{
+      key: string;
+      value?: string;
+      effect: string;
+    }>;
+  };
   status: {
     conditions?: Array<{
       type: string;
       status: string;
+      lastHeartbeatTime?: string;
+      lastTransitionTime?: string;
+      reason?: string;
+      message?: string;
     }>;
     addresses?: Array<{
       type: string;
       address: string;
     }>;
+    capacity?: Record<string, string>;
+    allocatable?: Record<string, string>;
+    nodeInfo?: {
+      kernelVersion: string;
+      osImage: string;
+      containerRuntimeVersion: string;
+      kubeletVersion: string;
+      architecture: string;
+    };
   };
 }
 
@@ -156,6 +177,9 @@ export interface K8sPod {
         waiting?: { reason: string; message?: string };
         terminated?: { exitCode: number; reason: string };
       };
+      lastState?: {
+        terminated?: { exitCode: number; reason: string; finishedAt?: string };
+      };
       image: string;
     }>;
   };
@@ -187,7 +211,7 @@ export class K8sApiClient {
     });
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  private async apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.config.apiUrl}${path}`;
     
     if (this.config.skipTlsVerify) {
@@ -261,10 +285,31 @@ export class K8sApiClient {
   }
 
   /**
+   * Generic public request method for accessing arbitrary K8s API paths.
+   * Used by PrometheusClient and AlertManagerClient for CRD access.
+   */
+  async request<T = unknown>(
+    path: string,
+    options?: { method?: string; body?: string; headers?: Record<string, string> }
+  ): Promise<T> {
+    const requestInit: RequestInit = {};
+    if (options?.method) {
+      requestInit.method = options.method;
+    }
+    if (options?.body) {
+      requestInit.body = options.body;
+    }
+    if (options?.headers) {
+      requestInit.headers = options.headers;
+    }
+    return this.apiRequest<T>(path, requestInit);
+  }
+
+  /**
    * Get all namespaces
    */
   async getNamespaces(): Promise<K8sNamespace[]> {
-    const result = await this.request<{ items: K8sNamespace[] }>('/api/v1/namespaces');
+    const result = await this.apiRequest<{ items: K8sNamespace[] }>('/api/v1/namespaces');
     return result.items;
   }
 
@@ -272,7 +317,7 @@ export class K8sApiClient {
    * Get all deployments across all namespaces
    */
   async getAllDeployments(): Promise<K8sDeployment[]> {
-    const result = await this.request<{ items: K8sDeployment[] }>('/apis/apps/v1/deployments');
+    const result = await this.apiRequest<{ items: K8sDeployment[] }>('/apis/apps/v1/deployments');
     return result.items;
   }
 
@@ -280,7 +325,7 @@ export class K8sApiClient {
    * Get deployments in a specific namespace
    */
   async getDeployments(namespace: string): Promise<K8sDeployment[]> {
-    const result = await this.request<{ items: K8sDeployment[] }>(
+    const result = await this.apiRequest<{ items: K8sDeployment[] }>(
       `/apis/apps/v1/namespaces/${namespace}/deployments`
     );
     return result.items;
@@ -290,7 +335,7 @@ export class K8sApiClient {
    * Get all ingresses across all namespaces
    */
   async getAllIngresses(): Promise<K8sIngress[]> {
-    const result = await this.request<{ items: K8sIngress[] }>('/apis/networking.k8s.io/v1/ingresses');
+    const result = await this.apiRequest<{ items: K8sIngress[] }>('/apis/networking.k8s.io/v1/ingresses');
     return result.items;
   }
 
@@ -298,7 +343,7 @@ export class K8sApiClient {
    * Get ingresses in a specific namespace
    */
   async getIngresses(namespace: string): Promise<K8sIngress[]> {
-    const result = await this.request<{ items: K8sIngress[] }>(
+    const result = await this.apiRequest<{ items: K8sIngress[] }>(
       `/apis/networking.k8s.io/v1/namespaces/${namespace}/ingresses`
     );
     return result.items;
@@ -308,7 +353,7 @@ export class K8sApiClient {
    * Get all nodes in the cluster
    */
   async getNodes(): Promise<K8sNode[]> {
-    const result = await this.request<{ items: K8sNode[] }>('/api/v1/nodes');
+    const result = await this.apiRequest<{ items: K8sNode[] }>('/api/v1/nodes');
     return result.items;
   }
 
@@ -320,7 +365,7 @@ export class K8sApiClient {
     name: string,
     labels: Record<string, string>
   ): Promise<void> {
-    await this.request(
+    await this.apiRequest(
       `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`,
       {
         method: 'PATCH',
@@ -342,7 +387,7 @@ export class K8sApiClient {
     name: string,
     annotations: Record<string, string>
   ): Promise<void> {
-    await this.request(
+    await this.apiRequest(
       `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`,
       {
         method: 'PATCH',
@@ -358,7 +403,7 @@ export class K8sApiClient {
 
   async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
     try {
-      await this.request('/api/v1/namespaces/default');
+      await this.apiRequest('/api/v1/namespaces/default');
       return { healthy: true };
     } catch (error) {
       return {
@@ -369,20 +414,20 @@ export class K8sApiClient {
   }
 
   async getDeployment(namespace: string, name: string): Promise<K8sDeployment> {
-    return this.request<K8sDeployment>(
+    return this.apiRequest<K8sDeployment>(
       `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`
     );
   }
 
   async getSecrets(namespace: string): Promise<K8sSecret[]> {
-    const result = await this.request<{ items: K8sSecret[] }>(
+    const result = await this.apiRequest<{ items: K8sSecret[] }>(
       `/api/v1/namespaces/${namespace}/secrets`
     );
     return result.items;
   }
 
   async getSecret(namespace: string, name: string): Promise<K8sSecret> {
-    return this.request<K8sSecret>(
+    return this.apiRequest<K8sSecret>(
       `/api/v1/namespaces/${namespace}/secrets/${name}`
     );
   }
@@ -393,38 +438,38 @@ export class K8sApiClient {
   }
 
   async getServices(namespace: string): Promise<K8sService[]> {
-    const result = await this.request<{ items: K8sService[] }>(
+    const result = await this.apiRequest<{ items: K8sService[] }>(
       `/api/v1/namespaces/${namespace}/services`
     );
     return result.items;
   }
 
   async getService(namespace: string, name: string): Promise<K8sService> {
-    return this.request<K8sService>(
+    return this.apiRequest<K8sService>(
       `/api/v1/namespaces/${namespace}/services/${name}`
     );
   }
 
   async getAllPods(): Promise<K8sPod[]> {
-    const result = await this.request<{ items: K8sPod[] }>('/api/v1/pods');
+    const result = await this.apiRequest<{ items: K8sPod[] }>('/api/v1/pods');
     return result.items;
   }
 
   async getPods(namespace: string): Promise<K8sPod[]> {
-    const result = await this.request<{ items: K8sPod[] }>(
+    const result = await this.apiRequest<{ items: K8sPod[] }>(
       `/api/v1/namespaces/${namespace}/pods`
     );
     return result.items;
   }
 
   async getPod(namespace: string, name: string): Promise<K8sPod> {
-    return this.request<K8sPod>(
+    return this.apiRequest<K8sPod>(
       `/api/v1/namespaces/${namespace}/pods/${name}`
     );
   }
 
   async getAllServices(): Promise<K8sService[]> {
-    const result = await this.request<{ items: K8sService[] }>('/api/v1/services');
+    const result = await this.apiRequest<{ items: K8sService[] }>('/api/v1/services');
     return result.items;
   }
 }

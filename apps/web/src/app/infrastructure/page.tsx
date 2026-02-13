@@ -51,6 +51,7 @@ import { NodeCard } from "@/components/cluster/NodeCard";
 import { AddNodeModal } from "@/components/cluster/AddNodeModal";
 import { AutoscalingPanel } from "@/components/cluster/AutoscalingPanel";
 import { HealthDashboard } from "@/components/cluster/HealthDashboard";
+import { PodHealthTable } from "@/components/cluster/PodHealthTable";
 import { CostDashboard } from "@/components/cluster/CostDashboard";
 import { formatDistanceToNow } from "date-fns";
 
@@ -1027,6 +1028,9 @@ export default function InfrastructurePage() {
 
             <TabsContent value="health">
               <HealthDashboard />
+              <div className="mt-6">
+                <PodHealthTable />
+              </div>
             </TabsContent>
 
             <TabsContent value="autoscaling">

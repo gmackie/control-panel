@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { useCommandPalette } from '@/components/command-palette/CommandPaletteProvider'
 import { useKeyboardShortcuts } from '@/components/keyboard-shortcuts/KeyboardShortcutsProvider'
+import { ClusterHealthBanner } from '@/components/cluster/ClusterHealthBanner'
 import { GlobalStatus } from './GlobalStatus'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -372,6 +373,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           
           <main className="flex-1">
             <div className="container mx-auto px-4 md:px-6 py-6 max-w-none">
+              <ClusterHealthBanner />
               {children}
             </div>
           </main>
