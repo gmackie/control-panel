@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Providers } from "./providers";
+import { AppShell } from "@/components/layout/app-shell";
 
 export const metadata = {
   title: "GMAC.IO Control Panel",
@@ -11,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <body className="min-h-screen bg-background text-foreground font-sans antialiased">
         <Providers>
-          {children}
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>
