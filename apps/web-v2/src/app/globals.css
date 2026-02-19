@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --font-sans: "Figtree", system-ui, sans-serif;
+
+    /* Stone base with green accent - Light mode */
+    --background: 60 9% 98%;
+    --foreground: 24 10% 10%;
+    --card: 60 9% 98%;
+    --card-foreground: 24 10% 10%;
+    --popover: 60 9% 98%;
+    --popover-foreground: 24 10% 10%;
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 24 6% 83%;
+    --secondary-foreground: 24 10% 10%;
+    --muted: 60 5% 96%;
+    --muted-foreground: 24 6% 45%;
+    --accent: 142 71% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 6% 83%;
+    --input: 24 6% 83%;
+    --ring: 142 71% 45%;
+    --chart-1: 142 71% 45%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    /* Sidebar */
+    --sidebar: 60 9% 98%;
+    --sidebar-foreground: 24 10% 10%;
+    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 142 71% 45%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 24 6% 90%;
+    --sidebar-ring: 142 71% 45%;
+  }
+
+  .dark {
+    /* Stone base with green accent - Dark mode */
+    --background: 24 10% 6%;
+    --foreground: 60 9% 98%;
+    --card: 24 10% 8%;
+    --card-foreground: 60 9% 98%;
+    --popover: 24 10% 8%;
+    --popover-foreground: 60 9% 98%;
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 24 6% 15%;
+    --secondary-foreground: 60 9% 98%;
+    --muted: 24 6% 15%;
+    --muted-foreground: 24 6% 65%;
+    --accent: 142 71% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 6% 20%;
+    --input: 24 6% 20%;
+    --ring: 142 71% 45%;
+    --chart-1: 142 71% 45%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Sidebar - Dark */
+    --sidebar: 24 10% 8%;
+    --sidebar-foreground: 60 9% 98%;
+    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 142 76% 36%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 24 6% 15%;
+    --sidebar-ring: 142 71% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-sm;
+  }
+
+  .card-header {
+    @apply text-xl font-semibold mb-4 text-card-foreground;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-healthy {
+    @apply bg-green-500/10 text-green-500 border border-green-500/20;
+  }
+
+  .status-warning {
+    @apply bg-yellow-500/10 text-yellow-500 border border-yellow-500/20;
+  }
+
+  .status-error {
+    @apply bg-red-500/10 text-red-500 border border-red-500/20;
+  }
+}
+
+/* Mira style enhancements */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-in {
+    animation: animate-in 0.2s ease-out;
+  }
+
+  @keyframes animate-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
