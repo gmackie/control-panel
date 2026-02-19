@@ -63,3 +63,8 @@ session-*.md
 # Test results
 test-results/
 **/test-results/
+
+# Claude Code
+.claude/settings.local.json
+session-ses_*.md
+.opencode/

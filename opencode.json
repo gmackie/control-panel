@@ -1,5 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
+    "gmac-control-panel": {
+      "type": "local",
+      "command": ["node", "packages/mcp-server/dist/index.js"],
+      "environment": {
+        "CONTROL_PANEL_URL": "https://control.gmac.io"
+      },
+      "enabled": true
+    }
   }
 }
