@@ -391,6 +391,115 @@ importers:
         specifier: ^4.0.16
         version: 4.0.16(@types/node@20.19.27)(@vitest/ui@4.0.16)(happy-dom@20.0.11)(jiti@1.21.7)(jsdom@20.0.3)(lightningcss@1.27.0)(msw@2.12.7(@types/node@20.19.27)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  apps/web-v2:
+    dependencies:
+      '@auth/core':
+        specifier: ^0.18.0
+        version: 0.18.6
+      '@kubernetes/client-node':
+        specifier: ^0.20.0
+        version: 0.20.0
+      '@neondatabase/serverless':
+        specifier: ^0.10.0
+        version: 0.10.4
+      '@radix-ui/react-dropdown-menu':
+        specifier: ^2.1.15
+        version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@radix-ui/react-slot':
+        specifier: ^1.2.4
+        version: 1.2.4(@types/react@19.2.7)(react@19.2.3)
+      '@radix-ui/react-tabs':
+        specifier: ^1.1.12
+        version: 1.1.13(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@repo/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@tanstack/react-query':
+        specifier: ^5.62.7
+        version: 5.90.12(react@19.2.3)
+      '@tanstack/react-query-devtools':
+        specifier: ^5.83.0
+        version: 5.91.1(@tanstack/react-query@5.90.12(react@19.2.3))(react@19.2.3)
+      '@trpc/client':
+        specifier: ^11.0.0-rc.660
+        version: 11.8.1(@trpc/server@11.8.1(typescript@5.9.3))(typescript@5.9.3)
+      '@trpc/react-query':
+        specifier: ^11.0.0-rc.660
+        version: 11.8.1(@tanstack/react-query@5.90.12(react@19.2.3))(@trpc/client@11.8.1(@trpc/server@11.8.1(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.8.1(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+      '@trpc/server':
+        specifier: ^11.0.0-rc.660
+        version: 11.8.1(typescript@5.9.3)
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      date-fns:
+        specifier: ^3.6.0
+        version: 3.6.0
+      drizzle-orm:
+        specifier: ^0.45.0
+        version: 0.45.1(@libsql/client-wasm@0.15.15)(@neondatabase/serverless@0.10.4)(@types/pg@8.16.0)(pg@8.16.3)
+      lucide-react:
+        specifier: ^0.468.0
+        version: 0.468.0(react@19.2.3)
+      next:
+        specifier: ^15.5.9
+        version: 15.5.9(@babel/core@7.28.5)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next-auth:
+        specifier: 4.24.11
+        version: 4.24.11(@auth/core@0.18.6)(next@15.5.9(@babel/core@7.28.5)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react:
+        specifier: ^19.2.3
+        version: 19.2.3
+      react-dom:
+        specifier: ^19.2.3
+        version: 19.2.3(react@19.2.3)
+      superjson:
+        specifier: ^2.2.2
+        version: 2.2.6
+      tailwind-merge:
+        specifier: ^3.4.0
+        version: 3.4.0
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
+      tailwindcss-animate:
+        specifier: ^1.0.7
+        version: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.2))
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.27
+      '@types/react':
+        specifier: ^19.2.7
+        version: 19.2.7
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.7)
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.4.23(postcss@8.5.6)
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.6
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
   packages/api:
     dependencies:
       '@octokit/types':
@@ -1788,7 +1897,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.22.27':
     resolution: {integrity: sha512-MZ3s68+OFQZWljAiCdwL+dL+xZudpkmhq0A2Qb4+p6MNp386WJyAYineXtiLJVww/8ohIfUxOL10vnaPdDVl4w==}
@@ -11959,7 +12068,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 20.19.27
+      '@types/node': 22.19.3
 
   '@types/ms@2.1.0': {}
 
@@ -12263,7 +12372,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.16(@types/node@20.19.27)(@vitest/ui@4.0.16)(happy-dom@20.0.11)(jiti@1.21.7)(jsdom@20.0.3)(lightningcss@1.27.0)(msw@2.12.7(@types/node@20.19.27)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest: 4.0.16(@types/node@22.19.3)(@vitest/ui@4.0.16)(happy-dom@20.0.11)(jiti@1.21.7)(jsdom@20.0.3)(lightningcss@1.27.0)(msw@2.12.7(@types/node@22.19.3)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/utils@4.0.16':
     dependencies:
