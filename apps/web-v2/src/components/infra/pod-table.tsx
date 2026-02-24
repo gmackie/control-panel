@@ -1,121 +1,147 @@
 "use client";
 
-import { trpc } from "@/lib/trpc/client";
+import { useClusterNodes, useClusterPods } from "@/hooks/use-cluster-data";
 import { cn } from "@/lib/utils";
 
-/**
- * Renders node rows for a single cluster.
- * Using a child component lets us call useQuery per-cluster
- * without violating the rules of hooks.
- */
-function ClusterNodeRows({ clusterId, clusterName }: { clusterId: string; clusterName: string }) {
-  const { data: cluster, isLoading } = trpc.clusters.byId.useQuery(clusterId);
-
-  if (isLoading) {
-    return (
-      <tr>
-        <td colSpan={7} className="py-2 text-muted-foreground">
-          Loading nodes for {clusterName}...
-        </td>
-      </tr>
-    );
-  }
-
-  const nodes = cluster?.nodes ?? [];
-
-  if (!nodes.length) {
-    return (
-      <tr>
-        <td colSpan={7} className="py-2 text-muted-foreground">
-          No nodes in {clusterName}
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <>
-      {nodes.map((node) => (
-        <tr key={node.id} className="border-b border-border/50">
-          <td className="py-2 font-medium">{node.name}</td>
-          <td className="py-2 text-muted-foreground">{clusterName}</td>
-          <td className="py-2">
-            <div className="flex items-center gap-1.5">
-              <div
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  node.status === "ready"
-                    ? "bg-green-500"
-                    : node.status === "not_ready"
-                      ? "bg-red-500"
-                      : "bg-zinc-500"
-                )}
-              />
-              <span className="capitalize">{node.status?.replace("_", " ")}</span>
-            </div>
-          </td>
-          <td className="py-2 text-muted-foreground capitalize">
-            {node.role?.replace("-", " ")}
-          </td>
-          <td className="py-2 text-muted-foreground">
-            {node.cpu
-              ? `${((node.cpu.used / node.cpu.total) * 100).toFixed(0)}%`
-              : "\u2014"}
-          </td>
-          <td className="py-2 text-muted-foreground">
-            {node.memory
-              ? `${((node.memory.used / node.memory.total) * 100).toFixed(0)}%`
-              : "\u2014"}
-          </td>
-          <td className="py-2 text-muted-foreground">
-            {node.pods ? `${node.pods.running}/${node.pods.total}` : "\u2014"}
-          </td>
-        </tr>
-      ))}
-    </>
-  );
-}
-
 export function PodTable() {
-  const { data: clusters, isLoading } = trpc.clusters.list.useQuery();
+  const { data: nodes, isLoading: nodesLoading } = useClusterNodes();
+  const { data: pods, isLoading: podsLoading } = useClusterPods();
 
   return (
-    <section>
-      <h2 className="text-lg font-semibold mb-4">Cluster Nodes</h2>
-      {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-12 rounded-lg bg-muted/30 animate-pulse" />
-          ))}
-        </div>
-      ) : !clusters?.length ? (
-        <p className="text-muted-foreground">No cluster nodes found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="pb-2 font-medium">Node</th>
-                <th className="pb-2 font-medium">Cluster</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">Role</th>
-                <th className="pb-2 font-medium">CPU</th>
-                <th className="pb-2 font-medium">Memory</th>
-                <th className="pb-2 font-medium">Pods</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clusters.map((cluster) => (
-                <ClusterNodeRows
-                  key={cluster.id}
-                  clusterId={cluster.id}
-                  clusterName={cluster.name}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+    <div className="space-y-8">
+      {/* Cluster Nodes Table */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Cluster Nodes</h2>
+        {nodesLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 rounded-lg bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        ) : !nodes?.length ? (
+          <p className="text-muted-foreground">No cluster nodes found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Node</th>
+                  <th className="pb-2 font-medium">Cluster</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Role</th>
+                  <th className="pb-2 font-medium">CPU</th>
+                  <th className="pb-2 font-medium">Memory</th>
+                  <th className="pb-2 font-medium">Pods</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((node) => {
+                  const cpuPct = node.cpu.usageMillis != null
+                    ? `${Math.round((node.cpu.usageMillis / node.cpu.allocatableMillis) * 100)}%`
+                    : "\u2014";
+                  const memPct = node.memory.usageBytes != null
+                    ? `${Math.round((node.memory.usageBytes / node.memory.allocatableBytes) * 100)}%`
+                    : "\u2014";
+                  const podCount = pods
+                    ? pods.filter((p) => p.nodeName === node.name && p.clusterId === node.clusterId).length
+                    : undefined;
+
+                  return (
+                    <tr key={`${node.clusterId}-${node.name}`} className="border-b border-border/50">
+                      <td className="py-2 font-medium">{node.name}</td>
+                      <td className="py-2 text-muted-foreground">
+                        {node.clusterId === "production" ? "Production" : "Staging"}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className={cn(
+                              "h-2 w-2 rounded-full",
+                              node.status === "Ready"
+                                ? "bg-green-500"
+                                : "bg-red-500"
+                            )}
+                          />
+                          <span>{node.status}</span>
+                        </div>
+                      </td>
+                      <td className="py-2 text-muted-foreground capitalize">
+                        {node.roles.join(", ")}
+                      </td>
+                      <td className="py-2 text-muted-foreground">{cpuPct}</td>
+                      <td className="py-2 text-muted-foreground">{memPct}</td>
+                      <td className="py-2 text-muted-foreground">
+                        {podCount != null ? `${podCount}/${node.pods.capacity}` : "\u2014"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Pod List Table */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Pods</h2>
+        {podsLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        ) : !pods?.length ? (
+          <p className="text-muted-foreground">No pods found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Pod</th>
+                  <th className="pb-2 font-medium">Namespace</th>
+                  <th className="pb-2 font-medium">Cluster</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Ready</th>
+                  <th className="pb-2 font-medium">Restarts</th>
+                  <th className="pb-2 font-medium">Node</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pods.map((pod) => (
+                  <tr key={`${pod.clusterId}-${pod.namespace}-${pod.name}`} className="border-b border-border/50">
+                    <td className="py-2 font-medium font-mono text-xs">{pod.name}</td>
+                    <td className="py-2 text-muted-foreground">{pod.namespace}</td>
+                    <td className="py-2 text-muted-foreground">
+                      {pod.clusterId === "production" ? "Prod" : "Staging"}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            pod.status === "Running"
+                              ? "bg-green-500"
+                              : pod.status === "Pending"
+                                ? "bg-yellow-500"
+                                : pod.status === "Failed"
+                                  ? "bg-red-500"
+                                  : "bg-zinc-500"
+                          )}
+                        />
+                        <span>{pod.status}</span>
+                      </div>
+                    </td>
+                    <td className="py-2 text-muted-foreground">{pod.ready}</td>
+                    <td className="py-2 text-muted-foreground">{pod.restarts}</td>
+                    <td className="py-2 text-muted-foreground text-xs">{pod.nodeName ?? "\u2014"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

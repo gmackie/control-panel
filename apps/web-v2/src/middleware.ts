@@ -28,6 +28,6 @@ export default authBypassEnabled
 
 export const config = {
   matcher: [
-    '/((?!auth|api/auth|api/trpc|api/health|api/webhooks|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!auth|api/auth|api/trpc|api/k8s|api/prometheus|api/harbor|api/health|api/webhooks|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ]
 }

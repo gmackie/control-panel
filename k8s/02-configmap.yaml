@@ -20,3 +20,4 @@ data:
   DATABASE_NAME: "control_panel"
   REDIS_HOST: "redis-service.control-panel.svc.cluster.local"
   REDIS_PORT: "6379"
+  STAGING_K8S_ENDPOINT: "https://100.64.115.45:6443"

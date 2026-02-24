@@ -1,16 +1,12 @@
 "use client";
 
-import { trpc } from "@/lib/trpc/client";
+import { useClusterHealth } from "@/hooks/use-cluster-data";
 import { cn } from "@/lib/utils";
+import type { ClusterHealthSummary } from "@/types/k8s";
 
 type ClusterStatus = "healthy" | "degraded" | "unhealthy" | "unknown";
 
-function deriveStatus(health: {
-  totalClusters: number;
-  healthyClusters: number;
-  totalNodes: number;
-  readyNodes: number;
-} | undefined): ClusterStatus {
+function deriveStatus(health: ClusterHealthSummary | undefined): ClusterStatus {
   if (!health) return "unknown";
   if (health.totalClusters === 0) return "unknown";
   if (health.healthyClusters === health.totalClusters && health.readyNodes === health.totalNodes) return "healthy";
@@ -19,9 +15,7 @@ function deriveStatus(health: {
 }
 
 export function ClusterStatusIndicator() {
-  const { data: health } = trpc.clusters.health.useQuery(undefined, {
-    refetchInterval: 30000, // Poll every 30 seconds
-  });
+  const { data: health } = useClusterHealth();
 
   const status = deriveStatus(health);
 

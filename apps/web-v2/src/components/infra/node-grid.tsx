@@ -1,11 +1,12 @@
 "use client";
 
-import { trpc } from "@/lib/trpc/client";
+import { useClusterNodes } from "@/hooks/use-cluster-data";
+import { formatBytes, formatCpu } from "@/lib/cluster/k8s-resource-utils";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function NodeGrid() {
-  const { data: servers, isLoading } = trpc.infrastructure.servers.useQuery();
+  const { data: nodes, isLoading } = useClusterNodes();
 
   return (
     <section>
@@ -13,46 +14,61 @@ export function NodeGrid() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-32 rounded-lg bg-muted/30 animate-pulse" />
+            <div key={i} className="h-36 rounded-lg bg-muted/30 animate-pulse" />
           ))}
         </div>
-      ) : !servers?.length ? (
-        <p className="text-muted-foreground">No servers found.</p>
+      ) : !nodes?.length ? (
+        <p className="text-muted-foreground">No nodes found.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {servers.map((server) => (
-            <Card key={server.id} className="p-4">
+          {nodes.map((node) => (
+            <Card key={`${node.clusterId}-${node.name}`} className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm">{server.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{node.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    {node.clusterId === "production" ? "prod" : "staging"}
+                  </span>
+                </div>
                 <div
                   className={cn(
                     "h-2 w-2 rounded-full",
-                    server.status === "running" ? "bg-green-500" : "bg-zinc-500"
+                    node.status === "Ready" ? "bg-green-500" : "bg-red-500"
                   )}
                 />
               </div>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>IP</span>
-                  <span className="font-mono">{server.publicIp}</span>
+                  <span className="font-mono">{node.internalIP}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Type</span>
-                  <span>{server.type}</span>
+                  <span>Role</span>
+                  <span className="capitalize">{node.roles.join(", ")}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Location</span>
-                  <span>{server.datacenter}</span>
+                  <span>Version</span>
+                  <span>{node.kubeletVersion}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Resources</span>
+                  <span>CPU</span>
                   <span>
-                    {server.cpu} vCPU / {server.memory}GB RAM / {server.disk}GB
+                    {node.cpu.usageMillis != null
+                      ? `${formatCpu(node.cpu.usageMillis)} / ${formatCpu(node.cpu.allocatableMillis)}`
+                      : formatCpu(node.cpu.allocatableMillis)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Cost</span>
-                  <span>&euro;{server.monthlyPrice?.toFixed(2)}/mo</span>
+                  <span>Memory</span>
+                  <span>
+                    {node.memory.usageBytes != null
+                      ? `${formatBytes(node.memory.usageBytes)} / ${formatBytes(node.memory.allocatableBytes)}`
+                      : formatBytes(node.memory.allocatableBytes)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Runtime</span>
+                  <span>{node.containerRuntime}</span>
                 </div>
               </div>
             </Card>

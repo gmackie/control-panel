@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc/client";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { useAppDeployments, useAppPods } from "@/hooks/use-app-data";
 
 export function OverviewTab({ appId }: { appId: string }) {
   const { data: app, isLoading: appLoading } =
@@ -16,6 +17,15 @@ export function OverviewTab({ appId }: { appId: string }) {
     { appId: app?.id, limit: 5 },
     { enabled: !!app?.id }
   );
+
+  const k8sNamespace = app?.k8sNamespace || undefined;
+  const k8sDeploymentName = app?.k8sDeploymentName || app?.slug || undefined;
+
+  const { data: k8sDeployments } = useAppDeployments(
+    k8sNamespace,
+    k8sDeploymentName
+  );
+  const { data: k8sPods } = useAppPods(k8sNamespace, k8sDeploymentName);
 
   if (appLoading) {
     return (
@@ -63,6 +73,83 @@ export function OverviewTab({ appId }: { appId: string }) {
           )}
         </div>
       </Card>
+
+      {/* K8s Status */}
+      {app?.deployProvider === "kubernetes" && (
+        <Card className="p-4">
+          <h3 className="text-sm font-medium mb-3">K8s Status</h3>
+          {!k8sDeployments?.length ? (
+            <p className="text-sm text-muted-foreground">
+              No K8s deployments found for this app.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {k8sDeployments.map((dep) => (
+                <div key={`${dep.clusterId}-${dep.name}`} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{dep.clusterName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {dep.namespace}/{dep.name}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Replicas:</span>{" "}
+                      <span
+                        className={cn(
+                          dep.readyReplicas === dep.replicas
+                            ? "text-green-500"
+                            : "text-yellow-500"
+                        )}
+                      >
+                        {dep.readyReplicas}/{dep.replicas}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Updated:</span>{" "}
+                      {dep.updatedReplicas}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Strategy:</span>{" "}
+                      {dep.strategy}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {k8sPods && k8sPods.length > 0 && (
+                <div className="border-t border-border/50 pt-2 mt-2">
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Pods ({k8sPods.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {k8sPods.map((pod) => (
+                      <div
+                        key={`${pod.clusterId}-${pod.name}`}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <div
+                          className={cn("h-2 w-2 rounded-full", {
+                            "bg-green-500": pod.status === "Running",
+                            "bg-yellow-500": pod.status === "Pending",
+                            "bg-red-500": pod.status === "Failed",
+                            "bg-zinc-500":
+                              pod.status === "Succeeded" ||
+                              pod.status === "Unknown",
+                          })}
+                        />
+                        <span className="font-mono">{pod.name}</span>
+                        <span className="text-muted-foreground">
+                          {pod.ready}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Recent Deployments */}
       <Card className="p-4">

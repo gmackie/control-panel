@@ -10,6 +10,8 @@ import { OverviewTab } from "@/components/apps/detail/overview-tab";
 import { DeploymentsTab } from "@/components/apps/detail/deployments-tab";
 import { LogsTab } from "@/components/apps/detail/logs-tab";
 import { MetricsTab } from "@/components/apps/detail/metrics-tab";
+import { RegistryTab } from "@/components/apps/detail/registry-tab";
+import { AlertsTab } from "@/components/apps/detail/alerts-tab";
 import { SettingsTab } from "@/components/apps/detail/settings-tab";
 
 const tabs = [
@@ -17,6 +19,8 @@ const tabs = [
   { id: "deployments", label: "Deployments" },
   { id: "logs", label: "Logs" },
   { id: "metrics", label: "Metrics" },
+  { id: "registry", label: "Registry" },
+  { id: "alerts", label: "Alerts" },
   { id: "settings", label: "Settings" },
 ] as const;
 
@@ -70,6 +74,8 @@ export default function AppDetailPage({ params }: { params: Promise<{ slug: stri
       {activeTab === "deployments" && <DeploymentsTab appId={slug} />}
       {activeTab === "logs" && <LogsTab appId={slug} />}
       {activeTab === "metrics" && <MetricsTab appId={slug} />}
+      {activeTab === "registry" && <RegistryTab appId={slug} />}
+      {activeTab === "alerts" && <AlertsTab appId={slug} />}
       {activeTab === "settings" && <SettingsTab appId={slug} />}
     </div>
   );

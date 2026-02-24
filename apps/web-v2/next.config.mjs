@@ -5,7 +5,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  serverExternalPackages: ['@libsql/client'],
+  serverExternalPackages: ['@libsql/client', '@kubernetes/client-node'],
 }
 
 export default nextConfig
