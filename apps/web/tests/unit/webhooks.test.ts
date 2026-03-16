@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import crypto from 'crypto'
 
 vi.mock('@/lib/activity/activity-service', () => ({
@@ -7,25 +7,35 @@ vi.mock('@/lib/activity/activity-service', () => ({
   },
 }))
 
-vi.mock('@/lib/webhooks/webhook-service', () => ({
+vi.mock('@repo/webhooks', () => ({
   storeWebhookEvent: vi.fn().mockResolvedValue('test-event-id'),
   storeAlert: vi.fn().mockResolvedValue('test-alert-id'),
   updateAlertStatus: vi.fn().mockResolvedValue(true),
   storeDeploymentEvent: vi.fn().mockResolvedValue('test-deployment-id'),
   createNotification: vi.fn().mockResolvedValue('test-notification-id'),
-  sendSlackNotification: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/lib/rate-limiter', () => ({
   webhookLimiter: {
     checkLimit: vi.fn().mockResolvedValue(undefined),
   },
+  verifyBearerToken: vi.fn().mockReturnValue({ valid: true }),
+  RateLimitError: class extends Error {
+    statusCode = 429
+    code = 'RATE_LIMIT_EXCEEDED'
+    retryAfter?: number
+  },
+}))
+
+vi.mock('@/lib/webhooks/webhook-service', () => ({
+  sendSlackNotification: vi.fn().mockResolvedValue(true),
+}))
+
+vi.mock('@repo/db', () => ({
+  getDb: vi.fn().mockReturnValue(null),
 }))
 
 describe('Webhook Signature Verification', () => {
   describe('Stripe Signature', () => {
     const secret = 'whsec_test_secret'
-    
+
     function generateStripeSignature(payload: string, secret: string): string {
       const timestamp = Math.floor(Date.now() / 1000)
       const signedPayload = `${timestamp}.${payload}`
@@ -39,7 +49,7 @@ describe('Webhook Signature Verification', () => {
     it('should generate valid Stripe signature format', () => {
       const payload = JSON.stringify({ type: 'payment_intent.succeeded' })
       const signature = generateStripeSignature(payload, secret)
-      
+
       expect(signature).toMatch(/^t=\d+,v1=[a-f0-9]+$/)
     })
 
@@ -47,21 +57,21 @@ describe('Webhook Signature Verification', () => {
       const payload = JSON.stringify({ type: 'payment_intent.succeeded' })
       const timestamp = Math.floor(Date.now() / 1000)
       const signedPayload = `${timestamp}.${payload}`
-      
+
       const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(signedPayload)
         .digest('hex')
-      
+
       const providedSignature = `t=${timestamp},v1=${expectedSignature}`
       const elements = providedSignature.split(',')
       const signatureMap: Record<string, string> = {}
-      
+
       for (const element of elements) {
         const [key, value] = element.split('=')
-        signatureMap[key] = value
+        signatureMap[key!] = value!
       }
-      
+
       expect(signatureMap['t']).toBe(String(timestamp))
       expect(signatureMap['v1']).toBe(expectedSignature)
     })
@@ -71,7 +81,7 @@ describe('Webhook Signature Verification', () => {
       const oldTimestamp = Math.floor(Date.now() / 1000) - tolerance - 10
       const now = Math.floor(Date.now() / 1000)
       const diff = Math.abs(now - oldTimestamp)
-      
+
       expect(diff).toBeGreaterThan(tolerance)
     })
   })
@@ -98,9 +108,9 @@ describe('Webhook Signature Verification', () => {
       const payload = JSON.stringify({ type: 'user.created' })
       const svixId = 'msg_test123'
       const svixTimestamp = String(Math.floor(Date.now() / 1000))
-      
+
       const signature = generateSvixSignature(payload, svixId, svixTimestamp, secret)
-      
+
       expect(signature).toMatch(/^v1,[A-Za-z0-9+/=]+$/)
     })
 
@@ -108,17 +118,17 @@ describe('Webhook Signature Verification', () => {
       const payload = JSON.stringify({ type: 'user.created' })
       const svixId = 'msg_test123'
       const svixTimestamp = String(Math.floor(Date.now() / 1000))
-      
+
       const secretBytes = Buffer.from(secret.replace('whsec_', ''), 'base64')
       const signedContent = `${svixId}.${svixTimestamp}.${payload}`
       const expectedSignature = crypto
         .createHmac('sha256', secretBytes)
         .update(signedContent)
         .digest('base64')
-      
+
       const providedSignature = `v1,${expectedSignature}`
       const signatures = providedSignature.split(' ').map(sig => sig.split(',')[1])
-      
+
       expect(signatures).toContain(expectedSignature)
     })
   })
@@ -133,7 +143,7 @@ describe('Webhook Signature Verification', () => {
     it('should generate valid Sentry signature', () => {
       const payload = JSON.stringify({ action: 'created', data: { issue: {} } })
       const signature = generateSentrySignature(payload, secret)
-      
+
       expect(signature).toMatch(/^[a-f0-9]{64}$/)
     })
 
@@ -141,12 +151,12 @@ describe('Webhook Signature Verification', () => {
       const payload = JSON.stringify({ action: 'created', data: { issue: {} } })
       const signature = generateSentrySignature(payload, secret)
       const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex')
-      
+
       const isValid = crypto.timingSafeEqual(
         Buffer.from(signature),
         Buffer.from(digest)
       )
-      
+
       expect(isValid).toBe(true)
     })
   })
@@ -155,13 +165,13 @@ describe('Webhook Signature Verification', () => {
     it('should validate correct bearer token', () => {
       const expectedToken = 'test-webhook-token'
       const authHeader = `Bearer ${expectedToken}`
-      
+
       const prefix = 'Bearer '
       expect(authHeader.startsWith(prefix)).toBe(true)
-      
+
       const providedToken = authHeader.slice(prefix.length)
       expect(providedToken).toBe(expectedToken)
-      
+
       const isValid = crypto.timingSafeEqual(
         Buffer.from(providedToken),
         Buffer.from(expectedToken)
@@ -172,7 +182,7 @@ describe('Webhook Signature Verification', () => {
     it('should reject invalid bearer token', () => {
       const expectedToken = 'correct-token'
       const providedToken = 'wrong-token'
-      
+
       expect(providedToken.length).not.toBe(expectedToken.length)
     })
 
@@ -184,7 +194,7 @@ describe('Webhook Signature Verification', () => {
     it('should reject malformed authorization header', () => {
       const authHeader = 'Basic dXNlcjpwYXNz'
       const prefix = 'Bearer '
-      
+
       expect(authHeader.startsWith(prefix)).toBe(false)
     })
   })
@@ -192,9 +202,9 @@ describe('Webhook Signature Verification', () => {
 
 describe('Webhook Rate Limiting', () => {
   it('should allow requests within limit', async () => {
-    const { webhookLimiter } = await import('@/lib/rate-limiter')
+    const { webhookLimiter } = await import('@repo/webhooks')
     const mockRequest = new Request('https://example.com/webhook')
-    
+
     await expect(webhookLimiter.checkLimit(mockRequest)).resolves.toBeUndefined()
   })
 })
@@ -205,8 +215,8 @@ describe('Webhook Event Storage', () => {
   })
 
   it('should store webhook events with correct data', async () => {
-    const { storeWebhookEvent } = await import('@/lib/webhooks/webhook-service')
-    
+    const { storeWebhookEvent } = await import('@repo/webhooks')
+
     const eventData = {
       source: 'stripe' as const,
       eventType: 'payment_intent.succeeded',
@@ -216,16 +226,16 @@ describe('Webhook Event Storage', () => {
       metadata: { eventId: 'evt_123' },
       timestamp: new Date(),
     }
-    
-    const result = await storeWebhookEvent(eventData)
-    
-    expect(storeWebhookEvent).toHaveBeenCalledWith(eventData)
+
+    const result = await storeWebhookEvent(null, eventData)
+
+    expect(storeWebhookEvent).toHaveBeenCalledWith(null, eventData)
     expect(result).toBe('test-event-id')
   })
 
   it('should store alerts from Prometheus webhooks', async () => {
-    const { storeAlert } = await import('@/lib/webhooks/webhook-service')
-    
+    const { storeAlert } = await import('@repo/webhooks')
+
     const alertData = {
       name: 'HighCPUUsage',
       severity: 'warning' as const,
@@ -233,16 +243,16 @@ describe('Webhook Event Storage', () => {
       startsAt: new Date(),
       summary: 'CPU usage above 80%',
     }
-    
-    const result = await storeAlert(alertData)
-    
-    expect(storeAlert).toHaveBeenCalledWith(alertData)
+
+    const result = await storeAlert(null, alertData)
+
+    expect(storeAlert).toHaveBeenCalledWith(null, alertData)
     expect(result).toBe('test-alert-id')
   })
 
   it('should store deployment events from ArgoCD webhooks', async () => {
-    const { storeDeploymentEvent } = await import('@/lib/webhooks/webhook-service')
-    
+    const { storeDeploymentEvent } = await import('@repo/webhooks')
+
     const deploymentData = {
       applicationId: 'app-123',
       applicationName: 'my-app',
@@ -251,10 +261,10 @@ describe('Webhook Event Storage', () => {
       status: 'succeeded' as const,
       triggeredBy: 'argocd',
     }
-    
-    const result = await storeDeploymentEvent(deploymentData)
-    
-    expect(storeDeploymentEvent).toHaveBeenCalledWith(deploymentData)
+
+    const result = await storeDeploymentEvent(null, deploymentData)
+
+    expect(storeDeploymentEvent).toHaveBeenCalledWith(null, deploymentData)
     expect(result).toBe('test-deployment-id')
   })
 })
@@ -290,7 +300,7 @@ describe('Webhook Payload Processing', () => {
   describe('Clerk Payloads', () => {
     it('should identify user events', () => {
       const userEvents = ['user.created', 'user.updated', 'user.deleted']
-      
+
       userEvents.forEach(event => {
         expect(event.startsWith('user.')).toBe(true)
       })
@@ -298,7 +308,7 @@ describe('Webhook Payload Processing', () => {
 
     it('should identify session events', () => {
       const sessionEvents = ['session.created', 'session.ended']
-      
+
       sessionEvents.forEach(event => {
         expect(event.startsWith('session.')).toBe(true)
       })
@@ -322,7 +332,7 @@ describe('Webhook Payload Processing', () => {
           },
         },
       }
-      
+
       expect(payload.action).toBe('created')
       expect(payload.data.issue.id).toBe('issue-123')
       expect(payload.data.issue.title).toBeDefined()
@@ -344,7 +354,7 @@ describe('Webhook Payload Processing', () => {
         },
         eventType: 'app.sync.succeeded',
       }
-      
+
       expect(payload.app.metadata.name).toBe('my-app')
       expect(payload.app.status.health.status).toBe('Healthy')
       expect(payload.app.status.sync.status).toBe('Synced')
@@ -362,7 +372,7 @@ describe('Webhook Payload Processing', () => {
             return 'info'
         }
       }
-      
+
       expect(getSeverityForEvent('app.sync.failed')).toBe('critical')
       expect(getSeverityForEvent('app.health.degraded')).toBe('critical')
       expect(getSeverityForEvent('app.deleted')).toBe('warning')

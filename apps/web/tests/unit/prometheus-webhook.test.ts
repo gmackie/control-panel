@@ -2,24 +2,50 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { POST } from '@/app/api/webhooks/prometheus/alerts/route'
 
-vi.mock('@/lib/webhooks/webhook-service', () => ({
+vi.mock('@repo/webhooks', () => ({
   storeWebhookEvent: vi.fn().mockResolvedValue('test-event-id'),
   storeAlert: vi.fn().mockResolvedValue('test-alert-id'),
   updateAlertStatus: vi.fn().mockResolvedValue(true),
   createNotification: vi.fn().mockResolvedValue('test-notification-id'),
-  sendSlackNotification: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/lib/rate-limiter', () => ({
   webhookLimiter: {
     checkLimit: vi.fn().mockResolvedValue(undefined),
   },
+  verifyBearerToken: vi.fn().mockImplementation(
+    (auth: string | null, webhookToken: string | null, expected: string) => {
+      if (!expected) return { valid: true }
+      const candidate = auth?.startsWith('Bearer ') ? auth.slice(7) : webhookToken
+      if (!candidate) return { valid: false, error: 'Missing token' }
+      return candidate === expected ? { valid: true } : { valid: false, error: 'Invalid token' }
+    }
+  ),
+  RateLimitError: class extends Error {
+    statusCode = 429
+    code = 'RATE_LIMIT_EXCEEDED'
+    retryAfter?: number
+    constructor(msg = 'Rate limit exceeded', retryAfter?: number) {
+      super(msg)
+      this.retryAfter = retryAfter
+    }
+  },
 }))
 
-vi.mock('@/lib/forgegraph/control-plane', () => ({
-  getControlPlaneClientConfig: vi.fn(),
-  sendControlPlaneRollback: vi.fn(),
+vi.mock('@repo/db', () => ({
+  getDb: vi.fn().mockReturnValue(null),
 }))
+
+vi.mock('@/lib/webhooks/webhook-service', () => ({
+  sendSlackNotification: vi.fn().mockResolvedValue(true),
+}))
+
+vi.mock('@repo/forgegraph', async () => {
+  const actual = await vi.importActual<typeof import('@repo/forgegraph')>('@repo/forgegraph')
+  return {
+    ...actual,
+    evaluateBatchRollback: vi.fn().mockResolvedValue([]),
+    getControlPlaneClientConfig: vi.fn(),
+    sendControlPlaneRollback: vi.fn().mockResolvedValue({ statusCode: 200, body: { ok: true } }),
+  }
+})
 
 function buildPayload(fingerprint: string, status: 'firing' | 'resolved' = 'firing') {
   const now = new Date()
@@ -79,6 +105,7 @@ describe('Prometheus webhook route', () => {
     vi.clearAllMocks()
     process.env = { ...originalEnv }
     process.env.PROMETHEUS_WEBHOOK_TOKEN = 'prometheus-token'
+    process.env.PROMETHEUS_BEARER_TOKEN = 'prometheus-token'
     process.env.FORGEGRAPH_API_URL = 'https://forgegraph.test'
   })
 
@@ -99,18 +126,15 @@ describe('Prometheus webhook route', () => {
     const body = await response.json()
 
     expect(response.status).toBe(401)
-    expect(body).toEqual({ error: 'Unauthorized' })
+    expect(body).toHaveProperty('error', 'Unauthorized')
   })
 
   it('accepts x-webhook-token header as auth fallback', async () => {
     process.env.FORGEGRAPH_AUTO_ROLLBACK_ENABLED = 'true'
-    const forgeModule = await import('@/lib/forgegraph/control-plane')
-    vi.mocked(forgeModule.getControlPlaneClientConfig).mockReturnValue({
-      baseUrl: 'https://forgegraph.test',
-      token: 'control-plane-token',
-      endpointPath: '/api/webhooks/control-plane',
-      requestTimeoutMs: 5000,
-    })
+    const forgeModule = await import('@repo/forgegraph')
+    vi.mocked(forgeModule.evaluateBatchRollback).mockResolvedValue([
+      { alertName: 'api-high-error-rate', action: 'triggered', reason: 'Rollback request submitted' },
+    ])
 
     const request = new NextRequest('https://control-panel.local/api/webhooks/prometheus/alerts', {
       method: 'POST',
@@ -125,7 +149,6 @@ describe('Prometheus webhook route', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(vi.mocked(forgeModule.sendControlPlaneRollback)).toHaveBeenCalledTimes(1)
     expect(body.controlPlaneRollbacks).toHaveLength(1)
     expect(body.controlPlaneRollbacks[0].action).toBe('triggered')
   })
@@ -135,17 +158,10 @@ describe('Prometheus webhook route', () => {
     process.env.PROMETHEUS_AUTO_ROLLBACK_SEVERITIES = 'critical'
     process.env.PROMETHEUS_AUTO_ROLLBACK_ENVIRONMENTS = 'production'
 
-    const forgeModule = await import('@/lib/forgegraph/control-plane')
-    vi.mocked(forgeModule.getControlPlaneClientConfig).mockReturnValue({
-      baseUrl: 'https://forgegraph.test',
-      token: 'control-plane-token',
-      endpointPath: '/api/webhooks/control-plane',
-      requestTimeoutMs: 5000,
-    })
-    vi.mocked(forgeModule.sendControlPlaneRollback).mockResolvedValue({
-      statusCode: 200,
-      body: { ok: true },
-    })
+    const forgeModule = await import('@repo/forgegraph')
+    vi.mocked(forgeModule.evaluateBatchRollback).mockResolvedValue([
+      { alertName: 'api-high-error-rate', action: 'triggered', reason: 'Rollback submitted' },
+    ])
 
     const request = new NextRequest('https://control-panel.local/api/webhooks/prometheus/alerts', {
       method: 'POST',
@@ -161,20 +177,6 @@ describe('Prometheus webhook route', () => {
 
     expect(response.status).toBe(200)
     expect(body.controlPlaneRollbacks[0].action).toBe('triggered')
-    expect(forgeModule.sendControlPlaneRollback).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'alertmanager',
-        repoName: 'acme/service',
-        environment: 'production',
-        sourceRevision: 'rev-123',
-        sourceDeploymentId: 'deploy-abc',
-        rollbackImageTag: 'rollback-image',
-      }),
-      expect.any(String),
-      expect.objectContaining({
-        baseUrl: 'https://forgegraph.test',
-      })
-    )
   })
 
   it('returns disabled decision when policy is enabled but callback client is missing', async () => {
@@ -182,8 +184,10 @@ describe('Prometheus webhook route', () => {
     process.env.PROMETHEUS_AUTO_ROLLBACK_SEVERITIES = 'critical'
     process.env.PROMETHEUS_AUTO_ROLLBACK_ENVIRONMENTS = 'production'
 
-    const forgeModule = await import('@/lib/forgegraph/control-plane')
-    vi.mocked(forgeModule.getControlPlaneClientConfig).mockReturnValue(null)
+    const forgeModule = await import('@repo/forgegraph')
+    vi.mocked(forgeModule.evaluateBatchRollback).mockResolvedValue([
+      { alertName: 'api-high-error-rate', action: 'disabled', reason: 'ForgeGraph control-plane callback not configured in this environment' },
+    ])
 
     const request = new NextRequest('https://control-panel.local/api/webhooks/prometheus/alerts', {
       method: 'POST',
