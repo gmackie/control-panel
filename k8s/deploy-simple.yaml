@@ -62,12 +62,18 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: control-panel
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/metrics"
     spec:
       serviceAccountName: control-panel
+      imagePullSecrets:
+      - name: harbor-registry
       containers:
       - name: control-panel
-        image: docker.io/library/control-panel:latest
-        imagePullPolicy: Never
+        image: registry.gmac.io/gmac/control-panel:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 3000
@@ -121,6 +127,89 @@ spec:
             secretKeyRef:
               name: control-panel-secrets
               key: DATABASE_URL
+        - name: FORGEGRAPH_API_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_API_URL
+              optional: true
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TOKEN
+              optional: true
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_PATH
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_PATH
+              optional: true
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TIMEOUT_MS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TIMEOUT_MS
+              optional: true
+        - name: PROMETHEUS_BEARER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: PROMETHEUS_BEARER_TOKEN
+              optional: true
+        - name: FORGEGRAPH_AUTO_ROLLBACK_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_ENABLED
+              optional: true
+        - name: FORGEGRAPH_AUTO_ROLLBACK_SEVERITIES
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_SEVERITIES
+              optional: true
+        - name: FORGEGRAPH_AUTO_ROLLBACK_ENVIRONMENTS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_ENVIRONMENTS
+              optional: true
+        - name: FORGEGRAPH_ROLLBACK_DEDUPE_WINDOW_MS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_ROLLBACK_DEDUPE_WINDOW_MS
+              optional: true
+        - name: GITEA_URL
+          valueFrom:
+            configMapKeyRef:
+              name: control-panel-config
+              key: GITEA_URL
+        - name: GITEA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: GITEA_TOKEN
+              optional: true
+        - name: ARGOCD_SERVER
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: ARGOCD_SERVER
+              optional: true
+        - name: ARGOCD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: ARGOCD_TOKEN
+              optional: true
+        - name: PROMETHEUS_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: PROMETHEUS_URL
+              optional: true
         - name: K3S_SA_TOKEN
           valueFrom:
             secretKeyRef:
