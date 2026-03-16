@@ -18,6 +18,7 @@ import {
 } from '@repo/forgegraph'
 import { sendSlackNotification } from '@/lib/webhooks/webhook-service'
 import { getDb } from '@repo/db'
+import { metrics } from '@/lib/metrics/collector'
 
 function nowIso8601(): string {
   return new Date().toISOString()
@@ -113,6 +114,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  metrics.incrementCounter("webhook_received_total", { source: "prometheus" })
+
   let payload: AlertmanagerWebhookPayload
   try {
     payload = await request.json()
@@ -189,6 +192,8 @@ export async function POST(request: NextRequest) {
     const rollbackFailures = rollbackDecisions.filter((d) => d.action === 'failed').length
     const processingTimeMs = Date.now() - startMs
 
+    metrics.observeHistogram("webhook_processing_duration_seconds", (Date.now() - startMs) / 1000, { source: "prometheus" })
+
     return NextResponse.json(
       {
         success: true,
@@ -205,6 +210,7 @@ export async function POST(request: NextRequest) {
       }
     )
   } catch (error) {
+    metrics.incrementCounter("webhook_errors_total", { source: "prometheus" })
     console.error('Error processing Prometheus webhook:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

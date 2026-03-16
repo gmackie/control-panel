@@ -7,6 +7,7 @@ import {
 } from "@repo/webhooks";
 import { normalizeStatus, isValidTransition } from "@repo/forgegraph";
 import { getDb } from "@repo/db";
+import { metrics } from "@/lib/metrics/collector";
 
 interface BuildStatusBody {
   repoId: string;
@@ -47,6 +48,8 @@ export async function POST(request: NextRequest) {
       { status: 401 },
     );
   }
+
+  metrics.incrementCounter("webhook_received_total", { source: "forge-build" });
 
   let body: BuildStatusBody;
   try {
@@ -103,6 +106,7 @@ export async function POST(request: NextRequest) {
     });
 
     const processingTimeMs = Date.now() - startMs;
+    metrics.observeHistogram("webhook_processing_duration_seconds", (Date.now() - startMs) / 1000, { source: "forge-build" });
 
     return NextResponse.json(
       {
@@ -120,6 +124,7 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
+    metrics.incrementCounter("webhook_errors_total", { source: "forge-build" });
     console.error("Error processing build status:", error);
     return NextResponse.json(
       { error: "Internal server error" },

@@ -9,6 +9,7 @@ import { verifyBearerToken } from '@repo/webhooks';
 import { webhookLimiter } from '@repo/webhooks';
 import { RateLimitError } from '@repo/webhooks';
 import { getDb } from '@repo/db';
+import { metrics } from '@/lib/metrics/collector';
 
 interface ArgoCDStatus {
   health: {
@@ -143,6 +144,8 @@ function statusFromEvent(payload: ArgoCDWebhookPayload) {
 }
 
 export async function POST(request: NextRequest) {
+  const startMs = Date.now();
+
   try {
     await webhookLimiter.checkLimit(request);
   } catch (error) {
@@ -167,6 +170,8 @@ export async function POST(request: NextRequest) {
       );
     }
   }
+
+  metrics.incrementCounter("webhook_received_total", { source: "argocd" });
 
   try {
     const payload: ArgoCDWebhookPayload = await request.json();
@@ -222,12 +227,15 @@ export async function POST(request: NextRequest) {
       timestamp: new Date(payload.eventTime),
     });
 
+    metrics.observeHistogram("webhook_processing_duration_seconds", (Date.now() - startMs) / 1000, { source: "argocd" });
+
     return NextResponse.json({
       success: true,
       event: payload.eventType,
       app: payload.app.metadata.name,
     });
   } catch (error) {
+    metrics.incrementCounter("webhook_errors_total", { source: "argocd" });
     console.error('Error processing ArgoCD webhook:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

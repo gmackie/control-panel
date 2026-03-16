@@ -9,6 +9,7 @@ import {
 } from '@repo/webhooks'
 import { sendSlackNotification } from '@/lib/webhooks/webhook-service'
 import { getDb } from '@repo/db'
+import { metrics } from '@/lib/metrics/collector'
 
 interface HarborWebhookPayload {
   type: string
@@ -31,6 +32,8 @@ interface HarborWebhookPayload {
 }
 
 export async function POST(request: NextRequest) {
+  const startMs = Date.now()
+
   try {
     await webhookLimiter.checkLimit(request)
   } catch (error) {
@@ -56,9 +59,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  metrics.incrementCounter("webhook_received_total", { source: "harbor" })
+
   try {
     const payload: HarborWebhookPayload = await request.json()
-    
+
     console.log(`Processing Harbor webhook: ${payload.type}`)
     
     const repo = payload.event_data.repository?.repo_full_name || 'unknown'
@@ -108,11 +113,14 @@ export async function POST(request: NextRequest) {
       timestamp: new Date(payload.occur_at * 1000),
     })
     
+    metrics.observeHistogram("webhook_processing_duration_seconds", (Date.now() - startMs) / 1000, { source: "harbor" })
+
     return NextResponse.json({
       success: true,
       event: payload.type
     })
   } catch (error) {
+    metrics.incrementCounter("webhook_errors_total", { source: "harbor" })
     console.error('Error processing Harbor webhook:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
