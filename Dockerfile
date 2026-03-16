@@ -18,6 +18,8 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/api/package.json ./packages/api/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/webhooks/package.json ./packages/webhooks/
+COPY packages/forgegraph/package.json ./packages/forgegraph/
 COPY tooling/eslint/package.json ./tooling/eslint/
 COPY tooling/typescript/package.json ./tooling/typescript/
 
@@ -35,6 +37,8 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/webhooks/node_modules ./packages/webhooks/node_modules
+COPY --from=deps /app/packages/forgegraph/node_modules ./packages/forgegraph/node_modules
 
 # Copy source code
 COPY . .
