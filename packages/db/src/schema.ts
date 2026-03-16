@@ -30,6 +30,7 @@ export const applications = pgTable("applications", {
   k8sDeploymentName: varchar("k8s_deployment_name", { length: 255 }),
   vercelProjectId: text("vercel_project_id"),
   expoProjectId: text("expo_project_id"),
+  forgeGraphRepoId: varchar("forge_graph_repo_id", { length: 255 }),
   status: varchar("status", { length: 50 }).notNull().default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -38,6 +39,7 @@ export const applications = pgTable("applications", {
   appTypeIdx: index("applications_app_type_idx").on(table.appType),
   gitProviderIdx: index("applications_git_provider_idx").on(table.gitProvider),
   deployProviderIdx: index("applications_deploy_provider_idx").on(table.deployProvider),
+  forgeGraphRepoIdIdx: index("applications_forge_graph_repo_id_idx").on(table.forgeGraphRepoId),
 }));
 
 // ===================================

@@ -1,0 +1,2 @@
+ALTER TABLE "applications" ADD COLUMN "forge_graph_repo_id" varchar(255);--> statement-breakpoint
+CREATE INDEX "applications_forge_graph_repo_id_idx" ON "applications" USING btree ("forge_graph_repo_id");
