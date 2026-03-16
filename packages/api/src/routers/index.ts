@@ -25,6 +25,7 @@ import { integrationsRouter } from "./integrations";
 import { templatesRouter } from "./templates";
 import { ciPipelinesRouter } from "./ci-pipelines";
 import { argoAppsRouter } from "./argo-apps";
+import { appOverviewRouter } from "./app-overview";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -47,6 +48,7 @@ export const appRouter = router({
   templates: templatesRouter,
   ciPipelines: ciPipelinesRouter,
   argoApps: argoAppsRouter,
+  appOverview: appOverviewRouter,
 });
 
 export type AppRouter = typeof appRouter;
