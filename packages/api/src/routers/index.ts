@@ -23,6 +23,8 @@ import { webhooksRouter } from "./webhooks";
 import { apiKeysRouter } from "./api-keys";
 import { integrationsRouter } from "./integrations";
 import { templatesRouter } from "./templates";
+import { ciPipelinesRouter } from "./ci-pipelines";
+import { argoAppsRouter } from "./argo-apps";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -43,6 +45,8 @@ export const appRouter = router({
   apiKeys: apiKeysRouter,
   integrations: integrationsRouter,
   templates: templatesRouter,
+  ciPipelines: ciPipelinesRouter,
+  argoApps: argoAppsRouter,
 });
 
 export type AppRouter = typeof appRouter;
