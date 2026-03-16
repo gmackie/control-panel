@@ -36,12 +36,14 @@ export const config = {
      * - /api/trpc/* (tRPC API routes - has own auth via protectedProcedure)
      * - /api/health and /api/health/* (health check endpoints for K8s probes)
      * - /api/webhooks/* (webhook endpoints from external services)
+     * - /api/forge/* (ForgeGraph control-plane endpoints - has bearer token auth)
+     * - /api/metrics (Prometheus scrape target)
      * - /api/db/* (database management endpoints - protected by their own auth)
      * - /api/apps/sync (app sync endpoint - protected by its own auth)
      * - /api/resources/* (resources endpoints for testing)
      * - /_next/* (Next.js internals)
      * - /favicon.ico, /robots.txt (static files)
      */
-    '/((?!auth|api/auth|api/trpc|api/health|api/webhooks|api/db|api/apps/sync|api/resources|api/integrations/org/.*/sync|api/integrations/k8s|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!auth|api/auth|api/trpc|api/health|api/webhooks|api/forge|api/metrics|api/db|api/apps/sync|api/resources|api/integrations/org/.*/sync|api/integrations/k8s|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ]
 }
