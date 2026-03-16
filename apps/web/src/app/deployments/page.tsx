@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DeploymentManager } from '@/components/deployment/DeploymentManager';
 import { DeploymentList } from '@/components/deployment/DeploymentList';
+import { AppOverviewCards } from '@/components/dashboard/app-overview-cards';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -76,7 +77,7 @@ function DeploymentsContent() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [deploymentStats, setDeploymentStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'applications');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [deployingApps, setDeployingApps] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -264,12 +265,17 @@ function DeploymentsContent() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-5">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="applications">Applications</TabsTrigger>
           <TabsTrigger value="repositories">Repositories</TabsTrigger>
           <TabsTrigger value="deploy">Deploy New</TabsTrigger>
           <TabsTrigger value="list">Deployed Apps</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <AppOverviewCards />
+        </TabsContent>
 
         <TabsContent value="applications" className="space-y-4">
           <div className="grid gap-4">
