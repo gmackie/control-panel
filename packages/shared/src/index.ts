@@ -5,5 +5,6 @@
  */
 
 export * from "./types";
+export * from "./release-control";
 export * from "./validators";
 export * from "./utils";

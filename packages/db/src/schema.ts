@@ -4,7 +4,7 @@
  * Drizzle ORM schema definitions for Neon/PostgreSQL
  */
 
-import { pgTable, text, integer, real, timestamp, boolean, index, uuid, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, timestamp, boolean, index, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 // ===================================
 // Applications
@@ -1458,6 +1458,201 @@ export const k3sDeployments = pgTable("k3s_deployments", {
   applicationIdIdx: index("k3s_deployments_application_id_idx").on(table.applicationId),
   namespaceIdx: index("k3s_deployments_namespace_idx").on(table.namespace),
   clusterNameIdx: index("k3s_deployments_cluster_name_idx").on(table.clusterName),
+}));
+
+// ===================================
+// Release Control Room
+// ===================================
+
+export const releaseCandidates = pgTable("release_candidates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  forgeGraphRepoId: varchar("forge_graph_repo_id", { length: 255 }).notNull(),
+  forgeGraphRevId: varchar("forge_graph_rev_id", { length: 255 }).notNull(),
+  jjChangeId: varchar("jj_change_id", { length: 255 }),
+  gitSha: varchar("git_sha", { length: 255 }),
+  branch: varchar("branch", { length: 255 }),
+  ciRunId: varchar("ci_run_id", { length: 255 }),
+  imageTag: text("image_tag"),
+  imageDigest: text("image_digest"),
+  queueState: varchar("queue_state", { length: 64 }).notNull().default("building"),
+  readinessStatus: varchar("readiness_status", { length: 64 }).notNull().default("collecting"),
+  supersedeStatus: varchar("supersede_status", { length: 64 }).notNull().default("current"),
+  knownGoodStatus: varchar("known_good_status", { length: 64 }).notNull().default("unknown"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdx: index("release_candidates_application_id_idx").on(table.applicationId),
+  queueStateIdx: index("release_candidates_queue_state_idx").on(table.queueState),
+  supersedeIdx: index("release_candidates_supersede_status_idx").on(table.supersedeStatus),
+  knownGoodIdx: index("release_candidates_known_good_status_idx").on(table.knownGoodStatus),
+  uniqueRevision: uniqueIndex("release_candidates_unique_revision_idx").on(
+    table.applicationId,
+    table.forgeGraphRepoId,
+    table.forgeGraphRevId,
+  ),
+}));
+
+export const candidateEvidence = pgTable("candidate_evidence", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+  candidateId: uuid("candidate_id").references(() => releaseCandidates.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }),
+  source: varchar("source", { length: 64 }).notNull(),
+  evidenceType: varchar("evidence_type", { length: 64 }).notNull(),
+  freshnessSeconds: integer("freshness_seconds"),
+  payload: text("payload").notNull(),
+  observedAt: timestamp("observed_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdx: index("candidate_evidence_application_id_idx").on(table.applicationId),
+  candidateIdx: index("candidate_evidence_candidate_id_idx").on(table.candidateId),
+  sourceIdx: index("candidate_evidence_source_idx").on(table.source),
+  observedAtIdx: index("candidate_evidence_observed_at_idx").on(table.observedAt),
+}));
+
+export const environmentStates = pgTable("environment_states", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  clusterName: varchar("cluster_name", { length: 255 }).notNull(),
+  namespace: varchar("namespace", { length: 255 }).notNull(),
+  workloadName: varchar("workload_name", { length: 255 }).notNull(),
+  argoAppName: varchar("argo_app_name", { length: 255 }).notNull(),
+  deploymentRepoPath: text("deployment_repo_path").notNull(),
+  desiredCandidateId: uuid("desired_candidate_id").references(() => releaseCandidates.id, { onDelete: "set null" }),
+  liveCandidateId: uuid("live_candidate_id").references(() => releaseCandidates.id, { onDelete: "set null" }),
+  desiredImage: text("desired_image"),
+  liveImage: text("live_image"),
+  driftStatus: varchar("drift_status", { length: 64 }).notNull().default("aligned"),
+  lastObservedAt: timestamp("last_observed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdx: index("environment_states_application_id_idx").on(table.applicationId),
+  environmentIdx: index("environment_states_environment_idx").on(table.environment),
+  driftIdx: index("environment_states_drift_status_idx").on(table.driftStatus),
+  uniqueEnvironment: uniqueIndex("environment_states_application_environment_idx").on(
+    table.applicationId,
+    table.environment,
+  ),
+}));
+
+export const promotionPrs = pgTable("promotion_prs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").notNull().references(() => releaseCandidates.id, { onDelete: "cascade" }),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  repo: text("repo").notNull(),
+  branch: varchar("branch", { length: 255 }).notNull(),
+  prNumber: integer("pr_number"),
+  headSha: varchar("head_sha", { length: 255 }),
+  status: varchar("status", { length: 64 }).notNull().default("requested"),
+  mergePolicy: varchar("merge_policy", { length: 64 }).notNull().default("human_gate"),
+  openedBy: text("opened_by"),
+  mergedBy: text("merged_by"),
+  openedAt: timestamp("opened_at"),
+  mergedAt: timestamp("merged_at"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  candidateIdx: index("promotion_prs_candidate_id_idx").on(table.candidateId),
+  applicationIdx: index("promotion_prs_application_id_idx").on(table.applicationId),
+  statusIdx: index("promotion_prs_status_idx").on(table.status),
+  prNumberIdx: index("promotion_prs_pr_number_idx").on(table.prNumber),
+}));
+
+export const releasePolicies = pgTable("release_policies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  requiredApproverCount: integer("required_approver_count").notNull().default(1),
+  eligibleApproverSet: text("eligible_approver_set").notNull().default("[]"),
+  highRiskRequiresSecondApprover: boolean("high_risk_requires_second_approver").notNull().default(false),
+  overrideAllowed: boolean("override_allowed").notNull().default(false),
+  overrideEligibleSet: text("override_eligible_set").notNull().default("[]"),
+  freshnessThresholds: text("freshness_thresholds").notNull().default("{}"),
+  blockerPolicyDefinitions: text("blocker_policy_definitions").notNull().default("{}"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdx: index("release_policies_application_id_idx").on(table.applicationId),
+  uniquePolicy: uniqueIndex("release_policies_application_environment_idx").on(
+    table.applicationId,
+    table.environment,
+  ),
+}));
+
+export const releaseOwners = pgTable("release_owners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  userId: text("user_id").notNull(),
+  role: varchar("role", { length: 64 }).notNull().default("release_owner"),
+  canApprove: boolean("can_approve").notNull().default(true),
+  canOverride: boolean("can_override").notNull().default(false),
+  canMerge: boolean("can_merge").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdx: index("release_owners_application_id_idx").on(table.applicationId),
+  userIdx: index("release_owners_user_id_idx").on(table.userId),
+  uniqueOwner: uniqueIndex("release_owners_unique_assignment_idx").on(
+    table.applicationId,
+    table.environment,
+    table.userId,
+  ),
+}));
+
+export const overrideRecords = pgTable("override_records", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").notNull().references(() => releaseCandidates.id, { onDelete: "cascade" }),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  blockerReason: varchar("blocker_reason", { length: 128 }).notNull(),
+  approvedBy: text("approved_by").notNull(),
+  justification: text("justification").notNull(),
+  ticketUrl: text("ticket_url").notNull(),
+  snapshot: text("snapshot").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  candidateIdx: index("override_records_candidate_id_idx").on(table.candidateId),
+  applicationIdx: index("override_records_application_id_idx").on(table.applicationId),
+  createdAtIdx: index("override_records_created_at_idx").on(table.createdAt),
+}));
+
+export const knownGoodReleases = pgTable("known_good_releases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").notNull().references(() => releaseCandidates.id, { onDelete: "cascade" }),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  environment: varchar("environment", { length: 32 }).notNull(),
+  reason: varchar("reason", { length: 64 }).notNull(),
+  pinnedBy: text("pinned_by"),
+  becameKnownGoodAt: timestamp("became_known_good_at").notNull().defaultNow(),
+  pinnedAt: timestamp("pinned_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  candidateIdx: uniqueIndex("known_good_releases_candidate_id_idx").on(table.candidateId),
+  applicationIdx: index("known_good_releases_application_id_idx").on(table.applicationId),
+  environmentIdx: index("known_good_releases_environment_idx").on(table.environment),
+}));
+
+export const sourceHealth = pgTable("source_health", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  source: varchar("source", { length: 64 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("healthy"),
+  lastSuccessAt: timestamp("last_success_at"),
+  lastObservedAt: timestamp("last_observed_at"),
+  maxFreshnessSeconds: integer("max_freshness_seconds").notNull().default(300),
+  lastError: text("last_error"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  sourceIdx: uniqueIndex("source_health_source_idx").on(table.source),
+  statusIdx: index("source_health_status_idx").on(table.status),
 }));
 
 // ===================================

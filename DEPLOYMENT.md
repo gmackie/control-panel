@@ -60,6 +60,48 @@ kubectl apply -f k8s/03-secret.yaml
 
 ## Building and Deployment
 
+## Release Control Room Deployment Model
+
+The release control room assumes a coordination model rather than direct deployment authority.
+
+Authoritative systems:
+
+- ForgeGraph or JJ for revision lineage
+- CI for build status
+- Harbor for published artifacts
+- deployment repo for desired GitOps state
+- ArgoCD for desired and live rollout state
+- Prometheus and Alertmanager for runtime health
+
+Standard release path:
+
+1. revision is created
+2. CI builds and publishes an image
+3. control-panel assembles a release candidate
+4. staging verification completes
+5. production approval is recorded in control-panel
+6. control-panel opens a deployment repo PR
+7. PR is merged by an approver
+8. ArgoCD reconciles the new desired state
+9. control-panel monitors the observation window and marks the release known-good
+
+### Release Control Room Requirements
+
+For an app to use the release control room end to end, make sure:
+
+- the app has a deployment repo path that can be updated by PR
+- the app has release owners and approvers configured
+- ArgoCD app name, namespace, and cluster mapping are known
+- image tags or digests are traceable back to the ForgeGraph revision
+- source freshness thresholds are defined
+
+### Operational Notes
+
+- production promotion should happen through deployment repo PRs, not direct cluster mutation
+- stale source evidence should block or require override for production decisions
+- rollback should remain human-confirmed even when a known-good target is suggested
+- all promotion and override decisions should be reviewable through the release queue audit trail
+
 ### Method 1: Docker Build and Push
 
 ```bash

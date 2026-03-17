@@ -26,6 +26,12 @@ import { templatesRouter } from "./templates";
 import { ciPipelinesRouter } from "./ci-pipelines";
 import { argoAppsRouter } from "./argo-apps";
 import { appOverviewRouter } from "./app-overview";
+import { releaseQueueRouter } from "./release-queue";
+import { releaseCandidatesRouter } from "./release-candidates";
+import { releasePoliciesRouter } from "./release-policies";
+import { promotionPrsRouter } from "./promotion-prs";
+import { releaseAuditRouter } from "./release-audit";
+import { sourceTrustRouter } from "./source-trust";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -49,6 +55,12 @@ export const appRouter = router({
   ciPipelines: ciPipelinesRouter,
   argoApps: argoAppsRouter,
   appOverview: appOverviewRouter,
+  releaseQueue: releaseQueueRouter,
+  releaseCandidates: releaseCandidatesRouter,
+  releasePolicies: releasePoliciesRouter,
+  promotionPrs: promotionPrsRouter,
+  releaseAudit: releaseAuditRouter,
+  sourceTrust: sourceTrustRouter,
 });
 
 export type AppRouter = typeof appRouter;
