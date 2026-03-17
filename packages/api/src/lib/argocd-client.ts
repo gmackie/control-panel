@@ -71,12 +71,32 @@ export class ArgoCDClient {
   }
 
   private async request<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const url = `${this.baseUrl}${path}`;
+    // ArgoCD uses self-signed certs for cluster-internal HTTPS
+    const options: RequestInit & { dispatcher?: unknown } = {
       headers: {
         Authorization: `Bearer ${this.token}`,
         "Content-Type": "application/json",
       },
-    });
+    };
+
+    // Node.js undici (used by fetch) supports rejectUnauthorized via env var
+    // For cluster-internal ArgoCD calls, we set this at the process level
+    const originalTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    if (this.baseUrl.includes(".svc.cluster.local") || this.baseUrl.includes("argocd")) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, options);
+    } finally {
+      if (originalTls !== undefined) {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTls;
+      } else {
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      }
+    }
 
     if (!response.ok) {
       throw new Error(
