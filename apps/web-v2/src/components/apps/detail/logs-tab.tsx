@@ -68,7 +68,7 @@ export function LogsTab({ appId }: { appId: string }) {
   if (app?.deployProvider === "vercel") {
     return (
       <Card className="p-4">
-        <h3 className="text-sm font-medium mb-3">Pod Logs</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">Pod Logs</h3>
         <p className="text-sm text-muted-foreground">
           For Vercel deployments, view logs in the{" "}
           <a
@@ -87,7 +87,7 @@ export function LogsTab({ appId }: { appId: string }) {
   if (app && app.deployProvider !== "kubernetes") {
     return (
       <Card className="p-4">
-        <h3 className="text-sm font-medium mb-3">Pod Logs</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">Pod Logs</h3>
         <p className="text-sm text-muted-foreground">
           Log streaming is only available for Kubernetes deployments.
         </p>
@@ -102,14 +102,14 @@ export function LogsTab({ appId }: { appId: string }) {
         <div className="flex flex-wrap items-end gap-3">
           {/* Cluster */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Cluster</label>
+            <label className="font-mono text-[11px] uppercase tracking-wider text-dim">Cluster</label>
             <select
               value={clusterId}
               onChange={(e) => {
                 setClusterId(e.target.value as ClusterId);
                 setSelectedPod("");
               }}
-              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
             >
               <option value="production">Production</option>
               <option value="staging">Staging</option>
@@ -118,11 +118,11 @@ export function LogsTab({ appId }: { appId: string }) {
 
           {/* Pod */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Pod</label>
+            <label className="font-mono text-[11px] uppercase tracking-wider text-dim">Pod</label>
             <select
               value={selectedPod}
               onChange={(e) => setSelectedPod(e.target.value)}
-              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm max-w-[280px]"
+              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono max-w-[280px]"
               disabled={podsLoading || !pods?.length}
             >
               {!pods?.length && <option value="">No pods found</option>}
@@ -137,11 +137,11 @@ export function LogsTab({ appId }: { appId: string }) {
           {/* Container */}
           {currentPod && currentPod.containers.length > 1 && (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Container</label>
+              <label className="font-mono text-[11px] uppercase tracking-wider text-dim">Container</label>
               <select
                 value={selectedContainer}
                 onChange={(e) => setSelectedContainer(e.target.value)}
-                className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
               >
                 {currentPod.containers.map((c) => (
                   <option key={c.name} value={c.name}>
@@ -154,11 +154,11 @@ export function LogsTab({ appId }: { appId: string }) {
 
           {/* Tail */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Tail lines</label>
+            <label className="font-mono text-[11px] uppercase tracking-wider text-dim">Tail lines</label>
             <select
               value={tail}
               onChange={(e) => setTail(Number(e.target.value))}
-              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+              className="block rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
             >
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -191,9 +191,9 @@ export function LogsTab({ appId }: { appId: string }) {
             Error: {error}
           </div>
         )}
-        <div className="bg-zinc-950 rounded-md max-h-[600px] overflow-auto p-4">
+        <div className="bg-[hsl(264,8%,6%)] rounded-md max-h-[600px] overflow-auto p-4">
           {lines.length === 0 ? (
-            <p className="text-zinc-500 text-sm font-mono">
+            <p className="text-muted-foreground text-sm font-mono">
               {podsLoading
                 ? "Loading pods..."
                 : !selectedPod
@@ -203,12 +203,12 @@ export function LogsTab({ appId }: { appId: string }) {
                     : "No log lines returned."}
             </p>
           ) : (
-            <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap leading-relaxed">
+            <pre className="text-[13px] font-mono text-foreground/80 whitespace-pre-wrap leading-relaxed">
               {lines.map((line, i) => (
                 <div
                   key={i}
                   className={cn(
-                    "hover:bg-zinc-800/50 px-1 -mx-1 rounded",
+                    "hover:bg-accent/50 px-1 -mx-1 rounded",
                     line.toLowerCase().includes("error") && "text-red-400",
                     line.toLowerCase().includes("warn") && "text-yellow-400"
                   )}

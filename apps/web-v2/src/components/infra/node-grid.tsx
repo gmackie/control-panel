@@ -10,7 +10,7 @@ export function NodeGrid() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold mb-4">Nodes</h2>
+      <h2 className="font-display text-lg font-semibold mb-4">Nodes</h2>
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -25,8 +25,8 @@ export function NodeGrid() {
             <Card key={`${node.clusterId}-${node.name}`} className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{node.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                  <span className="font-mono font-medium text-sm">{node.name}</span>
+                  <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                     {node.clusterId === "production" ? "prod" : "staging"}
                   </span>
                 </div>
@@ -44,15 +44,15 @@ export function NodeGrid() {
                 </div>
                 <div className="flex justify-between">
                   <span>Role</span>
-                  <span className="capitalize">{node.roles.join(", ")}</span>
+                  <span className="font-mono capitalize">{node.roles.join(", ")}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Version</span>
-                  <span>{node.kubeletVersion}</span>
+                  <span className="font-mono">{node.kubeletVersion}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>CPU</span>
-                  <span>
+                  <span className="font-mono tabular-nums">
                     {node.cpu.usageMillis != null
                       ? `${formatCpu(node.cpu.usageMillis)} / ${formatCpu(node.cpu.allocatableMillis)}`
                       : formatCpu(node.cpu.allocatableMillis)}
@@ -60,7 +60,7 @@ export function NodeGrid() {
                 </div>
                 <div className="flex justify-between">
                   <span>Memory</span>
-                  <span>
+                  <span className="font-mono tabular-nums">
                     {node.memory.usageBytes != null
                       ? `${formatBytes(node.memory.usageBytes)} / ${formatBytes(node.memory.allocatableBytes)}`
                       : formatBytes(node.memory.allocatableBytes)}
@@ -68,7 +68,7 @@ export function NodeGrid() {
                 </div>
                 <div className="flex justify-between">
                   <span>Runtime</span>
-                  <span>{node.containerRuntime}</span>
+                  <span className="font-mono">{node.containerRuntime}</span>
                 </div>
               </div>
             </Card>

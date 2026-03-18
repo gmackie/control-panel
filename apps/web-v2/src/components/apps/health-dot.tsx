@@ -10,7 +10,7 @@ export function HealthDot({ status, size = "md" }: { status: AppStatus; size?: "
         "bg-green-500": status === "healthy",
         "bg-yellow-500": status === "degraded",
         "bg-red-500": status === "unhealthy",
-        "bg-zinc-500": status === "unknown",
+        "bg-neutral-400": status === "unknown",
       })}
     />
   );

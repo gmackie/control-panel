@@ -194,7 +194,7 @@ export default function AppsGrid() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Applications</h1>
+          <h1 className="font-display text-2xl font-bold">Applications</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {appSummaries.length} apps across your infrastructure
           </p>
@@ -212,7 +212,7 @@ export default function AppsGrid() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-48 rounded-lg bg-muted/30 animate-pulse" />
           ))}
@@ -222,7 +222,7 @@ export default function AppsGrid() {
           {search ? "No apps match your search." : "No applications found."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filtered.map((app) => (
             <AppCard key={app.id} app={app} onClick={() => setSelectedApp(app)} />
           ))}

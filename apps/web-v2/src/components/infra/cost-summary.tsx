@@ -20,7 +20,7 @@ export function CostSummary() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold mb-4">Costs &amp; Capacity</h2>
+      <h2 className="font-display text-lg font-semibold mb-4">Costs &amp; Capacity</h2>
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -36,7 +36,7 @@ export function CostSummary() {
             <p className="text-xs text-muted-foreground mb-1">
               Hetzner Servers
             </p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-mono font-bold tabular-nums">
               {health?.hetzner?.serverCount ?? 0}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -44,7 +44,7 @@ export function CostSummary() {
               {health?.hetzner?.totalMonthlyCost != null && (
                 <>
                   {" "}
-                  &bull; &euro;{health.hetzner.totalMonthlyCost.toFixed(2)}/mo
+                  &bull; <span className="font-mono tabular-nums">&euro;{health.hetzner.totalMonthlyCost.toFixed(2)}/mo</span>
                 </>
               )}
             </p>
@@ -53,14 +53,16 @@ export function CostSummary() {
             <p className="text-xs text-muted-foreground mb-1">
               Harbor Registry
             </p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-mono font-bold tabular-nums">
               {health?.harbor?.imageCount ?? 0}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               images &bull;{" "}
-              {health?.harbor?.storageUsed != null
-                ? formatBytes(health.harbor.storageUsed)
-                : "\u2014"}{" "}
+              <span className="font-mono tabular-nums">
+                {health?.harbor?.storageUsed != null
+                  ? formatBytes(health.harbor.storageUsed)
+                  : "\u2014"}
+              </span>{" "}
               used
             </p>
           </Card>
@@ -68,7 +70,7 @@ export function CostSummary() {
             <p className="text-xs text-muted-foreground mb-1">
               Gitea Repositories
             </p>
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-mono font-bold tabular-nums">
               {health?.gitea?.repositoryCount ?? 0}
             </p>
             <p className="text-xs text-muted-foreground mt-1">repositories</p>
@@ -77,7 +79,7 @@ export function CostSummary() {
       )}
       {costs?.breakdown?.length ? (
         <div className="mt-4">
-          <h3 className="text-sm font-medium mb-2">Cost Breakdown</h3>
+          <h3 className="font-display text-sm font-medium mb-2">Cost Breakdown</h3>
           <div className="space-y-1">
             {costs.breakdown.map((item) => (
               <div
@@ -85,14 +87,14 @@ export function CostSummary() {
                 className="flex items-center justify-between text-sm"
               >
                 <span className="text-muted-foreground">{item.resource}</span>
-                <span>&euro;{item.cost?.toFixed(2)}/mo</span>
+                <span className="font-mono tabular-nums">&euro;{item.cost?.toFixed(2)}/mo</span>
               </div>
             ))}
           </div>
           {costs.totalCost != null && (
             <div className="flex items-center justify-between text-sm font-medium mt-2 pt-2 border-t border-border">
               <span>Total</span>
-              <span>
+              <span className="font-mono tabular-nums">
                 &euro;{costs.totalCost.toFixed(2)}/mo
                 {costs.trend?.change != null && (
                   <span className="text-xs text-muted-foreground ml-2">

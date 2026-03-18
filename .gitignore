@@ -68,3 +68,7 @@ test-results/
 .claude/settings.local.json
 session-ses_*.md
 .opencode/
+
+*storybook.log
+storybook-static
+.gstack/

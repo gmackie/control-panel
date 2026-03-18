@@ -38,17 +38,17 @@ export function MetricsTab({ appId }: { appId: string }) {
 
     return (
       <Card className="p-4">
-        <h3 className="text-sm font-medium mb-3">Prometheus Metrics</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">Prometheus Metrics</h3>
         {isUnconfigured ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
               Prometheus is not currently available. To enable metrics, run:
             </p>
-            <pre className="text-xs bg-muted/30 rounded px-3 py-2 font-mono">
+            <pre className="font-mono text-[13px] bg-muted/30 rounded px-3 py-2">
               kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
             </pre>
             <p className="text-xs text-muted-foreground">
-              Then set <code className="bg-muted/30 px-1 rounded">PROMETHEUS_URL=http://localhost:9090</code> in your environment.
+              Then set <code className="bg-muted/30 px-1 rounded font-mono">PROMETHEUS_URL=http://localhost:9090</code> in your environment.
             </p>
           </div>
         ) : (
@@ -102,11 +102,11 @@ export function MetricsTab({ appId }: { appId: string }) {
               <stat.icon className={cn("h-4 w-4", stat.color)} />
               <p className="text-xs text-muted-foreground">{stat.label}</p>
             </div>
-            <p className={cn("text-lg font-bold", stat.color)}>{stat.value}</p>
+            <p className={cn("text-lg font-mono font-bold tabular-nums", stat.color)}>{stat.value}</p>
           </Card>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="font-mono text-[11px] text-dim">
         Metrics sourced from Prometheus. Showing instant values with 5m rate window.
         Auto-refreshes every 30s.
       </p>
@@ -124,7 +124,7 @@ function ServiceMetrics({ appId }: { appId: string }) {
   if (!appService) {
     return (
       <Card className="p-4">
-        <h3 className="text-sm font-medium mb-3">Metrics</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">Metrics</h3>
         <p className="text-sm text-muted-foreground">
           No metrics available for this application.
         </p>
@@ -137,19 +137,19 @@ function ServiceMetrics({ appId }: { appId: string }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Status</p>
-          <p className="text-lg font-bold capitalize">{appService.status}</p>
+          <p className="text-lg font-mono font-bold capitalize">{appService.status}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Latency</p>
-          <p className="text-lg font-bold">{appService.latency}ms</p>
+          <p className="text-lg font-mono font-bold tabular-nums">{appService.latency}ms</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Uptime</p>
-          <p className="text-lg font-bold">{appService.uptime}%</p>
+          <p className="text-lg font-mono font-bold tabular-nums">{appService.uptime}%</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Last Check</p>
-          <p className="text-sm font-medium">
+          <p className="text-sm font-mono font-medium">
             {appService.lastCheck
               ? new Date(appService.lastCheck).toLocaleTimeString()
               : "\u2014"}
@@ -159,7 +159,7 @@ function ServiceMetrics({ appId }: { appId: string }) {
 
       {appService.endpoints?.length > 0 && (
         <Card className="p-4">
-          <h3 className="text-sm font-medium mb-3">Endpoints</h3>
+          <h3 className="font-display text-sm font-semibold mb-3">Endpoints</h3>
           <div className="space-y-2">
             {appService.endpoints.map((ep) => (
               <div
@@ -172,7 +172,7 @@ function ServiceMetrics({ appId }: { appId: string }) {
                   />
                   <span>{ep.name}</span>
                 </div>
-                <span className="text-muted-foreground">
+                <span className="font-mono text-[13px] tabular-nums text-muted-foreground">
                   {ep.responseTime}ms
                 </span>
               </div>

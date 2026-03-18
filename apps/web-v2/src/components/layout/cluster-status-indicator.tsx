@@ -26,12 +26,12 @@ export function ClusterStatusIndicator() {
           "bg-green-500": status === "healthy",
           "bg-yellow-500": status === "degraded",
           "bg-red-500": status === "unhealthy",
-          "bg-zinc-500": status === "unknown",
+          "bg-neutral-400": status === "unknown",
         })}
       />
       <span className="text-muted-foreground capitalize">{status}</span>
       {health && status !== "unknown" && (
-        <span className="text-xs text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           ({health.readyNodes}/{health.totalNodes} nodes)
         </span>
       )}

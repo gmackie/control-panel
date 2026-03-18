@@ -11,7 +11,7 @@ export function PodTable() {
     <div className="space-y-8">
       {/* Cluster Nodes Table */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Cluster Nodes</h2>
+        <h2 className="font-display text-lg font-semibold mb-4">Cluster Nodes</h2>
         {nodesLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -24,14 +24,14 @@ export function PodTable() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Node</th>
-                  <th className="pb-2 font-medium">Cluster</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Role</th>
-                  <th className="pb-2 font-medium">CPU</th>
-                  <th className="pb-2 font-medium">Memory</th>
-                  <th className="pb-2 font-medium">Pods</th>
+                <tr className="border-b border-border text-left">
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Node</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Cluster</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Status</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Role</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">CPU</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Memory</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Pods</th>
                 </tr>
               </thead>
               <tbody>
@@ -47,9 +47,9 @@ export function PodTable() {
                     : undefined;
 
                   return (
-                    <tr key={`${node.clusterId}-${node.name}`} className="border-b border-border/50">
-                      <td className="py-2 font-medium">{node.name}</td>
-                      <td className="py-2 text-muted-foreground">
+                    <tr key={`${node.clusterId}-${node.name}`} className="border-b border-border/50 hover:bg-accent/50">
+                      <td className="py-2 font-mono text-[13px] font-medium">{node.name}</td>
+                      <td className="py-2 font-mono text-[13px] text-muted-foreground">
                         {node.clusterId === "production" ? "Production" : "Staging"}
                       </td>
                       <td className="py-2">
@@ -62,15 +62,15 @@ export function PodTable() {
                                 : "bg-red-500"
                             )}
                           />
-                          <span>{node.status}</span>
+                          <span className="font-mono text-[13px]">{node.status}</span>
                         </div>
                       </td>
-                      <td className="py-2 text-muted-foreground capitalize">
+                      <td className="py-2 font-mono text-[13px] text-muted-foreground capitalize">
                         {node.roles.join(", ")}
                       </td>
-                      <td className="py-2 text-muted-foreground">{cpuPct}</td>
-                      <td className="py-2 text-muted-foreground">{memPct}</td>
-                      <td className="py-2 text-muted-foreground">
+                      <td className="py-2 font-mono text-[13px] tabular-nums text-muted-foreground">{cpuPct}</td>
+                      <td className="py-2 font-mono text-[13px] tabular-nums text-muted-foreground">{memPct}</td>
+                      <td className="py-2 font-mono text-[13px] tabular-nums text-muted-foreground">
                         {podCount != null ? `${podCount}/${node.pods.capacity}` : "\u2014"}
                       </td>
                     </tr>
@@ -84,7 +84,7 @@ export function PodTable() {
 
       {/* Pod List Table */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Pods</h2>
+        <h2 className="font-display text-lg font-semibold mb-4">Pods</h2>
         {podsLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -97,22 +97,22 @@ export function PodTable() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Pod</th>
-                  <th className="pb-2 font-medium">Namespace</th>
-                  <th className="pb-2 font-medium">Cluster</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Ready</th>
-                  <th className="pb-2 font-medium">Restarts</th>
-                  <th className="pb-2 font-medium">Node</th>
+                <tr className="border-b border-border text-left">
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Pod</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Namespace</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Cluster</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Status</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Ready</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Restarts</th>
+                  <th className="pb-2 font-mono text-[11px] uppercase tracking-wider text-dim">Node</th>
                 </tr>
               </thead>
               <tbody>
                 {pods.map((pod) => (
-                  <tr key={`${pod.clusterId}-${pod.namespace}-${pod.name}`} className="border-b border-border/50">
-                    <td className="py-2 font-medium font-mono text-xs">{pod.name}</td>
-                    <td className="py-2 text-muted-foreground">{pod.namespace}</td>
-                    <td className="py-2 text-muted-foreground">
+                  <tr key={`${pod.clusterId}-${pod.namespace}-${pod.name}`} className="border-b border-border/50 hover:bg-accent/50">
+                    <td className="py-2 font-mono text-[13px] font-medium">{pod.name}</td>
+                    <td className="py-2 font-mono text-[13px] text-muted-foreground">{pod.namespace}</td>
+                    <td className="py-2 font-mono text-[13px] text-muted-foreground">
                       {pod.clusterId === "production" ? "Prod" : "Staging"}
                     </td>
                     <td className="py-2">
@@ -126,15 +126,15 @@ export function PodTable() {
                                 ? "bg-yellow-500"
                                 : pod.status === "Failed"
                                   ? "bg-red-500"
-                                  : "bg-zinc-500"
+                                  : "bg-neutral-400"
                           )}
                         />
-                        <span>{pod.status}</span>
+                        <span className="font-mono text-[13px]">{pod.status}</span>
                       </div>
                     </td>
-                    <td className="py-2 text-muted-foreground">{pod.ready}</td>
-                    <td className="py-2 text-muted-foreground">{pod.restarts}</td>
-                    <td className="py-2 text-muted-foreground text-xs">{pod.nodeName ?? "\u2014"}</td>
+                    <td className="py-2 font-mono text-[13px] tabular-nums text-muted-foreground">{pod.ready}</td>
+                    <td className="py-2 font-mono text-[13px] tabular-nums text-muted-foreground">{pod.restarts}</td>
+                    <td className="py-2 font-mono text-[13px] text-muted-foreground">{pod.nodeName ?? "\u2014"}</td>
                   </tr>
                 ))}
               </tbody>

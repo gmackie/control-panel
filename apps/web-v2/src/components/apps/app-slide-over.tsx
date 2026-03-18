@@ -46,7 +46,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
             <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <HealthDot status={app.status} />
-                <h2 className="font-semibold">{app.name}</h2>
+                <h2 className="font-display font-semibold">{app.name}</h2>
               </div>
               <div className="flex items-center gap-2">
                 <Link href={`/apps/${app.slug}`}>
@@ -64,7 +64,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               {/* Environments */}
               <section>
-                <h3 className="text-sm font-medium mb-3">Environments</h3>
+                <h3 className="font-display text-sm font-medium mb-3">Environments</h3>
                 <div className="space-y-2">
                   {app.environments.map((env) => (
                     <div
@@ -75,7 +75,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
                         <HealthDot status={env.status} size="sm" />
                         <span className="text-sm capitalize">{env.provider} {env.name}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="font-mono text-[13px] text-muted-foreground">
                         {env.podCount
                           ? `${env.podCount.ready}/${env.podCount.total} pods`
                           : env.vercelStatus}
@@ -89,7 +89,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
               {/* Metrics */}
               {app.metrics && (
                 <section>
-                  <h3 className="text-sm font-medium mb-3">Current Metrics</h3>
+                  <h3 className="font-display text-sm font-medium mb-3">Current Metrics</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { label: "CPU", value: `${app.metrics.cpuPercent}%` },
@@ -99,7 +99,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
                     ].map((m) => (
                       <div key={m.label} className="p-3 rounded-lg bg-muted/50">
                         <p className="text-xs text-muted-foreground">{m.label}</p>
-                        <p className="text-lg font-semibold">{m.value}</p>
+                        <p className="text-lg font-mono font-semibold tabular-nums">{m.value}</p>
                       </div>
                     ))}
                   </div>
@@ -108,7 +108,7 @@ export function AppSlideOver({ app, onClose }: AppSlideOverProps) {
 
               {/* Placeholder for recent deploys */}
               <section>
-                <h3 className="text-sm font-medium mb-3">Recent Deployments</h3>
+                <h3 className="font-display text-sm font-medium mb-3">Recent Deployments</h3>
                 <p className="text-sm text-muted-foreground">Loading...</p>
               </section>
             </div>

@@ -90,7 +90,7 @@ export function AlertsTab({ appId }: { appId: string }) {
                               ? "warning"
                               : "secondary"
                         }
-                        className="text-xs"
+                        className="font-mono text-[11px]"
                       >
                         {alert.severity}
                       </Badge>
@@ -102,15 +102,15 @@ export function AlertsTab({ appId }: { appId: string }) {
                               ? "warning"
                               : "success"
                         }
-                        className="text-xs"
+                        className="font-mono text-[11px]"
                       >
                         {alert.status}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="font-mono text-[11px] text-muted-foreground">
                         {alert.source}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="font-mono text-[11px] text-muted-foreground mt-1">
                       Started{" "}
                       {formatDistanceToNow(new Date(alert.startsAt), {
                         addSuffix: true,

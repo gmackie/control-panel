@@ -30,7 +30,7 @@ export function AppCard({ app, onClick }: AppCardProps) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <HealthDot status={app.status} />
-          <span className="font-semibold text-sm">{app.name}</span>
+          <span className="font-display font-semibold text-sm">{app.name}</span>
         </div>
         <div className="flex items-center gap-1">
           <ProviderBadge provider={app.gitProvider} />
@@ -43,7 +43,9 @@ export function AppCard({ app, onClick }: AppCardProps) {
       {/* Git line */}
       {app.latestCommit && (
         <p className="text-xs text-muted-foreground truncate mb-3">
-          {app.branch} &bull; {app.latestCommit.sha.slice(0, 7)} &ldquo;{app.latestCommit.message}&rdquo;
+          {app.branch} &bull;{" "}
+          <span className="font-mono text-[11px]">{app.latestCommit.sha.slice(0, 7)}</span>{" "}
+          &ldquo;{app.latestCommit.message}&rdquo;
           <span className="ml-1">
             {formatDistanceToNow(new Date(app.latestCommit.timestamp), { addSuffix: true })}
           </span>
@@ -60,7 +62,7 @@ export function AppCard({ app, onClick }: AppCardProps) {
                 {env.provider === "k8s" ? `K8s ${env.name}` : "Vercel"}
               </span>
             </div>
-            <span className="text-muted-foreground">
+            <span className="font-mono text-[13px] text-muted-foreground">
               {env.podCount
                 ? `${env.podCount.ready}/${env.podCount.total} pods`
                 : env.vercelStatus ?? "—"}
@@ -71,7 +73,7 @@ export function AppCard({ app, onClick }: AppCardProps) {
 
       {/* Metrics row */}
       {app.metrics && (
-        <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3 border-t border-border pt-2">
+        <div className="flex items-center gap-3 font-mono text-[13px] tabular-nums text-muted-foreground mb-3 border-t border-border pt-2">
           <span>CPU {app.metrics.cpuPercent}%</span>
           <span>MEM {app.metrics.memPercent}%</span>
           <span className={app.metrics.errorRate > 1 ? "text-red-400" : ""}>

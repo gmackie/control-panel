@@ -1,6 +1,6 @@
-# Control Panel - Turborepo Monorepo Production Build
+# Control Panel v2 - Turborepo Monorepo Production Build
 # ================================================
-# This Dockerfile builds the web app from the monorepo structure
+# This Dockerfile builds the web-v2 app from the monorepo structure
 
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
@@ -14,7 +14,7 @@ COPY pnpm-lock.yaml ./
 COPY package.json ./
 
 # Copy package.json files from all workspaces
-COPY apps/web/package.json ./apps/web/
+COPY apps/web-v2/package.json ./apps/web-v2/
 COPY packages/api/package.json ./packages/api/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
@@ -31,9 +31,9 @@ FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
 WORKDIR /app
 
-# Copy dependencies (pnpm hoists most to root, but workspace packages have local symlinked node_modules)
+# Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/apps/web-v2/node_modules ./apps/web-v2/node_modules
 COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
@@ -53,8 +53,8 @@ ARG NEXT_PUBLIC_AZURE_AD_TENANT_ID
 ENV NEXT_PUBLIC_AZURE_AD_CLIENT_ID=$NEXT_PUBLIC_AZURE_AD_CLIENT_ID
 ENV NEXT_PUBLIC_AZURE_AD_TENANT_ID=$NEXT_PUBLIC_AZURE_AD_TENANT_ID
 
-# Build the web app with turbo
-RUN pnpm build --filter=@repo/web
+# Build the web-v2 app with turbo
+RUN pnpm build --filter=@repo/web-v2
 
 # Stage 3: Production runner
 FROM node:20-alpine AS runner
@@ -69,13 +69,11 @@ RUN adduser --system --uid 1001 --home /home/nextjs nextjs
 RUN mkdir -p /home/nextjs/.ssh && chown -R nextjs:nodejs /home/nextjs/.ssh && chmod 700 /home/nextjs/.ssh
 
 # Copy necessary files from builder
-COPY --from=builder /app/apps/web/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web-v2/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web-v2/.next/static ./apps/web-v2/.next/static
 
-# The standalone output places the server at the app location
-# We need to ensure static files are in the right place
-RUN mkdir -p .next/static && cp -r apps/web/.next/static/* .next/static/ 2>/dev/null || true
+# Ensure static files are in the right place
+RUN mkdir -p .next/static && cp -r apps/web-v2/.next/static/* .next/static/ 2>/dev/null || true
 
 USER nextjs
 
@@ -85,4 +83,4 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Start the Next.js server
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/web-v2/server.js"]
