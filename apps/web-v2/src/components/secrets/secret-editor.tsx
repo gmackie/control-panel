@@ -15,7 +15,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw, Plug } from "lucide-react";
+import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw, Plug, FileSearch, ArrowUpRight } from "lucide-react";
 import { SyncStatusBanner } from "./sync-status-banner";
 import { IntegrationSetupWizard } from "./integration-setup-wizard";
 import { useDriftDetection } from "@/hooks/use-drift-detection";
@@ -34,6 +34,29 @@ async function restartPods(applicationId: string): Promise<any> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ applicationId }),
+  });
+  return res.json();
+}
+
+async function detectEnvExample(applicationId: string): Promise<any> {
+  const res = await fetch("/api/secrets/detect-env", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationId }),
+  });
+  return res.json();
+}
+
+async function promoteSecrets(
+  applicationId: string,
+  source: string,
+  target: string,
+  mode: "preview" | "apply"
+): Promise<any> {
+  const res = await fetch("/api/secrets/promote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationId, sourceEnvironment: source, targetEnvironment: target, mode }),
   });
   return res.json();
 }
@@ -154,6 +177,57 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
       setSyncMessage(`Restart failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   }, [applicationId]);
+
+  const handleDetectEnv = useCallback(async () => {
+    setSyncMessage("Scanning repository for .env.example...");
+    try {
+      const result = await detectEnvExample(applicationId);
+      if (!result.found || !result.vars?.length) {
+        setSyncMessage("No .env.example found in repository.");
+        setTimeout(() => setSyncMessage(null), 3000);
+        return;
+      }
+      // Auto-create secrets for each detected var
+      let created = 0;
+      for (const v of result.vars as { key: string; defaultValue: string; comment: string }[]) {
+        if (!v.defaultValue) continue; // Skip empty values
+        await setSecret.mutateAsync({
+          applicationId,
+          key: v.key,
+          value: v.defaultValue,
+          category: "custom" as any,
+          sensitive: v.key.includes("SECRET") || v.key.includes("TOKEN") || v.key.includes("PASSWORD") || v.key.includes("KEY"),
+        });
+        created++;
+      }
+      setSyncMessage(`Imported ${created} variables from .env.example (${result.vars.length} total found)`);
+      utils.secrets.list.invalidate();
+    } catch (err) {
+      setSyncMessage(`Detection failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }, [applicationId, setSecret, utils]);
+
+  const handlePromote = useCallback(async () => {
+    // Preview first
+    const preview = await promoteSecrets(applicationId, "staging", "production", "preview");
+    if (!preview.diff?.length || preview.adds + preview.updates === 0) {
+      setSyncMessage("Nothing to promote — staging and production are identical.");
+      setTimeout(() => setSyncMessage(null), 3000);
+      return;
+    }
+
+    const changes = preview.diff.filter((d: any) => d.action !== "unchanged");
+    const confirmed = confirm(
+      `Promote ${changes.length} secret(s) from staging → production?\n\n` +
+      changes.map((d: any) => `${d.action === "add" ? "+" : "~"} ${d.key}`).join("\n")
+    );
+
+    if (!confirmed) return;
+
+    const result = await promoteSecrets(applicationId, "staging", "production", "apply");
+    setSyncMessage(`Promoted ${result.applied} secret(s) to production. Sync to K8s to apply.`);
+    utils.secrets.list.invalidate();
+  }, [applicationId, utils]);
 
   if (isLoading) {
     return (
@@ -350,7 +424,7 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
       )}
 
       {/* Footer actions */}
-      <div className="flex items-center gap-2 pt-2">
+      <div className="flex flex-wrap items-center gap-2 pt-2">
         <Button size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
           <RefreshCw className={cn("h-3 w-3 mr-1", syncing && "animate-spin")} />
           {syncing ? "Syncing..." : "Sync to K8s"}
@@ -360,6 +434,12 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
         </Button>
         <Button variant="outline" size="sm" className="text-xs" onClick={() => setWizardProvider("__picker__")}>
           <Plug className="h-3 w-3 mr-1" /> Add Integration
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={handleDetectEnv}>
+          <FileSearch className="h-3 w-3 mr-1" /> Import from .env.example
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={handlePromote}>
+          <ArrowUpRight className="h-3 w-3 mr-1" /> Promote Staging → Prod
         </Button>
         <Button variant="ghost" size="sm" className="text-xs" onClick={() => setAddingCategory("custom")}>
           <Plus className="h-3 w-3 mr-1" /> Add Secret
