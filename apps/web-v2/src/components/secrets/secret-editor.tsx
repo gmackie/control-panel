@@ -7,8 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Trash2, Plus, Copy, Download } from "lucide-react";
+import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw } from "lucide-react";
 import { SyncStatusBanner } from "./sync-status-banner";
+
+async function syncSecrets(applicationId: string): Promise<any> {
+  const res = await fetch("/api/secrets/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationId }),
+  });
+  return res.json();
+}
+
+async function restartPods(applicationId: string): Promise<any> {
+  const res = await fetch("/api/secrets/restart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationId }),
+  });
+  return res.json();
+}
 
 interface SecretEditorProps {
   applicationId: string;
@@ -44,6 +62,8 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // Reveal a secret value
   const { data: revealedData } = trpc.secrets.reveal.useQuery(revealedId!, {
@@ -87,8 +107,39 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
     const result = await exportSecrets.refetch();
     if (result.data?.content) {
       await navigator.clipboard.writeText(result.data.content);
+      setSyncMessage("Copied to clipboard!");
+      setTimeout(() => setSyncMessage(null), 3000);
     }
   }, [exportSecrets]);
+
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await syncSecrets(applicationId);
+      if (result.failed > 0) {
+        setSyncMessage(`Synced ${result.synced}, failed ${result.failed}: ${result.results?.find((r: any) => r.error)?.error}`);
+      } else {
+        setSyncMessage(`Synced ${result.synced} secret(s) to ${result.namespace}/${result.secretName}. Restart pods to apply.`);
+      }
+      utils.secrets.list.invalidate();
+      utils.secrets.syncStatus.invalidate();
+    } catch (err) {
+      setSyncMessage(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setSyncing(false);
+    }
+  }, [applicationId, utils]);
+
+  const handleRestart = useCallback(async () => {
+    try {
+      const result = await restartPods(applicationId);
+      setSyncMessage(`Restarted ${result.deployment} in ${result.namespace} (${result.cluster})`);
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err) {
+      setSyncMessage(`Restart failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }, [applicationId]);
 
   if (isLoading) {
     return (
@@ -110,7 +161,15 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
           pending={syncStatus.pending}
           failed={syncStatus.failed}
           drift={syncStatus.drift}
+          onRestartPods={handleRestart}
         />
+      )}
+
+      {/* Sync message */}
+      {syncMessage && (
+        <div className="text-sm font-mono text-[13px] px-3 py-2 rounded-lg border border-border bg-muted/30">
+          {syncMessage}
+        </div>
       )}
 
       {/* Secret groups */}
@@ -278,6 +337,10 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
 
       {/* Footer actions */}
       <div className="flex items-center gap-2 pt-2">
+        <Button size="sm" className="text-xs" onClick={handleSync} disabled={syncing}>
+          <RefreshCw className={cn("h-3 w-3 mr-1", syncing && "animate-spin")} />
+          {syncing ? "Syncing..." : "Sync to K8s"}
+        </Button>
         <Button variant="outline" size="sm" className="text-xs" onClick={handleExport}>
           <Copy className="h-3 w-3 mr-1" /> Copy as .env
         </Button>

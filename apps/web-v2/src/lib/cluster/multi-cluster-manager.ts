@@ -322,6 +322,191 @@ class MultiClusterManager {
 
     return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   }
+
+  /**
+   * Read a K8s secret. Returns null if not found.
+   */
+  async readSecret(
+    clusterId: ClusterId,
+    namespace: string,
+    secretName: string
+  ): Promise<{ data: Record<string, string>; resourceVersion: string } | null> {
+    const clusters = this.getCluster(clusterId);
+    if (clusters.length === 0) return null;
+
+    try {
+      const { body } = await clusters[0].coreApi.readNamespacedSecret(secretName, namespace);
+      const data: Record<string, string> = {};
+      if (body.data) {
+        for (const [key, value] of Object.entries(body.data)) {
+          data[key] = Buffer.from(value, "base64").toString("utf-8");
+        }
+      }
+      return {
+        data,
+        resourceVersion: body.metadata?.resourceVersion ?? "",
+      };
+    } catch (err: any) {
+      if (err?.statusCode === 404 || err?.response?.statusCode === 404) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Write secrets to a K8s secret. Creates if not found, patches with
+   * resourceVersion optimistic locking if exists.
+   */
+  async writeSecret(
+    clusterId: ClusterId,
+    namespace: string,
+    secretName: string,
+    secrets: Record<string, string>
+  ): Promise<{ created: boolean; resourceVersion: string }> {
+    const clusters = this.getCluster(clusterId);
+    if (clusters.length === 0) {
+      throw new Error(`Cluster ${clusterId} not found or not configured`);
+    }
+
+    const coreApi = clusters[0].coreApi;
+    const base64Data: Record<string, string> = {};
+    for (const [key, value] of Object.entries(secrets)) {
+      base64Data[key] = Buffer.from(value).toString("base64");
+    }
+
+    // Try to read existing secret
+    const existing = await this.readSecret(clusterId, namespace, secretName);
+
+    if (!existing) {
+      // Create new secret
+      const { body } = await coreApi.createNamespacedSecret(namespace, {
+        apiVersion: "v1",
+        kind: "Secret",
+        metadata: {
+          name: secretName,
+          namespace,
+          labels: {
+            "app.kubernetes.io/managed-by": "control-panel",
+          },
+        },
+        type: "Opaque",
+        data: base64Data,
+      });
+      return {
+        created: true,
+        resourceVersion: body.metadata?.resourceVersion ?? "",
+      };
+    }
+
+    // Merge with existing data and patch using resourceVersion (optimistic lock)
+    const mergedData: Record<string, string> = {};
+    // Keep existing base64 values for keys we're not updating
+    if (existing.data) {
+      for (const [key, value] of Object.entries(existing.data)) {
+        mergedData[key] = Buffer.from(value).toString("base64");
+      }
+    }
+    // Overwrite/add new values
+    for (const [key, value] of Object.entries(base64Data)) {
+      mergedData[key] = value;
+    }
+
+    const { body } = await coreApi.replaceNamespacedSecret(secretName, namespace, {
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: {
+        name: secretName,
+        namespace,
+        resourceVersion: existing.resourceVersion,
+        labels: {
+          "app.kubernetes.io/managed-by": "control-panel",
+        },
+      },
+      type: "Opaque",
+      data: mergedData,
+    });
+
+    return {
+      created: false,
+      resourceVersion: body.metadata?.resourceVersion ?? "",
+    };
+  }
+
+  /**
+   * Delete a single key from a K8s secret.
+   */
+  async deleteSecretKey(
+    clusterId: ClusterId,
+    namespace: string,
+    secretName: string,
+    key: string
+  ): Promise<void> {
+    const existing = await this.readSecret(clusterId, namespace, secretName);
+    if (!existing || !(key in existing.data)) return;
+
+    const clusters = this.getCluster(clusterId);
+    if (clusters.length === 0) return;
+
+    const newData: Record<string, string> = {};
+    for (const [k, v] of Object.entries(existing.data)) {
+      if (k !== key) {
+        newData[k] = Buffer.from(v).toString("base64");
+      }
+    }
+
+    await clusters[0].coreApi.replaceNamespacedSecret(secretName, namespace, {
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: {
+        name: secretName,
+        namespace,
+        resourceVersion: existing.resourceVersion,
+        labels: {
+          "app.kubernetes.io/managed-by": "control-panel",
+        },
+      },
+      type: "Opaque",
+      data: newData,
+    });
+  }
+
+  /**
+   * Trigger a rolling restart on a deployment.
+   */
+  async restartDeployment(
+    clusterId: ClusterId,
+    namespace: string,
+    deploymentName: string
+  ): Promise<void> {
+    const clusters = this.getCluster(clusterId);
+    if (clusters.length === 0) {
+      throw new Error(`Cluster ${clusterId} not found`);
+    }
+
+    // Patch the deployment with a restart annotation (same as kubectl rollout restart)
+    await clusters[0].appsApi.patchNamespacedDeployment(
+      deploymentName,
+      namespace,
+      {
+        spec: {
+          template: {
+            metadata: {
+              annotations: {
+                "kubectl.kubernetes.io/restartedAt": new Date().toISOString(),
+              },
+            },
+          },
+        },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headers: { "Content-Type": "application/strategic-merge-patch+json" } }
+    );
+  }
 }
 
 // Module-level singleton
