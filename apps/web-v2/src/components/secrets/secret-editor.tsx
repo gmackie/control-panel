@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw, Plug } from "lucide-react";
 import { SyncStatusBanner } from "./sync-status-banner";
 import { IntegrationSetupWizard } from "./integration-setup-wizard";
+import { useDriftDetection } from "@/hooks/use-drift-detection";
 
 async function syncSecrets(applicationId: string): Promise<any> {
   const res = await fetch("/api/secrets/sync", {
@@ -74,6 +75,9 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [wizardProvider, setWizardProvider] = useState<string | null>(null);
+
+  // Drift detection — polls every 5 min
+  useDriftDetection(applicationId);
 
   // Reveal a secret value
   const { data: revealedData } = trpc.secrets.reveal.useQuery(revealedId!, {
