@@ -215,6 +215,51 @@ spec:
             secretKeyRef:
               name: control-panel-secrets
               key: WEBHOOK_SECRET
+        - name: FORGEGRAPH_API_URL
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_API_URL
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TOKEN
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_PATH
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_PATH
+        - name: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TIMEOUT_MS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_CONTROL_PLANE_WEBHOOK_TIMEOUT_MS
+        - name: PROMETHEUS_BEARER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: PROMETHEUS_BEARER_TOKEN
+        - name: FORGEGRAPH_AUTO_ROLLBACK_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_ENABLED
+        - name: FORGEGRAPH_AUTO_ROLLBACK_SEVERITIES
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_SEVERITIES
+        - name: FORGEGRAPH_AUTO_ROLLBACK_ENVIRONMENTS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_AUTO_ROLLBACK_ENVIRONMENTS
+        - name: FORGEGRAPH_ROLLBACK_DEDUPE_WINDOW_MS
+          valueFrom:
+            secretKeyRef:
+              name: control-panel-secrets
+              key: FORGEGRAPH_ROLLBACK_DEDUPE_WINDOW_MS
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:

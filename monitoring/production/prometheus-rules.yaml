@@ -207,6 +207,50 @@ spec:
         description: "Cannot connect to ArgoCD API."
         runbook_url: "https://docs.gmac.io/runbooks/argocd-integration"
 
+  - name: control-panel.rollback
+    interval: 60s
+    rules:
+    - alert: ControlPanelCriticalErrorRate
+      expr: (
+        sum(rate(http_requests_total{job="control-panel",status=~"5.."}[5m])) /
+        clamp_min(sum(rate(http_requests_total{job="control-panel"}[5m])), 1)
+      ) * 100 > 5
+      for: 5m
+      labels:
+        severity: critical
+        service: control-panel
+        team: sre
+        repository: control-panel
+        namespace: control-panel
+        environment: production
+        source_revision: "{{ $labels.image_tag | default \"unknown\" }}"
+        source_deployment_id: "{{ $labels.pod }}"
+        rollback_image_tag: "{{ $labels.image_tag | default \"unknown\" }}"
+        reason: "High control-panel error rate"
+      annotations:
+        summary: "Control Panel critical error rate"
+        description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/control-panel-high-error-rate"
+
+    - alert: ControlPanelCrashLooping
+      expr: increase(kube_pod_container_status_restarts_total{namespace="control-panel",pod=~"control-panel-.*"}[5m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        service: control-panel
+        team: sre
+        repository: control-panel
+        namespace: control-panel
+        environment: production
+        source_revision: "{{ $labels.image | default \"unknown\" }}"
+        source_deployment_id: "{{ $labels.pod }}"
+        rollback_image_tag: "{{ $labels.image | default \"unknown\" }}"
+        reason: "Pod restart spike in control-panel"
+      annotations:
+        summary: "Control Panel pod crash looping"
+        description: "Pod {{ $labels.pod }} has restarted repeatedly in the last 5 minutes."
+        runbook_url: "https://docs.gmac.io/runbooks/control-panel-crash-loop"
+
   - name: control-panel.business
     interval: 300s  # 5 minutes
     rules:

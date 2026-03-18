@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc";
-import { pushSubscriptions, applications, deploymentHistory, eq, desc, and } from "@repo/db";
+import { pushSubscriptions, applications, deploymentHistory, eq, desc, and, inArray } from "@repo/db";
 import { TRPCError } from "@trpc/server";
 import { getProviderRegistry } from "../providers/registry";
 import type { DeployProviderType } from "../providers/deploy/types";
@@ -47,10 +47,16 @@ function mapProviderStatus(status: string): Deployment["status"] {
   const statusMap: Record<string, Deployment["status"]> = {
     queued: "pending",
     building: "running",
+    in_progress: "running",
     deploying: "running",
+    testing: "running",
+    verifying: "running",
     ready: "succeeded",
+    completed: "succeeded",
     error: "failed",
     cancelled: "cancelled",
+    success: "succeeded",
+    succeeded: "succeeded",
   };
   return statusMap[status] ?? "pending";
 }
@@ -61,10 +67,17 @@ async function sendDeploymentPush(
 ): Promise<{ success: boolean; sent: number }> {
   if (tokens.length === 0) return { success: false, sent: 0 };
 
-  const statusEmoji: Record<string, string> = {
+const statusEmoji: Record<string, string> = {
     pending: "⏳",
+    queued: "⏳",
+    building: "🚀",
+    testing: "🧪",
+    deploying: "🚀",
+    verifying: "🔎",
     running: "🚀",
+    in_progress: "🚀",
     succeeded: "✅",
+    completed: "✅",
     failed: "❌",
     cancelled: "⏹️",
   };
@@ -160,7 +173,18 @@ export const deploymentsRouter = router({
     .input(z.object({
       limit: z.number().min(1).max(100).default(20),
       environment: z.enum(["development", "staging", "production"]).optional(),
-      status: z.enum(["pending", "running", "succeeded", "failed", "cancelled"]).optional(),
+      status: z.enum([
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "queued",
+        "building",
+        "testing",
+        "deploying",
+        "verifying",
+      ]).optional(),
       appId: z.string().optional(),
       projectId: z.string().optional(),
       demoMode: z.boolean().optional().default(false),
@@ -172,9 +196,9 @@ export const deploymentsRouter = router({
         if (input?.environment) {
           deployments = deployments.filter((d) => d.environment === input.environment);
         }
-        if (input?.status) {
-          deployments = deployments.filter((d) => d.status === input.status);
-        }
+      if (input?.status) {
+        deployments = deployments.filter((d) => d.status === input.status);
+      }
         if (input?.appId) {
           deployments = deployments.filter((d) => d.appId === input.appId);
         }
@@ -226,14 +250,25 @@ export const deploymentsRouter = router({
       }
       
       if (input?.status) {
-        const statusMap: Record<string, string> = {
-          pending: "pending",
-          running: "in_progress",
-          succeeded: "success",
-          failed: "failed",
-          cancelled: "cancelled",
+        const statusMap: Record<string, string[]> = {
+          pending: ["pending", "queued"],
+          running: ["running", "in_progress", "building", "testing", "deploying", "verifying"],
+          succeeded: ["success", "succeeded"],
+          failed: ["failed", "error"],
+          cancelled: ["cancelled", "canceled"],
+          queued: ["queued"],
+          building: ["building"],
+          testing: ["testing"],
+          deploying: ["deploying"],
+          verifying: ["verifying"],
         };
-        conditions.push(eq(deploymentHistory.status, statusMap[input.status] || input.status));
+
+        const mappedStatuses = statusMap[input.status];
+        if (!mappedStatuses) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid status filter" });
+        }
+
+        conditions.push(inArray(deploymentHistory.status, mappedStatuses));
       }
       
       const dbDeployments = await ctx.db
@@ -246,10 +281,18 @@ export const deploymentsRouter = router({
       return dbDeployments.map((d): Deployment => {
         const statusMap: Record<string, Deployment["status"]> = {
           pending: "pending",
+          queued: "pending",
           in_progress: "running",
+          running: "running",
+          building: "running",
+          testing: "running",
+          deploying: "running",
+          verifying: "running",
           success: "succeeded",
           failed: "failed",
+          error: "failed",
           cancelled: "cancelled",
+          canceled: "cancelled",
         };
         
         const duration = d.startedAt && d.completedAt
