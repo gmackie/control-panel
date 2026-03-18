@@ -33,13 +33,15 @@ import {
 type Subscriber = (notification: Notification) => void;
 const subscribers = new Set<Subscriber>();
 
-/**
- * Generate a unique ID
- */
-function generateId(prefix: string = "ntf"): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 10);
-  return `${prefix}_${timestamp}_${random}`;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireUuid(value: string | null | undefined, recordType: string): string {
+  if (!value || !UUID_PATTERN.test(value)) {
+    throw new Error(`${recordType} insert returned a non-UUID id`);
+  }
+
+  return value;
 }
 
 /**
@@ -131,10 +133,7 @@ export class NotificationService {
     if (!db) throw new Error("Database not available");
 
     const now = new Date();
-    const id = generateId("ntf");
-
     const record = {
-      id,
       createdAt: now,
       updatedAt: now,
       source: input.source,
@@ -162,9 +161,15 @@ export class NotificationService {
       metadata: input.metadata ? JSON.stringify(input.metadata) : null,
     };
 
-    await db.insert(notifications).values(record);
+    const [insertedNotification] = await db
+      .insert(notifications)
+      .values(record)
+      .returning();
 
-    const notification = recordToNotification(record as unknown as NotificationRecord);
+    const notification = recordToNotification({
+      ...insertedNotification,
+      id: requireUuid(insertedNotification?.id, "notification"),
+    } as NotificationRecord);
     
     // Publish to subscribers for real-time updates
     this.publish(notification);
@@ -641,10 +646,7 @@ export class NotificationService {
     if (!db) throw new Error("Database not available");
 
     const now = new Date();
-    const id = generateId("prf");
-
     const defaultPrefs = {
-      id,
       userId,
       emailEnabled: true,
       slackEnabled: true,
@@ -657,9 +659,15 @@ export class NotificationService {
       updatedAt: now,
     };
 
-    await db.insert(notificationPreferences).values(defaultPrefs);
+    const [insertedPreferences] = await db
+      .insert(notificationPreferences)
+      .values(defaultPrefs)
+      .returning();
 
-    return recordToPreferences(defaultPrefs as unknown as NotificationPreferencesRecord);
+    return recordToPreferences({
+      ...insertedPreferences,
+      id: requireUuid(insertedPreferences?.id, "notification_preferences"),
+    } as NotificationPreferencesRecord);
   }
 
   // ===================================
