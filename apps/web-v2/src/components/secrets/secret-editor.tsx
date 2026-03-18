@@ -6,9 +6,18 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, Trash2, Plus, Copy, RefreshCw, Plug } from "lucide-react";
 import { SyncStatusBanner } from "./sync-status-banner";
+import { IntegrationSetupWizard } from "./integration-setup-wizard";
 
 async function syncSecrets(applicationId: string): Promise<any> {
   const res = await fetch("/api/secrets/sync", {
@@ -64,6 +73,7 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
   const [newValue, setNewValue] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [wizardProvider, setWizardProvider] = useState<string | null>(null);
 
   // Reveal a secret value
   const { data: revealedData } = trpc.secrets.reveal.useQuery(revealedId!, {
@@ -344,10 +354,82 @@ export function SecretEditor({ applicationId, environment }: SecretEditorProps) 
         <Button variant="outline" size="sm" className="text-xs" onClick={handleExport}>
           <Copy className="h-3 w-3 mr-1" /> Copy as .env
         </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => setWizardProvider("__picker__")}>
+          <Plug className="h-3 w-3 mr-1" /> Add Integration
+        </Button>
         <Button variant="ghost" size="sm" className="text-xs" onClick={() => setAddingCategory("custom")}>
           <Plus className="h-3 w-3 mr-1" /> Add Secret
         </Button>
       </div>
+
+      {/* Provider picker (simple) */}
+      {wizardProvider === "__picker__" && (
+        <ProviderPicker onSelect={(p) => setWizardProvider(p)} onClose={() => setWizardProvider(null)} />
+      )}
+
+      {/* Integration setup wizard */}
+      {wizardProvider && wizardProvider !== "__picker__" && (
+        <IntegrationSetupWizard
+          applicationId={applicationId}
+          provider={wizardProvider}
+          open={true}
+          onOpenChange={(open) => { if (!open) setWizardProvider(null); }}
+          onComplete={() => {
+            utils.secrets.list.invalidate();
+            utils.secrets.syncStatus.invalidate();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Simple provider picker grid */
+function ProviderPicker({ onSelect, onClose }: { onSelect: (provider: string) => void; onClose: () => void }) {
+  const { data: templates } = trpc.secrets.templates.useQuery();
+
+  if (!templates) return null;
+
+  const categories = [
+    { label: "Database", providers: templates.filter((t) => t.category === "database") },
+    { label: "Authentication", providers: templates.filter((t) => t.category === "auth") },
+    { label: "Monitoring", providers: templates.filter((t) => t.category === "monitoring") },
+    { label: "Analytics", providers: templates.filter((t) => t.category === "analytics") },
+    { label: "Email", providers: templates.filter((t) => t.category === "email") },
+    { label: "Payments", providers: templates.filter((t) => t.category === "payments") },
+  ].filter((c) => c.providers.length > 0);
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent>
+        <DialogClose onClick={onClose} />
+        <DialogHeader>
+          <DialogTitle className="font-display">Add Integration</DialogTitle>
+          <DialogDescription>Choose a provider to configure.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {categories.map((cat) => (
+            <div key={cat.label}>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-dim mb-2">{cat.label}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {cat.providers.map((t) => (
+                  <Button
+                    key={t.provider}
+                    variant="outline"
+                    className="justify-start h-auto py-2 px-3"
+                    onClick={() => onSelect(t.provider)}
+                  >
+                    <div className="text-left">
+                      <p className="text-sm font-medium">{t.displayName}</p>
+                      <p className="text-xs text-muted-foreground">{t.fieldCount} fields</p>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

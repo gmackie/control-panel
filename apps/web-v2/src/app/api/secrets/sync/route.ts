@@ -15,11 +15,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getMultiClusterManager } from "@/lib/cluster/multi-cluster-manager";
+import { syncToVercel } from "@/lib/vercel/sync";
 import type { ClusterId } from "@/types/k8s";
 
-// We import DB and crypto from the packages directly since this is server-side
 import { getDb } from "@repo/db";
-import { appSecrets, applications, eq, and } from "@repo/db";
+import { appSecrets, applications, orgIntegrations, eq, and } from "@repo/db";
 import { decryptSecret } from "@repo/api/src/lib/crypto";
 
 export async function POST(request: NextRequest) {
@@ -131,6 +131,62 @@ export async function POST(request: NextRequest) {
           status: "failed",
           error: message,
         });
+      }
+    }
+
+    // Sync to Vercel targets
+    const vercelTargets = new Set<string>();
+    for (const secret of toSync) {
+      const syncTargetList = JSON.parse(secret.syncTargets) as string[];
+      for (const target of syncTargetList) {
+        if (target.startsWith("vercel:")) {
+          vercelTargets.add(target.replace("vercel:", ""));
+        }
+      }
+    }
+
+    if (vercelTargets.size > 0) {
+      // Get Vercel credentials from orgIntegrations
+      try {
+        const [vercelIntegration] = await db
+          .select()
+          .from(orgIntegrations)
+          .where(eq(orgIntegrations.provider, "vercel"))
+          .limit(1);
+
+        if (vercelIntegration?.credentials) {
+          const creds = JSON.parse(vercelIntegration.credentials) as { token?: string; teamId?: string };
+          // Get Vercel project ID from app's integrations (appIntegrations)
+          // For now use app slug as project name — Vercel projects can be looked up by name
+          const vercelToken = creds.token ?? process.env.VERCEL_TOKEN;
+
+          if (vercelToken) {
+            for (const vercelTarget of vercelTargets) {
+              try {
+                const vercelResult = await syncToVercel(
+                  vercelToken,
+                  app.slug!,
+                  decrypted,
+                  vercelTarget as "production" | "preview" | "development",
+                  creds.teamId ?? process.env.VERCEL_TEAM_ID
+                );
+                results.push({
+                  target: `vercel:${vercelTarget}`,
+                  status: vercelResult.failed > 0 ? "failed" : "synced",
+                  error: vercelResult.errors.length > 0 ? vercelResult.errors.join("; ") : undefined,
+                });
+              } catch (err) {
+                results.push({
+                  target: `vercel:${vercelTarget}`,
+                  status: "failed",
+                  error: err instanceof Error ? err.message : "Vercel sync failed",
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[secrets/sync] Vercel sync skipped:", err);
       }
     }
 
