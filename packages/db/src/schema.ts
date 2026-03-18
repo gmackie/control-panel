@@ -1720,3 +1720,34 @@ export const integrationResources = pgTable("integration_resources", {
 
 export type IntegrationResource = typeof integrationResources.$inferSelect;
 export type NewIntegrationResource = typeof integrationResources.$inferInsert;
+
+// ===================================
+// Application Secrets
+// ===================================
+
+export const appSecrets = pgTable("app_secrets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicationId: uuid("application_id").notNull(),
+  key: varchar("key", { length: 255 }).notNull(),
+  encryptedValue: text("encrypted_value").notNull(),
+  iv: text("iv").notNull(),
+  environment: varchar("environment", { length: 50 }).notNull().default("shared"),
+  category: varchar("category", { length: 50 }).notNull().default("custom"),
+  provider: varchar("provider", { length: 100 }),
+  sensitive: boolean("sensitive").notNull().default(true),
+  syncTargets: text("sync_targets").notNull().default("[]"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }).default("pending"),
+  lastSyncError: text("last_sync_error"),
+  createdBy: text("created_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  applicationIdIdx: index("app_secrets_application_id_idx").on(table.applicationId),
+  categoryIdx: index("app_secrets_category_idx").on(table.category),
+  syncStatusIdx: index("app_secrets_sync_status_idx").on(table.lastSyncStatus),
+  uniqueSecret: uniqueIndex("app_secrets_unique").on(table.applicationId, table.key, table.environment),
+}));
+
+export type AppSecret = typeof appSecrets.$inferSelect;
+export type NewAppSecret = typeof appSecrets.$inferInsert;

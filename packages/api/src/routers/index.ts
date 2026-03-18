@@ -32,6 +32,7 @@ import { releasePoliciesRouter } from "./release-policies";
 import { promotionPrsRouter } from "./promotion-prs";
 import { releaseAuditRouter } from "./release-audit";
 import { sourceTrustRouter } from "./source-trust";
+import { secretsRouter } from "./secrets";
 
 export const appRouter = router({
   notifications: notificationsRouter,
@@ -61,6 +62,7 @@ export const appRouter = router({
   promotionPrs: promotionPrsRouter,
   releaseAudit: releaseAuditRouter,
   sourceTrust: sourceTrustRouter,
+  secrets: secretsRouter,
 });
 
 export type AppRouter = typeof appRouter;

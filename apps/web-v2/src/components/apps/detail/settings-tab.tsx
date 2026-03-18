@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import { SecretEditor } from "@/components/secrets/secret-editor";
 
 export function SettingsTab({ appId }: { appId: string }) {
   const { data: app, isLoading } =
@@ -307,13 +308,11 @@ export function SettingsTab({ appId }: { appId: string }) {
         </div>
       </Card>
 
-      {/* Environment Variables */}
-      <Card className="p-4">
-        <h3 className="font-display text-sm font-semibold mb-3">Environment Variables</h3>
-        <p className="text-sm text-muted-foreground">
-          Environment variable management will be wired here.
-        </p>
-      </Card>
+      {/* Environment Variables / Secrets */}
+      <div>
+        <h3 className="font-display text-sm font-semibold mb-3">Secrets & Environment Variables</h3>
+        <SecretEditor applicationId={app?.id ?? appId} />
+      </div>
     </div>
   );
 }
