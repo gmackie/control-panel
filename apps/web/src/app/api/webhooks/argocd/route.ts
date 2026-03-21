@@ -10,6 +10,16 @@ import { webhookLimiter } from '@repo/webhooks';
 import { RateLimitError } from '@repo/webhooks';
 import { getDb } from '@repo/db';
 import { metrics } from '@/lib/metrics/collector';
+import {
+  getActiveDeployment,
+  clearActiveDeployment,
+  setLastKnownGood,
+  getLastKnownGood,
+  markRolledBack,
+  sendForgeGraphCallback,
+  commitRollback,
+  initGitOpsRepo,
+} from '@repo/forgegraph';
 
 interface ArgoCDStatus {
   health: {
@@ -226,6 +236,9 @@ export async function POST(request: NextRequest) {
       },
       timestamp: new Date(payload.eventTime),
     });
+
+    // ForgeGraph correlation — send callbacks if this event matches an active FG deployment
+    await correlateForgeGraph(payload);
 
     metrics.observeHistogram("webhook_processing_duration_seconds", (Date.now() - startMs) / 1000, { source: "argocd" });
 
@@ -462,6 +475,127 @@ async function handleSyncFailed(payload: ArgoCDWebhookPayload) {
     message,
     severity: 'critical',
   });
+}
+
+// ---------------------------------------------------------------------------
+// ForgeGraph correlation — send callbacks when an active FG deployment matches
+// ---------------------------------------------------------------------------
+
+async function correlateForgeGraph(payload: ArgoCDWebhookPayload): Promise<void> {
+  const appName = payload.app.metadata.name;
+  const env = payload.app.metadata.namespace;
+  const activeDeploy = getActiveDeployment(appName, env);
+
+  if (!activeDeploy) return;
+
+  const { executionRequestId } = activeDeploy;
+
+  try {
+    switch (payload.eventType) {
+      case 'app.sync.succeeded': {
+        await sendForgeGraphCallback({
+          executionRequestId,
+          status: 'deployed',
+          environment: env,
+        });
+        break;
+      }
+
+      case 'app.updated': {
+        const syncStatus = payload.app.status.sync.status;
+        const healthStatus = payload.app.status.health.status;
+
+        if (syncStatus === 'Synced' && healthStatus === 'Healthy') {
+          // Parse image info from the active deployment's imageRef
+          const lastColon = activeDeploy.imageRef.lastIndexOf(':');
+          const imageRepository = lastColon > 0 ? activeDeploy.imageRef.slice(0, lastColon) : activeDeploy.imageRef;
+          const imageTag = lastColon > 0 ? activeDeploy.imageRef.slice(lastColon + 1) : 'latest';
+
+          await sendForgeGraphCallback({
+            executionRequestId,
+            status: 'healthy',
+            environment: env,
+          });
+
+          setLastKnownGood(appName, env, {
+            imageRepository,
+            imageTag,
+            imageDigest: activeDeploy.imageDigest,
+            confirmedAt: new Date(),
+          });
+
+          clearActiveDeployment(appName, env);
+        }
+        break;
+      }
+
+      case 'app.health.degraded':
+      case 'app.sync.failed': {
+        await handleForgeGraphFailure(appName, env, activeDeploy.executionRequestId, activeDeploy.imageRef);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('ForgeGraph correlation error:', err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function handleForgeGraphFailure(
+  appName: string,
+  env: string,
+  executionRequestId: string,
+  _imageRef: string,
+): Promise<void> {
+  const markedFirst = markRolledBack(appName, env);
+
+  if (!markedFirst) {
+    // Already rolled back once — this is the rollback itself failing
+    await sendForgeGraphCallback({
+      executionRequestId,
+      status: 'failed',
+      environment: env,
+      metadata: { rollbackFailed: true },
+    });
+    clearActiveDeployment(appName, env);
+    return;
+  }
+
+  // First rollback attempt — try to restore last-known-good
+  const lkg = getLastKnownGood(appName, env);
+
+  if (!lkg) {
+    await sendForgeGraphCallback({
+      executionRequestId,
+      status: 'failed',
+      environment: env,
+      metadata: { noRollbackTarget: true },
+    });
+    clearActiveDeployment(appName, env);
+    return;
+  }
+
+  // Commit rollback to GitOps repo — don't send callback yet, wait for ArgoCD sync
+  try {
+    await initGitOpsRepo();
+    await commitRollback({
+      appName,
+      environment: env,
+      imageRepository: lkg.imageRepository,
+      imageTag: lkg.imageTag,
+      imageDigest: lkg.imageDigest,
+      commitMessage: `${appName} ${env} → ${lkg.imageRepository}:${lkg.imageTag} [rollback for ${executionRequestId}]`,
+    });
+    console.log(`ForgeGraph rollback committed for ${appName}/${env} to ${lkg.imageRepository}:${lkg.imageTag}`);
+  } catch (err) {
+    console.error('ForgeGraph rollback commit failed:', err instanceof Error ? err.message : String(err));
+    await sendForgeGraphCallback({
+      executionRequestId,
+      status: 'failed',
+      environment: env,
+      metadata: { rollbackFailed: true, error: err instanceof Error ? err.message : String(err) },
+    });
+    clearActiveDeployment(appName, env);
+  }
 }
 
 export async function GET() {

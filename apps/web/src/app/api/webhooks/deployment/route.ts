@@ -1,6 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleAsyncRoute, ValidationError, AuthenticationError, RateLimitError } from '@/lib/api-errors';
 import { webhookLimiter, withRateLimit } from '@/lib/rate-limiter';
+import {
+  isDeployInFlight,
+  getActiveDeployment,
+  setActiveDeployment,
+  clearActiveDeployment,
+  commitDeployment,
+  initGitOpsRepo,
+  sendForgeGraphCallback,
+} from '@repo/forgegraph';
+
+// ---------------------------------------------------------------------------
+// ForgeGraph deployment dispatch
+// ---------------------------------------------------------------------------
+
+interface ForgeGraphDispatchPayload {
+  source?: 'forgegraph';
+  executionRequestId: string;
+  applicationId: string;
+  imageRef: string;
+  imageDigest?: string;
+  changesetSummary?: string;
+  environment: string;
+  idempotencyKey?: string;
+  forgeGraphRepoId?: string;
+  forgeGraphRevId?: string;
+}
+
+function isForgeGraphDispatch(payload: Record<string, unknown>): payload is ForgeGraphDispatchPayload {
+  return (
+    payload.source === 'forgegraph' ||
+    (typeof payload.executionRequestId === 'string' && typeof payload.imageRef === 'string')
+  );
+}
+
+const SYNC_TIMEOUT_MS = parseInt(process.env.SYNC_TIMEOUT_MS ?? '600000', 10); // default 10 min
+
+async function handleForgeGraphDispatch(payload: ForgeGraphDispatchPayload): Promise<NextResponse> {
+  const { executionRequestId, applicationId, imageRef, imageDigest, changesetSummary, environment } = payload;
+
+  console.log('ForgeGraph dispatch received:', { executionRequestId, applicationId, environment, imageRef });
+
+  // Check serialization — only one deploy per app/env at a time
+  if (isDeployInFlight(applicationId, environment)) {
+    const active = getActiveDeployment(applicationId, environment);
+    return NextResponse.json(
+      { error: 'Deploy already in-flight', activeExecutionRequestId: active?.executionRequestId },
+      { status: 409 },
+    );
+  }
+
+  // Register active deployment
+  setActiveDeployment(applicationId, environment, {
+    executionRequestId,
+    imageRef,
+    imageDigest,
+    startedAt: new Date(),
+    rolledBack: false,
+  });
+
+  // Parse imageRef into repository + tag  (split on last ":")
+  const lastColon = imageRef.lastIndexOf(':');
+  const imageRepository = lastColon > 0 ? imageRef.slice(0, lastColon) : imageRef;
+  const imageTag = lastColon > 0 ? imageRef.slice(lastColon + 1) : 'latest';
+
+  // Commit to GitOps repo
+  try {
+    await initGitOpsRepo();
+    await commitDeployment({
+      appName: applicationId,
+      environment,
+      imageRepository,
+      imageTag,
+      imageDigest,
+      commitMessage: `deploy: ${applicationId} ${environment} [${executionRequestId}]\n\n${changesetSummary || ''}\n\nCorrelation-ID: ${executionRequestId}`,
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('ForgeGraph GitOps commit failed:', errorMessage);
+
+    // Clear active deployment on failure
+    clearActiveDeployment(applicationId, environment);
+
+    // Send "failed" callback to ForgeGraph
+    sendForgeGraphCallback({
+      executionRequestId,
+      status: 'failed',
+      environment,
+      metadata: { reason: 'gitops_commit_failed', error: errorMessage },
+    }).catch((cbErr) => console.error('Failed to send ForgeGraph failure callback:', cbErr));
+
+    return NextResponse.json(
+      { error: 'GitOps commit failed', details: errorMessage },
+      { status: 500 },
+    );
+  }
+
+  // Send "deployed" callback (fire-and-forget)
+  sendForgeGraphCallback({
+    executionRequestId,
+    status: 'deployed',
+    environment,
+  }).catch((cbErr) => console.error('Failed to send ForgeGraph deployed callback:', cbErr));
+
+  // Start sync timeout — if ArgoCD doesn't report back in time, fail the deployment
+  setTimeout(() => {
+    const active = getActiveDeployment(applicationId, environment);
+    if (active && active.executionRequestId === executionRequestId) {
+      console.warn(`ForgeGraph sync timeout for ${applicationId}/${environment} (${executionRequestId})`);
+      sendForgeGraphCallback({
+        executionRequestId,
+        status: 'failed',
+        environment,
+        metadata: { reason: 'sync_timeout' },
+      }).catch((cbErr) => console.error('Failed to send ForgeGraph timeout callback:', cbErr));
+      clearActiveDeployment(applicationId, environment);
+    }
+  }, SYNC_TIMEOUT_MS);
+
+  return NextResponse.json({ success: true, action: 'gitops_committed' });
+}
+
+// ---------------------------------------------------------------------------
+// Standard deployment webhook types
+// ---------------------------------------------------------------------------
 
 interface DeploymentWebhookPayload {
   source: 'drone' | 'argocd' | 'harbor' | 'gitea' | 'github';
@@ -313,13 +437,21 @@ export async function POST(request: NextRequest) {
     const event = headersList.get('x-webhook-event') || '';
     
     const body = await request.text();
-    let payload: DeploymentWebhookPayload;
-    
+    let rawPayload: Record<string, unknown>;
+
     try {
-      payload = JSON.parse(body);
+      rawPayload = JSON.parse(body);
     } catch (error) {
       throw new ValidationError('Invalid JSON payload');
     }
+
+    // ---- ForgeGraph dispatch: early return if detected ----
+    if (isForgeGraphDispatch(rawPayload)) {
+      return handleForgeGraphDispatch(rawPayload);
+    }
+
+    // ---- Standard webhook handling continues below ----
+    const payload = rawPayload as DeploymentWebhookPayload;
 
     // Validate webhook signature (in production)
     const webhookSecret = process.env.WEBHOOK_SECRET;
